@@ -810,3 +810,119 @@
 }
 
 
+/* SQL line chart */
+.uns-sql-chart {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+
+.uns-sql-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #495057;
+}
+
+.uns-sql-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uns-sql-chart-controls label {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.uns-sql-chart-controls select {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.uns-sql-chart-zoom-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.uns-sql-chart-zoom-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 18px;
+  line-height: 1;
+  color: #495057;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.uns-sql-chart-zoom-btn:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.uns-sql-chart-zoom-btn:active {
+  background: #dee2e6;
+}
+
+.uns-sql-chart-zoom-hint {
+  font-size: 11px;
+  color: #6c757d;
+  margin-left: 8px;
+}
+
+.uns-sql-chart-body {
+  width: 100%;
+  min-height: 220px;
+  position: relative;
+  user-select: none; /* Prevent text selection while dragging */
+}
+
+.uns-sql-chart-body:active {
+  cursor: grabbing !important;
+}
+
+/* Recharts container – fixed height keeps aspect ratio, no stretch */
+.uns-sql-chart-body .recharts-responsive-container {
+  min-height: 220px;
+}
+
+/* Tooltip on hover over data points */
+.uns-chart-tooltip {
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.uns-chart-tooltip-time {
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.uns-chart-tooltip-value {
+  color: #212529;
+}
+
+.uns-chart-tooltip-value strong {
+  color: #007bff;
+}
+
+

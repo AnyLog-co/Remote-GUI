@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import './UNSPage.css';
+import UNSSidePanel from './UNSSidePanel';
 
 const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
 
@@ -24,6 +34,15 @@ const UNSPage = ({ node }) => {
   const [sqlError, setSqlError] = useState(null); // SQL query error
   const [sqlTab, setSqlTab] = useState('timeRange'); // 'timeRange' or 'advanced'
   const [customSqlQuery, setCustomSqlQuery] = useState(''); // Custom SQL query text
+  const [chartYKey, setChartYKey] = useState(null); // Selected value column for line chart
+  const [chartViewStart, setChartViewStart] = useState(0); // Zoom/pan: start index (0 = beginning)
+  const [chartViewEnd, setChartViewEnd] = useState(null); // Zoom/pan: end index (null = full range)
+  const chartContainerRef = useRef(null); // Ref for chart container to attach mouse events
+  const isDraggingRef = useRef(false); // Track if user is dragging
+  const dragStartXRef = useRef(0); // Mouse X position when drag started
+  const dragStartViewRef = useRef({ start: 0, end: 0 }); // View range when drag started
+  const chartDataRef = useRef(null); // Ref to current chart data for mouse handlers
+  const chartViewRef = useRef({ start: 0, end: 0, range: 0, total: 0 }); // Ref to current view state
   const [itemsWithData, setItemsWithData] = useState(new Map()); // Cache: item key (dbms:table) -> has_data (boolean)
   const [checkingData, setCheckingData] = useState(new Set()); // Track items currently being checked
   const checkTimeoutsRef = useRef([]); // Track all pending timeout IDs for cleanup
@@ -46,6 +65,48 @@ const UNSPage = ({ node }) => {
       }
     };
   }, [hoverTimeout]);
+
+  // Reset chart zoom/pan when data or value column changes
+  useEffect(() => {
+    setChartViewStart(0);
+    setChartViewEnd(null);
+  }, [sqlData, chartYKey]);
+
+  // Global mouse handlers for smooth drag-to-pan (attached at component level)
+  useEffect(() => {
+    const handleMove = (e) => {
+      if (!isDraggingRef.current || !chartContainerRef.current) return;
+      e.preventDefault();
+      
+      const view = chartViewRef.current;
+      if (!view.total || view.range === 0) return;
+      
+      const deltaX = e.clientX - dragStartXRef.current;
+      const rect = chartContainerRef.current.getBoundingClientRect();
+      const chartWidth = rect.width;
+      
+      const pointDelta = Math.round((deltaX / chartWidth) * view.range);
+      const newStart = Math.max(0, Math.min(view.total - view.range, dragStartViewRef.current.start - pointDelta));
+      const newEnd = Math.min(view.total - 1, newStart + view.range - 1);
+      
+      setChartViewStart(newStart);
+      setChartViewEnd(newEnd);
+    };
+    
+    const handleUp = () => {
+      if (chartContainerRef.current) {
+        chartContainerRef.current.style.cursor = 'grab';
+      }
+      isDraggingRef.current = false;
+    };
+    
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, []); // Empty deps - handlers use refs for current values
 
   // Background check for table data when layers change
   useEffect(() => {
@@ -1068,6 +1129,183 @@ const UNSPage = ({ node }) => {
     );
   };
 
+  // Helper to render an interactive line chart from SQL data using insert_timestamp as X and a selectable numeric column as Y
+  const renderSqlLineChart = () => {
+    if (!sqlData || !Array.isArray(sqlData) || sqlData.length === 0) {
+      return null;
+    }
+
+    const firstRow = sqlData[0];
+    if (!firstRow || !('insert_timestamp' in firstRow)) {
+      return null;
+    }
+
+    const valueCandidates = Object.keys(firstRow).filter((key) => {
+      if (['row_id', 'tsd_name', 'tsd_id', 'insert_timestamp'].includes(key)) return false;
+      const v = firstRow[key];
+      if (typeof v === 'number') return true;
+      return !Number.isNaN(parseFloat(v));
+    });
+
+    if (valueCandidates.length === 0) {
+      return null;
+    }
+
+    const effectiveYKey = chartYKey && valueCandidates.includes(chartYKey)
+      ? chartYKey
+      : valueCandidates[0];
+
+    // Build chart data for Recharts: [{ time, value, fullTime }] sorted by time
+    const chartData = sqlData
+      .map((row) => {
+        const tsRaw = row.insert_timestamp;
+        const t = Date.parse(tsRaw);
+        const vRaw = row[effectiveYKey];
+        const v = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
+        if (Number.isNaN(t) || Number.isNaN(v)) return null;
+        const d = new Date(t);
+        const timeLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return {
+          time: timeLabel,
+          value: v,
+          fullTime: d.toLocaleString(),
+        };
+      })
+      .filter((p) => p !== null)
+      .sort((a, b) => new Date(a.fullTime) - new Date(b.fullTime));
+
+    if (chartData.length === 0) {
+      return null;
+    }
+
+    const ZOOM_THRESHOLD = 50; // Show zoom/pan controls when more than this many points
+    const canZoom = chartData.length > ZOOM_THRESHOLD;
+    const totalPoints = chartData.length;
+    const endIndex = chartViewEnd != null ? Math.min(chartViewEnd, totalPoints - 1) : totalPoints - 1;
+    const startIndex = Math.max(0, Math.min(chartViewStart, endIndex - 1));
+    const displayedData = canZoom ? chartData.slice(startIndex, endIndex + 1) : chartData;
+    const viewRange = endIndex - startIndex + 1;
+    
+    // Update refs for mouse handlers
+    chartDataRef.current = chartData;
+    chartViewRef.current = { start: startIndex, end: endIndex, range: viewRange, total: totalPoints };
+
+    const CustomTooltip = ({ active, payload }) => {
+      if (!active || !payload || !payload.length) return null;
+      const point = payload[0].payload;
+      return (
+        <div className="uns-chart-tooltip">
+          <div className="uns-chart-tooltip-time">{point.fullTime}</div>
+          <div className="uns-chart-tooltip-value">
+            {effectiveYKey}: <strong>{Number(point.value).toLocaleString()}</strong>
+          </div>
+        </div>
+      );
+    };
+
+    // Zoom in/out centered on current view
+    const ZOOM_FACTOR = 1.4;
+    const handleZoomIn = () => {
+      if (!canZoom) return;
+      const mid = startIndex + Math.floor(viewRange / 2);
+      const newRange = Math.max(10, Math.round(viewRange / ZOOM_FACTOR));
+      const newStart = Math.max(0, Math.min(mid - Math.floor(newRange / 2), totalPoints - newRange));
+      const newEnd = Math.min(totalPoints - 1, newStart + newRange - 1);
+      setChartViewStart(newStart);
+      setChartViewEnd(newEnd);
+    };
+    const handleZoomOut = () => {
+      if (!canZoom) return;
+      const mid = startIndex + Math.floor(viewRange / 2);
+      const newRange = Math.min(totalPoints, Math.round(viewRange * ZOOM_FACTOR));
+      const newStart = Math.max(0, Math.min(mid - Math.floor(newRange / 2), totalPoints - newRange));
+      const newEnd = Math.min(totalPoints - 1, newStart + newRange - 1);
+      setChartViewStart(newStart);
+      setChartViewEnd(newEnd);
+    };
+
+
+
+
+    return (
+      <div className="uns-sql-chart">
+        <div className="uns-sql-chart-header">
+          <span>Line Chart</span>
+          <div className="uns-sql-chart-controls">
+            <label htmlFor="uns-sql-chart-ykey">Value column:</label>
+            <select
+              id="uns-sql-chart-ykey"
+              value={effectiveYKey}
+              onChange={(e) => setChartYKey(e.target.value)}
+            >
+              {valueCandidates.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </select>
+            {canZoom && (
+              <>
+                <div className="uns-sql-chart-zoom-btns">
+                  <button type="button" onClick={handleZoomIn} className="uns-sql-chart-zoom-btn" title="Zoom in" aria-label="Zoom in">
+                    +
+                  </button>
+                  <button type="button" onClick={handleZoomOut} className="uns-sql-chart-zoom-btn" title="Zoom out" aria-label="Zoom out">
+                    −
+                  </button>
+                </div>
+                <span className="uns-sql-chart-zoom-hint">Hold and drag to move</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div 
+          className="uns-sql-chart-body"
+          ref={chartContainerRef}
+          onMouseDown={(e) => {
+            if (!canZoom || !chartContainerRef.current) return;
+            if (e.button !== 0) return; // Only left mouse button
+            e.preventDefault();
+            isDraggingRef.current = true;
+            dragStartXRef.current = e.clientX;
+            dragStartViewRef.current = { start: startIndex, end: endIndex };
+            chartContainerRef.current.style.cursor = 'grabbing';
+          }}
+          style={{ cursor: canZoom ? 'grab' : 'default' }}
+        >
+          <ResponsiveContainer width="100%" height={220} aspect={undefined}>
+            <LineChart
+              data={displayedData}
+              margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 11 }}
+                stroke="#6c757d"
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                stroke="#6c757d"
+                tickFormatter={(v) => (Number.isInteger(v) ? v : v.toFixed(2))}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#007bff', strokeWidth: 1 }} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#007bff"
+                strokeWidth={2}
+                dot={displayedData.length <= 80 ? { r: 3, fill: '#007bff' } : false}
+                activeDot={{ r: 5, fill: '#0056b3', stroke: '#fff', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="uns-container">
       <div className="uns-header">
@@ -1145,248 +1383,37 @@ const UNSPage = ({ node }) => {
           </div>
         </div>
 
-        {/* Side Panel for detailed view - always rendered but hidden when closed */}
-        <div className={`uns-side-panel ${isSidePanelOpen ? 'open' : ''}`}>
-          <div className="uns-side-panel-header">
-            <h3>Item Details</h3>
-            <button 
-              className="uns-side-panel-close"
-              onClick={() => {
-                setIsSidePanelOpen(false);
-                setSelectedItem(null);
-                setSqlData(null);
-                setSqlError(null);
-                setCustomSqlQuery('');
-                setSqlTab('timeRange');
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div className="uns-side-panel-content">
-            {selectedItem && (() => {
-              const itemData = getItemData(selectedItem);
-              const hasTable = itemData && itemData.dbms && itemData.table;
-              
-              return (
-                <>
-                  <div className="uns-side-panel-info">
-                    <div className="uns-side-panel-info-row">
-                      <strong>Name:</strong> {getItemName(selectedItem)}
-                    </div>
-                    <div className="uns-side-panel-info-row">
-                      <strong>Type:</strong> {getItemType(selectedItem)}
-                    </div>
-                    <div className="uns-side-panel-info-row">
-                      <strong>ID:</strong> {getItemId(selectedItem)}
-                    </div>
-                    {hasTable && (
-                      <>
-                        <div className="uns-side-panel-info-row">
-                          <strong>DBMS:</strong> {itemData.dbms}
-                        </div>
-                        <div className="uns-side-panel-info-row">
-                          <strong>Table:</strong> {itemData.table}
-                        </div>
-                        <div className="uns-side-panel-time-range">
-                          <label htmlFor="time-range-value">Time Range:</label>
-                          <div className="uns-time-range-controls">
-                            <input
-                              id="time-range-value"
-                              type="number"
-                              min="0.01"
-                              step="0.01"
-                              value={timeRangeValue}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 5;
-                                setTimeRangeValue(value);
-                              }}
-                              className="uns-time-range-input"
-                            />
-                            <select
-                              id="time-range-unit"
-                              value={timeRangeUnit}
-                              onChange={(e) => {
-                                setTimeRangeUnit(e.target.value);
-                              }}
-                              className="uns-time-range-unit"
-                            >
-                              <option value="minute">Minutes</option>
-                              <option value="hour">Hours</option>
-                              <option value="day">Days</option>
-                              <option value="week">Weeks</option>
-                            </select>
-                            <button
-                              onClick={() => {
-                                if (hasTable) {
-                                  fetchSqlData(itemData.dbms, itemData.table);
-                                }
-                              }}
-                              disabled={sqlLoading}
-                              className="uns-time-range-refresh-btn"
-                            >
-                              {sqlLoading ? 'Loading...' : '🔄 Refresh'}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {hasTable && (
-                    <div className="uns-side-panel-sql">
-                      <div className="uns-sql-tabs">
-                        <button
-                          className={`uns-sql-tab ${sqlTab === 'timeRange' ? 'active' : ''}`}
-                          onClick={() => setSqlTab('timeRange')}
-                        >
-                          Time Range Query
-                        </button>
-                        <button
-                          className={`uns-sql-tab ${sqlTab === 'advanced' ? 'active' : ''}`}
-                          onClick={() => setSqlTab('advanced')}
-                        >
-                          Advanced Query
-                        </button>
-                      </div>
-
-                      {sqlTab === 'timeRange' && (
-                        <div className="uns-sql-tab-content">
-                          <div className="uns-sql-header">
-                            <strong>Table Data (Last {timeRangeValue} {timeRangeUnit}{timeRangeValue !== 1 ? 's' : ''}):</strong>
-                            {sqlData && sqlData.length > 0 && (
-                              <span className="uns-sql-row-count">({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})</span>
-                            )}
-                          </div>
-                          {sqlLoading && (
-                            <div className="uns-sql-loading">Loading table data...</div>
-                          )}
-                          {sqlError && (
-                            <div className={sqlError.includes('no table/data') ? "uns-sql-empty" : "uns-sql-error"}>
-                              {sqlError.includes('no table/data') ? (
-                                sqlError
-                              ) : (
-                                <>
-                                  <strong>Error:</strong> {sqlError}
-                                </>
-                              )}
-                            </div>
-                          )}
-                          {!sqlLoading && !sqlError && sqlData && (
-                            <div className="uns-sql-table-container">
-                              {sqlData.length === 0 ? (
-                                <div className="uns-sql-empty">No data found for the specified time range.</div>
-                              ) : (
-                                <table className="uns-sql-table">
-                                  <thead>
-                                    <tr>
-                                      {Object.keys(sqlData[0]).map((key) => (
-                                        <th key={key}>{key}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sqlData.map((row, index) => (
-                                      <tr key={index}>
-                                        {Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {sqlTab === 'advanced' && (
-                        <div className="uns-sql-tab-content">
-                          <div className="uns-sql-header">
-                            <strong>Custom SQL Query:</strong>
-                            {sqlData && sqlData.length > 0 && (
-                              <span className="uns-sql-row-count">({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})</span>
-                            )}
-                          </div>
-                          <div className="uns-custom-query-container">
-                            <textarea
-                              value={customSqlQuery}
-                              onChange={(e) => setCustomSqlQuery(e.target.value)}
-                              placeholder={`Enter your SQL query here...\nExample: SELECT * FROM ${itemData?.table || 'table_name'} WHERE column = 'value'`}
-                              className="uns-custom-query-input"
-                              rows={6}
-                            />
-                            <button
-                              onClick={() => {
-                                if (itemData?.dbms && customSqlQuery.trim()) {
-                                  fetchCustomSqlData(itemData.dbms, customSqlQuery);
-                                }
-                              }}
-                              disabled={sqlLoading || !itemData?.dbms || !customSqlQuery.trim()}
-                              className="uns-custom-query-execute-btn"
-                            >
-                              {sqlLoading ? 'Executing...' : '▶ Execute Query'}
-                            </button>
-                          </div>
-                          {sqlLoading && (
-                            <div className="uns-sql-loading">Executing query...</div>
-                          )}
-                          {sqlError && (
-                            <div className={sqlError.includes('no table/data') ? "uns-sql-empty" : "uns-sql-error"}>
-                              {sqlError.includes('no table/data') ? (
-                                sqlError
-                              ) : (
-                                <>
-                                  <strong>Error:</strong> {sqlError}
-                                </>
-                              )}
-                            </div>
-                          )}
-                          {!sqlLoading && !sqlError && sqlData && (
-                            <div className="uns-sql-table-container">
-                              {sqlData.length === 0 ? (
-                                <div className="uns-sql-empty">No data returned from query.</div>
-                              ) : (
-                                <table className="uns-sql-table">
-                                  <thead>
-                                    <tr>
-                                      {Object.keys(sqlData[0]).map((key) => (
-                                        <th key={key}>{key}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sqlData.map((row, index) => (
-                                      <tr key={index}>
-                                        {Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="uns-side-panel-json">
-                    <strong>JSON Data:</strong>
-                    <pre>{JSON.stringify(itemData, null, 2)}</pre>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+        {/* Side Panel for detailed view */}
+        <UNSSidePanel
+          isOpen={isSidePanelOpen}
+          selectedItem={selectedItem}
+          sqlData={sqlData}
+          sqlLoading={sqlLoading}
+          sqlError={sqlError}
+          sqlTab={sqlTab}
+          timeRangeValue={timeRangeValue}
+          timeRangeUnit={timeRangeUnit}
+          customSqlQuery={customSqlQuery}
+          onClose={() => {
+            setIsSidePanelOpen(false);
+            setSelectedItem(null);
+            setSqlData(null);
+            setSqlError(null);
+            setCustomSqlQuery('');
+            setSqlTab('timeRange');
+          }}
+          onTimeRangeValueChange={setTimeRangeValue}
+          onTimeRangeUnitChange={setTimeRangeUnit}
+          onFetchTimeRange={fetchSqlData}
+          onTabChange={setSqlTab}
+          onCustomQueryChange={setCustomSqlQuery}
+          onExecuteCustomQuery={fetchCustomSqlData}
+          getItemName={getItemName}
+          getItemType={getItemType}
+          getItemId={getItemId}
+          getItemData={getItemData}
+          renderSqlLineChart={renderSqlLineChart}
+        />
       </div>
 
       {hoveredItem && (
