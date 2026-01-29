@@ -176,6 +176,42 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
     setChartViewEnd(newEnd);
   };
 
+  const handleExportImage = () => {
+    if (!chartContainerRef.current) return;
+    const svgEl = chartContainerRef.current.querySelector('.recharts-wrapper svg') || chartContainerRef.current.querySelector('svg');
+    if (!svgEl) return;
+    const clone = svgEl.cloneNode(true);
+    const width = 800;
+    const height = 440;
+    clone.setAttribute('width', width);
+    clone.setAttribute('height', height);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const pngUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = `chart-${effectiveYKey || 'export'}-${new Date().toISOString().slice(0, 10)}.png`;
+        a.click();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  };
+
   return (
     <div className="uns-sql-chart">
       <div className="uns-sql-chart-header">
@@ -193,6 +229,9 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
               </option>
             ))}
           </select>
+          <button type="button" onClick={handleExportImage} className="uns-sql-chart-export-btn" title="Export as image" aria-label="Export chart as image">
+            Export image
+          </button>
           {canZoom && (
             <>
               <div className="uns-sql-chart-zoom-btns">
