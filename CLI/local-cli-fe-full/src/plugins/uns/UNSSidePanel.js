@@ -1,5 +1,6 @@
 import React from 'react';
 import './UNSPage.css';
+import UNSLineChart from './UNSLineChart';
 
 const UNSSidePanel = ({
   isOpen,
@@ -22,7 +23,8 @@ const UNSSidePanel = ({
   getItemType,
   getItemId,
   getItemData,
-  renderSqlLineChart,
+  chartYKey,
+  onChartYKeyChange,
 }) => {
   const itemData = selectedItem ? getItemData(selectedItem) : null;
   const hasTable = itemData && itemData.dbms && itemData.table;
@@ -180,7 +182,7 @@ const UNSSidePanel = ({
                             </table>
                           )}
                         </div>
-                        {renderSqlLineChart && renderSqlLineChart()}
+                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
                       </>
                     )}
                   </div>
@@ -262,7 +264,7 @@ const UNSSidePanel = ({
                             </table>
                           )}
                         </div>
-                        {renderSqlLineChart && renderSqlLineChart()}
+                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
                       </>
                     )}
                   </div>

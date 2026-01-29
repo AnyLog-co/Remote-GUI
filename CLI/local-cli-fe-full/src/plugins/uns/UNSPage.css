@@ -896,6 +896,37 @@
   cursor: grabbing !important;
 }
 
+/* Scrollbar below chart */
+.uns-sql-chart-scrollbar {
+  margin-top: 8px;
+  height: 12px;
+  width: 100%;
+  background: #e9ecef;
+  border-radius: 6px;
+  position: relative;
+  cursor: pointer;
+}
+
+.uns-sql-chart-scrollbar-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 24px;
+  background: #6c757d;
+  border-radius: 4px;
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.uns-sql-chart-scrollbar-thumb:active {
+  cursor: grabbing;
+  background: #495057;
+}
+
+.uns-sql-chart-scrollbar-thumb:hover {
+  background: #5a6268;
+}
+
 /* Recharts container – fixed height keeps aspect ratio, no stretch */
 .uns-sql-chart-body .recharts-responsive-container {
   min-height: 220px;
