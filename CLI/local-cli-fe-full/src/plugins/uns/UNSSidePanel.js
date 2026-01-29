@@ -273,7 +273,7 @@ const UNSSidePanel = ({
             )}
 
             <div className="uns-side-panel-json">
-              <strong>JSON Data:</strong>
+              <strong>UNS Policy:</strong>
               <pre>{JSON.stringify(itemData, null, 2)}</pre>
             </div>
           </>
