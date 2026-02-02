@@ -18,7 +18,7 @@ const UNSPage = ({ node }) => {
   const [hoverTimeout, setHoverTimeout] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null); // Selected item for side panel
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false); // Side panel visibility
-  const [rootQuery, setRootQuery] = useState('blockchain get *'); // Configurable root query
+  const [rootQuery, setRootQuery] = useState('blockchain get root policies'); // Configurable root query
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
   const [sqlData, setSqlData] = useState(null); // SQL query results
