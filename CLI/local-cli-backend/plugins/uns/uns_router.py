@@ -19,7 +19,7 @@ class BlockchainQueryRequest(BaseModel):
 
 class GetRootRequest(BaseModel):
     conn: str
-    query: Optional[str] = "blockchain get *"  # Default to blockchain get * if not provided
+    query: Optional[str] = "blockchain get root policies"  # Default to blockchain get * if not provided
 
 class QueryTableRequest(BaseModel):
     conn: str
