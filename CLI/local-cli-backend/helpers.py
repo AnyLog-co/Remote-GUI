@@ -559,6 +559,27 @@ def get_data_nodes(conn: str) -> list:
         return []
 
 
+def get_data_nodes_for_table(conn: str, dbms: str, table: str) -> list:
+    """
+    Get data nodes for a specific dbms and table using 'get data nodes'.
+    Returns an empty list if there is no table at that location (no error raised).
+    Use this instead of get_columns for existence checks, as it returns empty list
+    instead of raising/returning errors when the table doesn't exist.
+    """
+    try:
+        raw_response = make_request(conn, "GET", f'get data nodes where format=json and dbms="{dbms}" and table="{table}"')
+        if isinstance(raw_response, dict) and raw_response.get("type") == "error":
+            return []
+        structured_data = parse_response(raw_response)
+        if structured_data.get("type") == "json" and structured_data.get("data"):
+            data = structured_data["data"]
+            return data if isinstance(data, list) else []
+        return []
+    except Exception as e:
+        print(f"get_data_nodes_for_table {dbms}.{table}: {e}")
+        return []
+
+
 def get_companies(conn: str) -> list:
     """
     Get all companies available in the AnyLog network.

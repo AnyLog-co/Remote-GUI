@@ -5,6 +5,7 @@ import UNSLineChart from './UNSLineChart';
 const UNSSidePanel = ({
   isOpen,
   selectedItem,
+  itemsWithData,
   sqlData,
   sqlLoading,
   sqlError,
@@ -27,7 +28,10 @@ const UNSSidePanel = ({
   onChartYKeyChange,
 }) => {
   const itemData = selectedItem ? getItemData(selectedItem) : null;
-  const hasTable = itemData && itemData.dbms && itemData.table;
+  const hasTableMeta = itemData && itemData.dbms && itemData.table;
+  const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
+  const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
+  const showTableSection = hasTableMeta && hasDataAtLocation;
 
   return (
     <div className={`uns-side-panel ${isOpen ? 'open' : ''}`}>
@@ -53,7 +57,7 @@ const UNSSidePanel = ({
               <div className="uns-side-panel-info-row">
                 <strong>ID:</strong> {getItemId(selectedItem)}
               </div>
-              {hasTable && (
+              {showTableSection && (
                 <>
                   <div className="uns-side-panel-info-row">
                     <strong>DBMS:</strong> {itemData.dbms}
@@ -91,7 +95,7 @@ const UNSSidePanel = ({
                       </select>
                       <button
                         onClick={() => {
-                          if (hasTable) {
+                          if (showTableSection) {
                             onFetchTimeRange(itemData.dbms, itemData.table);
                           }
                         }}
@@ -106,7 +110,7 @@ const UNSSidePanel = ({
               )}
             </div>
 
-            {hasTable && (
+            {showTableSection && (
               <div className="uns-side-panel-sql">
                 <div className="uns-sql-tabs">
                   <button

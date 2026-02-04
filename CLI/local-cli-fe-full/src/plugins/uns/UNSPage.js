@@ -896,11 +896,13 @@ const UNSPage = ({ node }) => {
       setCustomSqlQuery(''); // Clear custom query when opening new item
       setSqlTab('timeRange'); // Reset to time range tab
       
-      // Check if item has dbms and table, then fetch SQL data
+      // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
-      if (itemData && itemData.dbms && itemData.table) {
+      const hasTableMeta = itemData && itemData.dbms && itemData.table;
+      const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
+      const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
+      if (hasDataAtLocation) {
         fetchSqlData(itemData.dbms, itemData.table);
-        // Note: Data checking happens automatically in background via useEffect
       }
     }
   };
@@ -1154,6 +1156,7 @@ const UNSPage = ({ node }) => {
         <UNSSidePanel
           isOpen={isSidePanelOpen}
           selectedItem={selectedItem}
+          itemsWithData={itemsWithData}
           sqlData={sqlData}
           sqlLoading={sqlLoading}
           sqlError={sqlError}

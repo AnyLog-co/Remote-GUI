@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from plugins.utils import make_request
 from parsers import parse_response
-from plugins.utils import get_columns
+from plugins.utils import get_data_nodes_for_table
 
 # Create the API router
 api_router = APIRouter(prefix="/uns", tags=["UNS"])
@@ -341,52 +341,32 @@ async def query_custom(request: QueryCustomRequest):
 
 @api_router.post("/check-table")
 async def check_table(request: CheckTableRequest):
-    """Check if a table exists and has data by checking for columns"""
+    """Check if a table exists at the location using get data nodes (returns empty list if no table)."""
     try:
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
         
-        # Use the get_columns helper which handles the command and parsing
-        columns = get_columns(request.conn, request.dbms, request.table)
+        # Use get data nodes: returns empty list if no table at this location (no error)
+        nodes = get_data_nodes_for_table(request.conn, request.dbms, request.table)
+        has_data = len(nodes) > 0
         
-        # If columns list is not empty, the table exists and has data
-        # Empty list means table doesn't exist or has no data
-        has_data = len(columns) > 0
-        
-        # Double-check: if we got an empty list, definitely no data
         if not has_data:
-            print(f"UNS: Table {request.dbms}.{request.table} has no columns - treating as no data")
+            print(f"UNS: No data nodes for {request.dbms}.{request.table} - treating as no table")
         
         return {
             "success": True,
             "has_data": has_data,
-            "column_count": len(columns),
+            "column_count": len(nodes),  # number of nodes matching dbms/table
             "error": None
         }
     except Exception as e:
         error_msg = str(e)
         print(f"UNS: Check table error: {error_msg}")
-        
-        # Check if error indicates table doesn't exist or connection issues
-        # These errors mean the table doesn't exist or can't be accessed
-        error_lower = error_msg.lower()
-        is_table_error = any(indicator in error_lower for indicator in [
-            "failed to load table metadata",
-            "connection broken",
-            "invalidchunklength",
-            "invalid literal",
-            "table",
-            "does not exist",
-            "not found",
-            "err_code"
-        ])
-        
-        # If there's an error (especially connection/table errors), assume table doesn't exist or has no data
         return {
             "success": False,
             "has_data": False,
             "column_count": 0,
-            "error": error_msg if not is_table_error else None  # Don't expose internal errors to frontend
+            "error": error_msg
         }
 
 @api_router.post("/check-children")
