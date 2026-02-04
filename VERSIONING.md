@@ -20,6 +20,49 @@ This document describes how versioning works across the Remote-GUI project: one 
 
 ---
 
+## Push workflow: what comes after `git add`
+
+You have two cases: **just pushing your changes** (no new release number) or **pushing a release** (bump version and tag).
+
+### Just pushing your work (no release)
+
+You finished a bunch of changes and want to push the branch. **Do not bump `VERSION`.**
+
+```bash
+git add .                              # or specific files
+git commit -m "Describe your changes"   # e.g. "UNS plugin: add export"
+git push
+```
+
+If your branch is new: `git push -u origin <branch-name>`. The app’s version stays whatever is in `VERSION`; `GET /version` will show that plus the new commit and branch after you push.
+
+### Pushing a release (bump version + tag)
+
+You’re happy with the state of the branch and want this push to be **release X.Y.Z** (e.g. 1.1.0).
+
+1. **Commit all your work** (if not already committed):
+   ```bash
+   git add .
+   git commit -m "Your feature/fix summary"
+   ```
+
+2. **Bump version, create a release commit and tag** (from repo root):
+   ```bash
+   python3 scripts/bump_version.py minor --commit --tag   # or patch / major
+   ```
+   This updates `VERSION`, commits it, and creates the tag (e.g. `v1.1.0`).
+
+3. **Push branch and tags**:
+   ```bash
+   git push
+   git push --tags
+   ```
+   Or in one line: `git push && git push --tags`.
+
+So after `git add`, the flow is: **commit** → (if releasing: **run bump script with --commit --tag**) → **push** → **push --tags** (if you created a tag).
+
+---
+
 ## Single source of truth: `VERSION`
 
 - **File:** `VERSION` at the repository root.
