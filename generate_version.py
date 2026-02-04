@@ -38,16 +38,8 @@ def create_html_file():
 
     with open(TEMPLATE_FILE, 'r') as f:
         html_content = f.read()
-    html_content += '<div class="card"> <h1>Application Info</h1>'
-    for param in METADATA:
-        if param == "Docs":
-            html_content += f'\n<div class="row"><span class="label" style="padding-left: 2em;"><b>{param.capitalize()}</b>:</span><a href="{METADATA[param]}" target="_blank">{METADATA[param]}</a></div>'
-        elif param == "Version":
-            html_content += f'\n<div class="row"><span class="label" style="padding-left: 2em;"><b>{param.capitalize()}</b>:</span></div>'
-        else:
-            html_content +=  f'\n<div class="row"><span class="label" style="padding-left: 2em;"><b>{param.capitalize()}</b>:</span>{METADATA[param]}</div>'
-    html_content += '\n</div></body></html>'
-
+    html_content = html_content.replace('<span class="label" style="padding-left: 2em;">&nbsp;&nbsp;&nbsp;<b>Date</b>: XXX | <b>Commit</b>: XXX</span>',
+                                        f'<span class="label" style="padding-left: 2em;">&nbsp;&nbsp;&nbsp;<b>Date</b>: {METADATA["version"]["date"]} | <b>Commit</b>: {METADATA["version"]["commit"]}</span>')
     return html_content
 
 def write_html():
