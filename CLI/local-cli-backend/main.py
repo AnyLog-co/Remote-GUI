@@ -9,6 +9,7 @@ sys.path.append(BASE_DIR)
 from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -28,6 +29,8 @@ from feature_config_loader import (
     get_enabled_plugins,
     load_feature_config
 )
+from version_info import get_version_info
+from jinja2 import Environment, FileSystemLoader
 
 
 
@@ -62,12 +65,14 @@ async def feature_check_middleware(request: Request, call_next):
     """Middleware to block access to disabled features"""
     path = request.url.path
     
-    # Skip feature checks for static files, docs, and config endpoints
+    # Skip feature checks for static files, docs, config, and version endpoints
     if (path.startswith("/static/") or 
         path.startswith("/docs") or 
         path.startswith("/openapi.json") or
         path == "/" or
-        path == "/feature-config"):
+        path == "/feature-config" or
+        path == "/version" or
+        path == "/version.html"):
         response = await call_next(request)
         return response
     
@@ -181,6 +186,21 @@ def get_feature_config_endpoint():
         "plugins": plugins_status,
         "version": config.get("version", "1.0.0")
     }
+
+# Version endpoint (always available, no feature gate)
+@app.get("/version")
+def get_version_endpoint():
+    """Return full version info: semantic version from VERSION file + git metadata (commit, branch, date, dirty)."""
+    return get_version_info()
+
+
+@app.get("/version.html", response_class=HTMLResponse)
+def get_version_html_endpoint():
+    """Return version info as HTML for human-readable display."""
+    env = Environment(loader=FileSystemLoader(os.path.join(BASE_DIR, "templates")))
+    template = env.get_template("version_template.html")
+    return template.render(**get_version_info())
+
 
 # Plugin order endpoint for frontend
 @app.get("/plugins/order")

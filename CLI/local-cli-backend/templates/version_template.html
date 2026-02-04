@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ application }} — Version</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 640px; }
+        h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+        .meta { color: #555; font-size: 0.9rem; }
+        .version-line { margin-top: 1rem; padding: 0.75rem; background: #f5f5f5; border-radius: 6px; }
+        .label { font-weight: 500; }
+        a { color: #0066cc; }
+    </style>
+</head>
+<body>
+    <h1>{{ application }}</h1>
+    <p class="meta">{{ description }}</p>
+    <p class="meta">{{ author }} · <a href="{{ docs }}">Repository</a> · {{ license }}</p>
+    <div class="version-line">
+        <span class="label">Version:</span> {{ version }}
+        {% if commit %}
+        | <span class="label">Commit:</span> {{ commit }}{% if dirty %} <em>(dirty)</em>{% endif %}
+        {% if branch and branch != 'detached' %} | <span class="label">Branch:</span> {{ branch }}{% endif %}
+        {% if date %} | <span class="label">Date:</span> {{ date }}{% endif %}
+        {% endif %}
+    </div>
+</body>
+</html>
