@@ -1,0 +1,10 @@
+CHANGELOG - Remote-GUI
+======================
+Patch notes for each release. Newest at top.
+
+## 1.1.1 - 2026-02-04
+- Fix UNS export
+- Add status filter
+
+## 1.1.0 - (date of release)
+- (Add notes when releasing: use --notes "line1" "line2" or --notes-file path with bump_version.py)
