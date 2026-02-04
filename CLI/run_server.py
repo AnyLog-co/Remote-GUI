@@ -1,6 +1,6 @@
+#### To debug in PyCharms or an IDE, start this backend server
+
 import uvicorn
-
-
 
 if __name__ == "__main__":
     uvicorn.run(
