@@ -65,6 +65,10 @@
     "mcpclient": {
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
+    },
+    "videostreamviewer": {
+      "enabled": true,
+      "description": "Video Stream Viewer Plugin"
     }
   },
   "version": "1.0.0"
