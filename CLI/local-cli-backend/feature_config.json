@@ -65,6 +65,10 @@
     "mcpclient": {
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
+    },
+    "fileuploader": {
+      "enabled": true,
+      "description": "File Uploader Plugin"
     }
   },
   "version": "1.0.0"
