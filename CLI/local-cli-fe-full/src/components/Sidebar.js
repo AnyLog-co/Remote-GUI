@@ -7,6 +7,7 @@ import {
   isFeatureEnabled, 
   isPluginEnabled 
 } from '../services/featureConfig';
+import { getVersion } from '../services/api';
 import '../styles/Sidebar.css';
 
 const Sidebar = () => {
@@ -14,6 +15,7 @@ const Sidebar = () => {
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [versionInfo, setVersionInfo] = useState(null);
   
   // Feature configuration mapping
   const featureConfig = [
@@ -66,6 +68,10 @@ const Sidebar = () => {
     
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    getVersion().then(setVersionInfo);
+  }, []);
   
   // Filter features based on config
   const visibleFeatures = featureConfig.filter(feature => 
@@ -103,7 +109,17 @@ const Sidebar = () => {
           ))}
         </div>
       )}
-      
+
+      <div className="sidebar-version">
+        {versionInfo ? (
+          <span title={`Commit: ${versionInfo.commit || '—'}${versionInfo.dirty ? ' (dirty)' : ''}${versionInfo.branch ? ` · ${versionInfo.branch}` : ''}`}>
+            v{versionInfo.version}
+            {versionInfo.commit && <span className="sidebar-version-commit"> ({versionInfo.commit}{versionInfo.dirty ? '-dirty' : ''})</span>}
+          </span>
+        ) : (
+          <span>—</span>
+        )}
+      </div>
     </nav>
   );
 };

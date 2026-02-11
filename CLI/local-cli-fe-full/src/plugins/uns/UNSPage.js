@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
 import UNSLineChart from './UNSLineChart';
-
-const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+import { getRoot, getChildren, checkChildren, queryTable, queryCustom, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
   const [loading, setLoading] = useState(false);
@@ -254,19 +253,7 @@ const UNSPage = ({ node }) => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/get-root`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, query: rootQuery.trim() }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await getRoot(node, rootQuery);
       
       if (result.success && result.data) {
         // Log the structure for debugging
@@ -415,19 +402,8 @@ const UNSPage = ({ node }) => {
   };
 
   const hasChildren = async (itemId) => {
-    // Check if item has children by trying to fetch them
     try {
-      const response = await fetch(`${API_URL}/uns/get-children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, item_id: itemId }),
-      });
-
-      if (!response.ok) return false;
-
-      const result = await response.json();
+      const result = await getChildren(node, itemId);
       return result.success && result.data && result.data.length > 0;
     } catch {
       return false;
@@ -454,22 +430,7 @@ const UNSPage = ({ node }) => {
     setCheckingChildren(prev => new Set(prev).add(itemId));
     
     try {
-      const response = await fetch(`${API_URL}/uns/check-children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          item_id: itemId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await checkChildren(node, itemId);
       
       // Only consider it has_children if success is True AND has_children is True
       const hasChildren = result.success === true && result.has_children === true;
@@ -537,19 +498,7 @@ const UNSPage = ({ node }) => {
     });
 
     try {
-      const response = await fetch(`${API_URL}/uns/get-children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, item_id: itemId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await getChildren(node, itemId);
       
       console.log('UNS: Response received:', {
         success: result.success,
@@ -659,32 +608,20 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchSqlData = async (dbms, table) => {
+  const fetchSqlData = async (dbms, table, whereClause) => {
     if (!node || !dbms || !table) return;
 
     setSqlLoading(true);
     setSqlError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/query-table`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          dbms: dbms,
-          table: table,
-          time_value: timeRangeValue,
-          time_unit: timeRangeUnit
-        }),
+      const result = await queryTable(node, {
+        dbms,
+        table,
+        time_value: timeRangeValue,
+        time_unit: timeRangeUnit,
+        where: whereClause,
       });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
       
       console.log('UNS: SQL query result:', {
         success: result.success,
@@ -738,23 +675,7 @@ const UNSPage = ({ node }) => {
     setSqlError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/query-custom`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          dbms: dbms,
-          sql_query: sqlQuery.trim()
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await queryCustom(node, { dbms, sql_query: sqlQuery });
       
       console.log('UNS: Custom SQL query result:', {
         success: result.success,
@@ -821,23 +742,7 @@ const UNSPage = ({ node }) => {
     setCheckingData(prev => new Set(prev).add(cacheKey));
     
     try {
-      const response = await fetch(`${API_URL}/uns/check-table`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          dbms: dbms,
-          table: table
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await checkTable(node, { dbms, table });
       
       // Only consider it has_data if success is True AND has_data is True
       // If success is False or has_data is False, treat as no data
@@ -902,7 +807,7 @@ const UNSPage = ({ node }) => {
       const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
       const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
       if (hasDataAtLocation) {
-        fetchSqlData(itemData.dbms, itemData.table);
+        fetchSqlData(itemData.dbms, itemData.table, itemData.where);
       }
     }
   };
@@ -1157,6 +1062,7 @@ const UNSPage = ({ node }) => {
           isOpen={isSidePanelOpen}
           selectedItem={selectedItem}
           itemsWithData={itemsWithData}
+          conn={node}
           sqlData={sqlData}
           sqlLoading={sqlLoading}
           sqlError={sqlError}
