@@ -9,6 +9,8 @@ The feature configuration file is located at:
 
 ## How It Works
 
+**Source of truth:** Only features and plugins **listed** in `feature_config.json` are considered. Any feature or plugin that is **not** in the config is **disabled** (not loaded on the backend, not shown in the UI). To enable a new feature or plugin, add it to the config with `"enabled": true`.
+
 ### Features
 The system controls access to core features:
 - `client` - Client connection and command execution

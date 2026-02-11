@@ -63,6 +63,25 @@ So after `git add`, the flow is: **commit** → (if releasing: **run bump script
 
 ---
 
+## Patch notes: `CHANGELOG.txt`
+
+- **File:** `CHANGELOG.txt` at the repository root.
+- **Format:** Newest release at top. Each section is `## X.Y.Z - YYYY-MM-DD` followed by bullet points.
+- **How it’s updated:** When you run the bump script with `--commit` (or `--tag`), it prepends a new section for the new version and commits it together with `VERSION`. Pass notes with `--notes "Fix export" "Add filter"` or `--notes-file release_notes.txt`.
+
+Example:
+
+```
+## 1.1.1 - 2025-02-03
+- Fix export in UNS plugin
+- Add status filter
+
+## 1.1.0 - 2025-01-15
+- Initial release
+```
+
+---
+
 ## Single source of truth: `VERSION`
 
 - **File:** `VERSION` at the repository root.
@@ -116,6 +135,10 @@ python scripts/bump_version.py minor --dry-run
 | `--tag` | Create annotated tag `vX.Y.Z` (run after commit; use with `--commit` to do both in one go). |
 | `--suffix SUFFIX` | Set or keep a suffix (e.g. `-dev`, `-beta.1`). Omit to keep current suffix or get a clean version. |
 | `--dry-run` | Print new version only; do not write `VERSION` or run git. |
+| `--notes "line1" "line2"` | Patch notes for this release (each argument = one bullet in `CHANGELOG.txt`). Use with `--commit`. |
+| `--notes-file PATH` | Path to a file (relative to repo root) with patch notes; one bullet per line. Use with `--commit`. |
+
+When you use `--commit` (or `--tag`), the script also updates **`CHANGELOG.txt`** at the repo root: it prepends a new section for the new version with today’s date and your notes (or “(No notes for this release.)” if you omit `--notes` and `--notes-file`). That way every release has a patch-notes entry.
 
 Run from the repo root so git sees the right directory. The script finds the repo by looking for `VERSION` and `.git`.
 
@@ -151,6 +174,7 @@ Pre-release: add a suffix, e.g. `1.0.0-dev`, `2.0.0-beta.1`. No need to bump the
 | What | Where | When to change |
 |------|--------|-----------------|
 | **App / release version** | `VERSION` (repo root) | When you cut a release or want to advertise a new version |
+| **Patch notes** | `CHANGELOG.txt` (repo root) | Updated by bump script when you use `--commit` with `--notes` or `--notes-file` |
 | Git metadata (commit, branch, dirty) | Computed from repo | Automatic |
 | Feature config schema | `feature_config.json` → `version` | When config format changes |
 | Frontend package | `package.json` → `version` | Optional: align with `VERSION` if desired |

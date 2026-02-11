@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-Bump the app version in VERSION (repo root).
+Bump the app version in VERSION (repo root) and optionally update CHANGELOG.txt.
 
 Usage:
   python scripts/bump_version.py patch              # 1.0.0 -> 1.0.1
-  python scripts/bump_version.py minor              # 1.0.0 -> 1.1.0
-  python scripts/bump_version.py major              # 1.0.0 -> 2.0.0
-  python scripts/bump_version.py patch --commit     # bump + git commit
-  python scripts/bump_version.py minor --commit --tag   # bump + commit + git tag
-  python scripts/bump_version.py patch --suffix -dev    # 1.0.0 -> 1.0.1-dev
+  python scripts/bump_version.py minor --commit --tag --notes "Fix export" "Add filter"
+  python scripts/bump_version.py patch --commit --notes-file release_notes.txt
 
 Run from repo root, or set REPO_ROOT. Requires git for --commit / --tag.
 """
@@ -17,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 
 def find_repo_root() -> str:
@@ -65,6 +63,42 @@ def bump(kind: str, major: int, minor: int, patch: int) -> tuple:
     raise ValueError(f"Unknown bump kind: {kind!r}")
 
 
+CHANGELOG_FILENAME = "CHANGELOG.txt"
+CHANGELOG_HEADER = "CHANGELOG - Remote-GUI\n======================\nPatch notes for each release. Newest at top.\n\n"
+
+
+def update_changelog(repo_root: str, new_version: str, notes_lines: list[str]) -> None:
+    """Prepend a new ## version - date section to CHANGELOG.txt with the given notes as bullets."""
+    path = os.path.join(repo_root, CHANGELOG_FILENAME)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    section = f"## {new_version} - {date_str}\n"
+    if notes_lines:
+        for line in notes_lines:
+            line = line.strip()
+            if line and not line.startswith("-"):
+                section += f"- {line}\n"
+            elif line:
+                section += f"{line}\n"
+    else:
+        section += "- (No notes for this release.)\n"
+    section += "\n"
+
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as f:
+            existing = f.read()
+        # Insert new section after first double-newline (after header) so newest stays at top
+        if existing.startswith("CHANGELOG - Remote-GUI") and "\n\n" in existing:
+            head, rest = existing.split("\n\n", 1)
+            new_content = head + "\n\n" + section + rest
+        else:
+            new_content = section + existing
+    else:
+        new_content = CHANGELOG_HEADER + section
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Bump VERSION (patch/minor/major), optionally commit and tag."
@@ -95,6 +129,17 @@ def main() -> None:
         action="store_true",
         help="Only print new version, do not write VERSION or run git",
     )
+    parser.add_argument(
+        "--notes",
+        nargs="*",
+        metavar="LINE",
+        help="Patch notes for this release (each argument = one bullet line). Use with --commit.",
+    )
+    parser.add_argument(
+        "--notes-file",
+        metavar="PATH",
+        help="Path to a file containing patch notes (one bullet per line, or free text). Use with --commit.",
+    )
     args = parser.parse_args()
 
     repo_root = os.environ.get("REPO_ROOT") or find_repo_root()
@@ -119,16 +164,30 @@ def main() -> None:
     with open(version_file, "w", encoding="utf-8") as f:
         f.write(new_version + "\n")
 
+    notes_lines: list[str] = []
+    if args.notes is not None and len(args.notes) > 0:
+        notes_lines = [line for n in args.notes for line in n.split("\n") if line.strip()]
+    elif args.notes_file:
+        notes_path = args.notes_file if os.path.isabs(args.notes_file) else os.path.join(repo_root, args.notes_file)
+        if os.path.isfile(notes_path):
+            with open(notes_path, "r", encoding="utf-8") as f:
+                notes_lines = [line.strip() for line in f.readlines() if line.strip()]
+        else:
+            print(f"Warning: --notes-file {args.notes_file} not found; changelog will have no notes.")
+
     if args.commit or args.tag:
-        subprocess.run(
-            ["git", "-C", repo_root, "add", "VERSION"],
-            check=True,
-        )
+        if notes_lines or True:  # always update changelog on release
+            update_changelog(repo_root, new_version, notes_lines)
+            print("Updated CHANGELOG.txt")
+        files_to_add = [version_file, os.path.join(repo_root, CHANGELOG_FILENAME)]
+        for f in files_to_add:
+            if os.path.isfile(f):
+                subprocess.run(["git", "-C", repo_root, "add", os.path.basename(f)], check=True)
         subprocess.run(
             ["git", "-C", repo_root, "commit", "-m", f"Bump version to {new_version}"],
             check=True,
         )
-        print("Committed VERSION")
+        print("Committed VERSION and CHANGELOG.txt")
 
     if args.tag:
         tag_name = f"v{new_version}"
