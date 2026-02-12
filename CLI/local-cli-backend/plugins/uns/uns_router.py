@@ -29,6 +29,7 @@ class QueryTableRequest(BaseModel):
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
+    column: Optional[str] = None  # When set, only fetch insert_timestamp and this column
 
 class QueryCustomRequest(BaseModel):
     conn: str
@@ -164,15 +165,21 @@ async def query_table(request: QueryTableRequest):
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
         
-        # Build SQL query: SELECT * FROM table WHERE period(...) [AND policy_where]
+        # Build SQL query: when column in policy, only fetch insert_timestamp + that column; else SELECT *
         time_value = request.time_value or 5.0
         time_unit = request.time_unit or "minute"
         
         # Convert to int if it's a whole number, otherwise keep as float
         time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
         
+        if request.column and request.column.strip():
+            col = _quote_identifier(request.column.strip())
+            select_clause = f"insert_timestamp, {col}"
+        else:
+            select_clause = "*"
+        
         # Base time filter
-        sql_query = f'SELECT * FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
+        sql_query = f'SELECT {select_clause} FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
         if request.where and request.where.strip():
             sql_query += f" AND ({request.where.strip()})"
         # Use the exact format that works in the client dashboard
@@ -389,8 +396,14 @@ async def column_details(request: ColumnDetailsRequest):
             rows = _extract_query_rows(run_sql(
                 f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {request.table} WHERE {period}{where}"))
             row = rows[0] if rows and isinstance(rows[0], dict) else {}
+            # Also fetch latest value for numerical summary
+            latest_rows = _extract_query_rows(run_sql(
+                f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"))
+            latest_row = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
+            latest_value = latest_row.get(request.column) or (list(latest_row.values())[0] if latest_row else None)
             return {"success": True, "column_type": "numerical",
-                    "data": {"min": row.get("min"), "max": row.get("max"), "avg": row.get("avg")}, "error": None}
+                    "data": {"min": row.get("min"), "max": row.get("max"), "avg": row.get("avg"),
+                             "latest_value": latest_value}, "error": None}
 
         # string: latest value + last occurrence per value
         latest_rows = _extract_query_rows(run_sql(

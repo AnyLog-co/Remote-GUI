@@ -98,7 +98,7 @@ const UNSSidePanel = ({
                       <button
                         onClick={() => {
                           if (showTableSection) {
-                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where);
+                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where, itemData.column);
                           }
                         }}
                         disabled={sqlLoading}
@@ -190,7 +190,12 @@ const UNSSidePanel = ({
                             </table>
                           )}
                         </div>
-                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        <UNSLineChart
+                          sqlData={sqlData}
+                          chartYKey={chartYKey}
+                          onChartYKeyChange={onChartYKeyChange}
+                          preferredColumn={itemData?.column}
+                        />
                         {itemData?.column && (
                           <UNSColumnDetails
                             conn={conn}
@@ -286,7 +291,12 @@ const UNSSidePanel = ({
                             </table>
                           )}
                         </div>
-                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        <UNSLineChart
+                          sqlData={sqlData}
+                          chartYKey={chartYKey}
+                          onChartYKeyChange={onChartYKeyChange}
+                          preferredColumn={itemData?.column}
+                        />
                         {itemData?.column && (
                           <UNSColumnDetails
                             conn={conn}

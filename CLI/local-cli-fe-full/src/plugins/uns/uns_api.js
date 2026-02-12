@@ -29,9 +29,10 @@ export async function checkChildren(conn, itemId) {
   return unsRequest("/uns/check-children", { conn, item_id: itemId });
 }
 
-export async function queryTable(conn, { dbms, table, time_value, time_unit, where }) {
+export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column }) {
   const body = { conn, dbms, table, time_value, time_unit };
   if (where?.trim()) body.where = where.trim();
+  if (column?.trim()) body.column = column.trim();
   return unsRequest("/uns/query-table", body);
 }
 

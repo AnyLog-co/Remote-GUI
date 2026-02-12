@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import './UNSPage.css';
 
-const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
+const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange, preferredColumn }) => {
   const [chartViewStart, setChartViewStart] = useState(0);
   const [chartViewEnd, setChartViewEnd] = useState(null);
   const chartContainerRef = useRef(null);
@@ -105,7 +105,9 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
 
   const effectiveYKey = chartYKey && valueCandidates.includes(chartYKey)
     ? chartYKey
-    : valueCandidates[0];
+    : preferredColumn && valueCandidates.includes(preferredColumn)
+      ? preferredColumn
+      : valueCandidates[0];
 
   // Build chart data for Recharts: [{ time, value, fullTime }] sorted by time
   const chartData = sqlData

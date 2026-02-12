@@ -608,7 +608,7 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchSqlData = async (dbms, table, whereClause) => {
+  const fetchSqlData = async (dbms, table, whereClause, column) => {
     if (!node || !dbms || !table) return;
 
     setSqlLoading(true);
@@ -621,6 +621,7 @@ const UNSPage = ({ node }) => {
         time_value: timeRangeValue,
         time_unit: timeRangeUnit,
         where: whereClause,
+        column,
       });
       
       console.log('UNS: SQL query result:', {
@@ -785,6 +786,7 @@ const UNSPage = ({ node }) => {
       setSqlError(null);
       setCustomSqlQuery(''); // Clear custom query when opening new item
       setSqlTab('timeRange'); // Reset to time range tab
+      setChartYKey(null); // Reset so chart defaults to policy column for new item
       
       // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
@@ -792,7 +794,7 @@ const UNSPage = ({ node }) => {
       const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
       const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
       if (hasDataAtLocation) {
-        fetchSqlData(itemData.dbms, itemData.table, itemData.where);
+        fetchSqlData(itemData.dbms, itemData.table, itemData.where, itemData.column);
       }
     }
   };
