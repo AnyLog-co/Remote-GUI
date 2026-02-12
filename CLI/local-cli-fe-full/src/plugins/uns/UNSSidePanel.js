@@ -1,11 +1,13 @@
 import React from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
+import UNSColumnDetails from './UNSColumnDetails';
 
 const UNSSidePanel = ({
   isOpen,
   selectedItem,
   itemsWithData,
+  conn,
   sqlData,
   sqlLoading,
   sqlError,
@@ -96,7 +98,7 @@ const UNSSidePanel = ({
                       <button
                         onClick={() => {
                           if (showTableSection) {
-                            onFetchTimeRange(itemData.dbms, itemData.table);
+                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where);
                           }
                         }}
                         disabled={sqlLoading}
@@ -187,6 +189,18 @@ const UNSSidePanel = ({
                           )}
                         </div>
                         <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        {itemData?.column && (
+                          <UNSColumnDetails
+                            conn={conn}
+                            dbms={itemData.dbms}
+                            table={itemData.table}
+                            column={itemData.column}
+                            where={itemData.where}
+                            timeValue={timeRangeValue}
+                            timeUnit={timeRangeUnit}
+                            sqlData={sqlData}
+                          />
+                        )}
                       </>
                     )}
                   </div>
@@ -208,7 +222,7 @@ const UNSSidePanel = ({
                         onChange={(e) => onCustomQueryChange(e.target.value)}
                         placeholder={`Enter your SQL query here...\nExample: SELECT * FROM ${
                           itemData?.table || 'table_name'
-                        } WHERE column = 'value'`}
+                        }${itemData?.where ? ` WHERE ${itemData.where}` : " WHERE column = 'value'"}`}
                         className="uns-custom-query-input"
                         rows={6}
                       />
@@ -269,6 +283,18 @@ const UNSSidePanel = ({
                           )}
                         </div>
                         <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        {itemData?.column && (
+                          <UNSColumnDetails
+                            conn={conn}
+                            dbms={itemData.dbms}
+                            table={itemData.table}
+                            column={itemData.column}
+                            where={itemData.where}
+                            timeValue={timeRangeValue}
+                            timeUnit={timeRangeUnit}
+                            sqlData={sqlData}
+                          />
+                        )}
                       </>
                     )}
                   </div>

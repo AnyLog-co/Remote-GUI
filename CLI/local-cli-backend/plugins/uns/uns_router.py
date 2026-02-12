@@ -1,6 +1,7 @@
 # UNS Plugin - Unified Namespace
 # Provides filesystem-like interface for blockchain metadata
 
+import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -27,6 +28,7 @@ class QueryTableRequest(BaseModel):
     table: str
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
+    where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
 
 class QueryCustomRequest(BaseModel):
     conn: str
@@ -41,6 +43,16 @@ class CheckTableRequest(BaseModel):
 class CheckChildrenRequest(BaseModel):
     conn: str
     item_id: str
+
+class ColumnDetailsRequest(BaseModel):
+    conn: str
+    dbms: str
+    table: str
+    column: str
+    where: Optional[str] = None
+    time_value: float = 5.0
+    time_unit: str = "minute"
+    column_type: str = "string"  # "numerical" or "string"
 
 # API endpoints
 @api_router.get("/")
@@ -152,15 +164,17 @@ async def query_table(request: QueryTableRequest):
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
         
-        # Build SQL query: SELECT * FROM table WHERE period(unit, value, NOW(), insert_timestamp)
+        # Build SQL query: SELECT * FROM table WHERE period(...) [AND policy_where]
         time_value = request.time_value or 5.0
         time_unit = request.time_unit or "minute"
         
         # Convert to int if it's a whole number, otherwise keep as float
         time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
         
-        # Use the time unit directly in the period function
+        # Base time filter
         sql_query = f'SELECT * FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
+        if request.where and request.where.strip():
+            sql_query += f" AND ({request.where.strip()})"
         # Use the exact format that works in the client dashboard
         command = f'run client () sql {request.dbms} format = table "{sql_query}"'
         
@@ -220,9 +234,10 @@ async def query_table(request: QueryTableRequest):
             print(f"UNS: First row sample: {data[0]}")
             print(f"UNS: Last row sample: {data[-1]}")
         
-        # Filter out internal columns (row_id, tsd_name, tsd_id) from each row
+        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
+        # timestamp is excluded as insert_timestamp is used for the chart
         filtered_data = []
-        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id'}
+        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
         
         for row in data:
             if isinstance(row, dict):
@@ -309,9 +324,10 @@ async def query_custom(request: QueryCustomRequest):
             print(f"UNS: First row sample: {data[0]}")
             print(f"UNS: Last row sample: {data[-1]}")
         
-        # Filter out internal columns (row_id, tsd_name, tsd_id) from each row
+        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
+        # timestamp is excluded as insert_timestamp is used for the chart
         filtered_data = []
-        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id'}
+        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
         
         for row in data:
             if isinstance(row, dict):
@@ -338,6 +354,78 @@ async def query_custom(request: QueryCustomRequest):
             "error": error_msg,
             "data": None
         }
+
+def _quote_identifier(name: str) -> str:
+    """Quote identifier for SQL (e.g. column names with spaces)."""
+    if not name:
+        return "''"
+    return f'"{name}"' if " " in name or "-" in name or any(c in name for c in ".*") else name
+
+def _extract_query_rows(response):
+    """Extract rows from raw run_sql JSON response. Expects {Query: [...], Statistics: [...]} or JSON string."""
+    if response is None:
+        return []
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(response, dict) and response.get("type") == "error":
+        return None
+    if isinstance(response, list):
+        return response
+    if isinstance(response, dict):
+        return response.get("Query") or response.get("data") or []
+    return []
+
+@api_router.post("/column-details")
+async def column_details(request: ColumnDetailsRequest):
+    """Get column details: numerical (min, max, avg) or string (latest value, last occurrence per value)."""
+    try:
+        if not request.dbms or not request.table or not request.column:
+            raise HTTPException(status_code=400, detail="dbms, table and column are required")
+        col = _quote_identifier(request.column)
+        tv = request.time_value or 5.0
+        tu = request.time_unit or "minute"
+        tv_str = str(int(tv)) if tv == int(tv) else str(tv)
+        where = f" AND ({request.where.strip()})" if request.where and request.where.strip() else ""
+        where_group = f" WHERE {request.where.strip()}" if request.where and request.where.strip() else ""
+        period = f"period({tu}, {tv_str}, NOW(), insert_timestamp)"
+
+        def run_sql(sql):
+            s = f'run client () sql {request.dbms} format = json "{sql}"'
+            print("s is: ", s)
+            return make_request(request.conn, "GET", s)
+
+        if request.column_type == "numerical":
+            rows = _extract_query_rows(run_sql(
+                f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {request.table} WHERE {period}{where}"))
+            row = rows[0] if rows and isinstance(rows[0], dict) else {}
+            return {"success": True, "column_type": "numerical",
+                    "data": {"min": row.get("min"), "max": row.get("max"), "avg": row.get("avg")}, "error": None}
+
+        # string: latest value + last occurrence per value
+        latest_rows = _extract_query_rows(run_sql(
+            f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"))
+        row0 = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
+        latest_value = row0.get(request.column) or (list(row0.values())[0] if row0 else None)
+
+        group_rows = _extract_query_rows(run_sql(
+            f"SELECT {col}, max(timestamp) FROM {request.table}{where_group} GROUP BY {col}"))
+        last_occurrence = []
+        for r in (group_rows or []):
+            if not isinstance(r, dict):
+                continue
+            val = r.get(request.column)
+            ts = r.get("max(timestamp)")
+            if val is None:
+                val = next((v for k, v in r.items() if k != "max(timestamp)"), None)
+            last_occurrence.append({"value": val, "last_timestamp": ts})
+
+        return {"success": True, "column_type": "string",
+                "data": {"latest_value": latest_value, "last_occurrence_per_value": last_occurrence}, "error": None}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": None}
 
 @api_router.post("/check-table")
 async def check_table(request: CheckTableRequest):
