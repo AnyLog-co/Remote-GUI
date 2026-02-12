@@ -676,47 +676,32 @@ const UNSPage = ({ node }) => {
 
     try {
       const result = await queryCustom(node, { dbms, sql_query: sqlQuery });
-      
-      console.log('UNS: Custom SQL query result:', {
-        success: result.success,
-        dataLength: result.data ? result.data.length : 0,
-        dataType: Array.isArray(result.data) ? 'array' : typeof result.data
-      });
-      
-      if (result.success) {
-        console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
-        setSqlData(result.data);
+
+      const safeData = Array.isArray(result?.data) ? result.data : [];
+
+      if (result?.success) {
+        setSqlData(safeData);
       } else {
-        // Check if it's a "no data" error or a real error
-        const errorMsg = result.error || '';
-        const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                             errorMsg.toLowerCase().includes('connection broken') ||
-                             errorMsg.toLowerCase().includes('invalidchunklength') ||
-                             errorMsg.toLowerCase().includes('invalid literal') ||
-                             errorMsg.toLowerCase().includes('err_code') ||
-                             !errorMsg; // Empty error usually means no data
-        
-        if (isNoDataError) {
-          setSqlError('There is no table/data at this location');
-        } else {
-          setSqlError(result.error || 'Failed to execute custom SQL query');
-        }
+        setSqlData([]);
+        const errorMsg = result?.error || '';
+        const isNoDataError = !errorMsg ||
+          errorMsg.toLowerCase().includes('failed to load table metadata') ||
+          errorMsg.toLowerCase().includes('connection broken') ||
+          errorMsg.toLowerCase().includes('invalidchunklength') ||
+          errorMsg.toLowerCase().includes('invalid literal') ||
+          errorMsg.toLowerCase().includes('err_code');
+        setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
       }
     } catch (err) {
       console.error('Error executing custom SQL query:', err);
-      // Check if it's a "no data" error
-      const errorMsg = err.message || '';
+      setSqlData([]);
+      const errorMsg = err?.message || '';
       const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                           errorMsg.toLowerCase().includes('connection broken') ||
-                           errorMsg.toLowerCase().includes('invalidchunklength') ||
-                           errorMsg.toLowerCase().includes('invalid literal') ||
-                           errorMsg.toLowerCase().includes('err_code');
-      
-      if (isNoDataError) {
-        setSqlError('There is no table/data at this location');
-      } else {
-        setSqlError(err.message || 'Failed to execute custom SQL query');
-      }
+        errorMsg.toLowerCase().includes('connection broken') ||
+        errorMsg.toLowerCase().includes('invalidchunklength') ||
+        errorMsg.toLowerCase().includes('invalid literal') ||
+        errorMsg.toLowerCase().includes('err_code');
+      setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
     } finally {
       setSqlLoading(false);
     }

@@ -156,7 +156,7 @@ const UNSSidePanel = ({
                         )}
                       </div>
                     )}
-                    {!sqlLoading && !sqlError && sqlData && (
+                    {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
                           {sqlData.length === 0 ? (
@@ -167,7 +167,7 @@ const UNSSidePanel = ({
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {Object.keys(sqlData[0]).map((key) => (
+                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
@@ -175,13 +175,15 @@ const UNSSidePanel = ({
                               <tbody>
                                 {sqlData.map((row, index) => (
                                   <tr key={index}>
-                                    {Object.values(row).map((value, cellIndex) => (
-                                      <td key={cellIndex}>
-                                        {typeof value === 'object'
-                                          ? JSON.stringify(value)
-                                          : String(value)}
-                                      </td>
-                                    ))}
+                                    {row && typeof row === 'object'
+                                      ? Object.values(row).map((value, cellIndex) => (
+                                          <td key={cellIndex}>
+                                            {typeof value === 'object' && value !== null
+                                              ? JSON.stringify(value)
+                                              : String(value ?? '')}
+                                          </td>
+                                        ))
+                                      : <td>{String(row ?? '')}</td>}
                                   </tr>
                                 ))}
                               </tbody>
@@ -252,7 +254,7 @@ const UNSSidePanel = ({
                         )}
                       </div>
                     )}
-                    {!sqlLoading && !sqlError && sqlData && (
+                    {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
                           {sqlData.length === 0 ? (
@@ -261,7 +263,7 @@ const UNSSidePanel = ({
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {Object.keys(sqlData[0]).map((key) => (
+                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
@@ -269,13 +271,15 @@ const UNSSidePanel = ({
                               <tbody>
                                 {sqlData.map((row, index) => (
                                   <tr key={index}>
-                                    {Object.values(row).map((value, cellIndex) => (
-                                      <td key={cellIndex}>
-                                        {typeof value === 'object'
-                                          ? JSON.stringify(value)
-                                          : String(value)}
-                                      </td>
-                                    ))}
+                                    {row && typeof row === 'object'
+                                      ? Object.values(row).map((value, cellIndex) => (
+                                          <td key={cellIndex}>
+                                            {typeof value === 'object' && value !== null
+                                              ? JSON.stringify(value)
+                                              : String(value ?? '')}
+                                          </td>
+                                        ))
+                                      : <td>{String(row ?? '')}</td>}
                                   </tr>
                                 ))}
                               </tbody>

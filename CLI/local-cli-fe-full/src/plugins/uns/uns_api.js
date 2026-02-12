@@ -10,10 +10,11 @@ async function unsRequest(endpoint, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Server responded with status ${response.status}`);
+    throw new Error(data?.error || `Server responded with status ${response.status}`);
   }
-  return response.json();
+  return data;
 }
 
 export async function getRoot(conn, query) {

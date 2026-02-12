@@ -270,90 +270,78 @@ async def query_table(request: QueryTableRequest):
 
 @api_router.post("/query-custom")
 async def query_custom(request: QueryCustomRequest):
-    """Execute a custom SQL query"""
+    """Execute a custom SQL query. On any error, returns success=False, data=[], error=message to avoid frontend crashes."""
+    def _error_response(msg: str):
+        return {"success": False, "error": msg, "data": []}
+
     try:
         if not request.dbms or not request.sql_query:
-            raise HTTPException(status_code=400, detail="dbms and sql_query are required")
-        
-        # Use the exact format that works in the client dashboard
+            return _error_response("dbms and sql_query are required")
+
         command = f'run client () sql {request.dbms} format = table "{request.sql_query}"'
-        
         print(f"UNS: Executing custom SQL command: {command}")
-        print(f"UNS: Connection: {request.conn}")
-        print(f"UNS: DBMS: {request.dbms}")
-        print(f"UNS: SQL Query: {request.sql_query}")
-        
-        # Use GET method like the client dashboard does
-        response = make_request(request.conn, "GET", command)
-        print("UNS: Custom query response", response)
-        
-        parsed = parse_response(response)
-        print("UNS: Custom query parsed", parsed)
-        
+
+        try:
+            response = make_request(request.conn, "GET", command)
+        except Exception as req_err:
+            error_msg = str(req_err)
+            print(f"UNS: Custom query request error: {error_msg}")
+            return _error_response(error_msg)
+
+        try:
+            parsed = parse_response(response)
+        except Exception as parse_err:
+            error_msg = str(parse_err)
+            print(f"UNS: Custom query parse error: {error_msg}")
+            return _error_response(error_msg)
+
+        if parsed is None:
+            return _error_response("No response received")
+
+        # Check for explicit error type
+        if isinstance(parsed, dict) and parsed.get("type") == "error":
+            return _error_response(parsed.get("data", "Unknown error occurred"))
+
         # Extract data from response
+        data = None
         if isinstance(parsed, dict) and "data" in parsed:
             data = parsed["data"]
         elif isinstance(parsed, list):
             data = parsed
-        elif isinstance(parsed, dict) and "type" in parsed:
-            # Check if it's an error response
-            if parsed.get("type") == "error":
-                return {
-                    "success": False,
-                    "error": parsed.get("data", "Unknown error occurred"),
-                    "data": None
-                }
-            data = parsed.get("data", parsed)
+        elif isinstance(parsed, dict):
+            data = parsed.get("data", parsed.get("Query"))
         else:
             data = parsed
-        
-        # Handle case where data might be a string (JSON string)
+
+        if data is None:
+            data = []
+
         if isinstance(data, str):
             try:
-                import json
                 data = json.loads(data)
             except (json.JSONDecodeError, ValueError):
-                pass
-        
-        # Ensure data is a list
+                return _error_response("Invalid response format")
+
         if not isinstance(data, list):
             data = [data] if data else []
-        
-        if isinstance(data, list) and len(data) > 0:
-            print(f"UNS: Custom query returned {len(data)} rows")
-            print(f"UNS: First row sample: {data[0]}")
-            print(f"UNS: Last row sample: {data[-1]}")
-        
-        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
-        # timestamp is excluded as insert_timestamp is used for the chart
+
+        # Filter out internal columns
         filtered_data = []
         columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
-        
         for row in data:
             if isinstance(row, dict):
-                # Filter out the internal columns
                 filtered_row = {k: v for k, v in row.items() if k not in columns_to_exclude}
                 filtered_data.append(filtered_row)
             elif isinstance(row, list):
-                # If it's a list (table format), we need to handle it differently
-                # For now, keep it as is if it's not a dict
                 filtered_data.append(row)
             else:
                 filtered_data.append(row)
-        
-        return {
-            "success": True,
-            "data": filtered_data,
-            "error": None
-        }
+
+        return {"success": True, "data": filtered_data, "error": None}
     except Exception as e:
         error_msg = str(e)
         print(f"UNS: Custom SQL query error: {error_msg}")
-        return {
-            "success": False,
-            "error": error_msg,
-            "data": None
-        }
+        return _error_response(error_msg)
 
 def _quote_identifier(name: str) -> str:
     """Quote identifier for SQL (e.g. column names with spaces)."""
