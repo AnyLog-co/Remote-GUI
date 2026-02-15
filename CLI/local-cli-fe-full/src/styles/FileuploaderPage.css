@@ -189,6 +189,21 @@
   flex-shrink: 0;
 }
 
+.file-list-item-delete-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
 .form-group {
   margin-bottom: 20px;
 }

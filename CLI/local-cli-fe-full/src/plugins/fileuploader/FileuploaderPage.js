@@ -1,63 +1,28 @@
-import React, {useState, useCallback, useMemo} from 'react';
-import {useDropzone} from 'react-dropzone';
+import React, {useState, useEffect} from 'react';
 import '../../styles/FileuploaderPage.css';
-
-// from https://react-dropzone.js.org/#!/Examples
-const focusedStyle = {
-  borderColor: '#2196f3',
-  transition: 'border .24s ease-in-out'
-};
-
-const activeStyle = {
-  borderColor: '#2196f3',
-  backgroundColor: '#e2e4e8',
-  color: '#a1a8b0',
-  transition: 'background-color .12s ease-in-out, border .24s ease-in-out'
-};
+import FileList from './FileList';
+import FileDropzone from './FileDropzone';
 
 function FileuploaderPage({ node }) {
 
   const [files, setFiles] = useState([]);
+  const changeFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
 
   const [canSubmit, setCanSubmit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const onDrop = useCallback(acceptedFiles => {
-    setCanSubmit(true);
-    setFiles([...files, ...acceptedFiles]);
-  }, [files])
-  const {
-    getRootProps,
-    getInputProps,
-    isFocused,
-    isDragActive
-  } = useDropzone({onDrop})
+  // upload button becomes valid if there are files selected
+  useEffect(() =>{
+    if (files.length > 0) setCanSubmit(true);
+    else setCanSubmit(false);
+  }, [files]);
 
-  const style = useMemo(() => ({
-    ...(isFocused ? focusedStyle : {}),
-    ...(isDragActive ? activeStyle : {}),
-  }), [
-    isFocused,
-    isDragActive
-  ]);
-
-  const getFileExtensionEmoji = (fileName) => {
-    const fileExtension = fileName.split('.').pop();
-    
-    // https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types
-    const imageExtension = ['apng', 'png', 'avif', 'gif', 'jpg', 'jpeg', 'jfif',
-      'pjpeg', 'pjp', 'svg', 'webp', 'bmp', 'ico', 'cur', 'tif', 'tiff'
-    ];
-
-    console.log(fileExtension);
-
-    if (imageExtension.includes(fileExtension)) {
-      return '🖼️';
-    } else {
-      return '📁';
-    }
+  const handleDeleteButtonClick = (id) => {
+    const index = files.findIndex((element) => element.id === id);
+    files.splice(index, 1);
+    setFiles([...files]);
   }
 
   return (
@@ -74,46 +39,25 @@ function FileuploaderPage({ node }) {
 
       <div className="fileuploader-form">
         <div className="form-section">
-          <div
-            className="file-dropzone"
-            {...getRootProps({style})}
-          >
-            <input {...getInputProps()} />
-              <p className={isDragActive ? "drag-active" : "drag-inactive"}>
-                Drop the file(s) here ...
-              </p> 
-
-              <p className={isDragActive ? "drag-inactive" : "drag-active"}>
-                Drag-and-drop files here, or click to select files
-              </p>
-          </div>
+          <h3>File Drop Zone</h3>
+          <FileDropzone setFilesCallback={changeFiles}/>
         </div>
 
-        {files.length > -1 &&
-          <div className="form-section">
-            <div
-              className="file-list-container"
-            >
-              <div className="file-list-container-header">
-                Files selected ({files.length})
-              </div>
-              <div className="file-list-content">
-                {files.map((file) => (
-                  <div className="file-list-item">
-                    <div className="uns-item-icon">
-                      {getFileExtensionEmoji(file.name)}
-                    </div>
-                    <div className="file-list-item-name">
-                      {file.name}
-                    </div>
-                    <div className="file-list-item-actions">
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="form-section">
+          <div
+            className="file-list-container"
+          >
+            <div className="file-list-container-header">
+              Files selected ({files.length})
+            </div>
+            <div className="file-list-content">
+              <FileList 
+                files={files}
+                handleDeleteButtonClick={handleDeleteButtonClick}
+              />
             </div>
           </div>
-        }
+        </div>
 
         <button 
           className="upload-button"
