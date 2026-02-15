@@ -1,41 +1,33 @@
-import React, {useCallback, useMemo} from 'react';
+import React, {useState, useCallback, useMemo} from 'react';
 import {useDropzone} from 'react-dropzone';
 import '../../styles/FileuploaderPage.css';
 
 // from https://react-dropzone.js.org/#!/Examples
-const baseStyle = {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '24px',
-  borderWidth: 2,
-  borderRadius: '6px',
-  borderColor: '#eeeeee',
-  borderStyle: 'dashed',
-  backgroundColor: '#f8fafc',
-  color: '#cbd5e1',
-  outline: 'none',
-  transition: 'background-color .12s ease-in-out, border .24s ease-in-out'
-};
-
 const focusedStyle = {
   borderColor: '#2196f3',
   transition: 'border .24s ease-in-out'
 };
 
 const activeStyle = {
-  borderColor: '#00e676',
-  backgroundColor: '#e9eaef',
-  color: '#c3ccd7',
+  borderColor: '#2196f3',
+  backgroundColor: '#e2e4e8',
+  color: '#a1a8b0',
   transition: 'background-color .12s ease-in-out, border .24s ease-in-out'
 };
 
 function FileuploaderPage({ node }) {
+
+  const [files, setFiles] = useState([]);
+
+  const [canSubmit, setCanSubmit] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
   const onDrop = useCallback(acceptedFiles => {
-    // Do something with the files
-  }, [])
+    setCanSubmit(true);
+    setFiles([...files, ...acceptedFiles]);
+  }, [files])
   const {
     getRootProps,
     getInputProps,
@@ -44,13 +36,29 @@ function FileuploaderPage({ node }) {
   } = useDropzone({onDrop})
 
   const style = useMemo(() => ({
-    ...baseStyle,
     ...(isFocused ? focusedStyle : {}),
     ...(isDragActive ? activeStyle : {}),
   }), [
     isFocused,
     isDragActive
   ]);
+
+  const getFileExtensionEmoji = (fileName) => {
+    const fileExtension = fileName.split('.').pop();
+    
+    // https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types
+    const imageExtension = ['apng', 'png', 'avif', 'gif', 'jpg', 'jpeg', 'jfif',
+      'pjpeg', 'pjp', 'svg', 'webp', 'bmp', 'ico', 'cur', 'tif', 'tiff'
+    ];
+
+    console.log(fileExtension);
+
+    if (imageExtension.includes(fileExtension)) {
+      return '🖼️';
+    } else {
+      return '📁';
+    }
+  }
 
   return (
     <div className="fileuploader-page">
@@ -64,10 +72,57 @@ function FileuploaderPage({ node }) {
         )}
       </div>
 
-      <div {...getRootProps({style})}>
-        <input {...getInputProps()} />
-          <p className={isDragActive ? "drag-active" : "drag-inactive"}>Drop the file(s) here ...</p> :
-          <p className={isDragActive ? "drag-inactive" : "drag-active"}>Drag-and-drop files here, or click to select files</p>
+      <div className="fileuploader-form">
+        <div className="form-section">
+          <div
+            className="file-dropzone"
+            {...getRootProps({style})}
+          >
+            <input {...getInputProps()} />
+              <p className={isDragActive ? "drag-active" : "drag-inactive"}>
+                Drop the file(s) here ...
+              </p> 
+
+              <p className={isDragActive ? "drag-inactive" : "drag-active"}>
+                Drag-and-drop files here, or click to select files
+              </p>
+          </div>
+        </div>
+
+        {files.length > -1 &&
+          <div className="form-section">
+            <div
+              className="file-list-container"
+            >
+              <div className="file-list-container-header">
+                Files selected ({files.length})
+              </div>
+              <div className="file-list-content">
+                {files.map((file) => (
+                  <div className="file-list-item">
+                    <div className="uns-item-icon">
+                      {getFileExtensionEmoji(file.name)}
+                    </div>
+                    <div className="file-list-item-name">
+                      {file.name}
+                    </div>
+                    <div className="file-list-item-actions">
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        }
+
+        <button 
+          className="upload-button"
+          disabled={!canSubmit}
+          title={!canSubmit ? "You must select at least one file to upload" : "Upload all selected files"}
+        >
+          {loading ? "Uploading..." : "Upload"}
+        </button>
+
       </div>
     </div>
   )
