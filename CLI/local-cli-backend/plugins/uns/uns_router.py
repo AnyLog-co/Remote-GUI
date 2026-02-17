@@ -397,8 +397,9 @@ async def column_details(request: ColumnDetailsRequest):
                 f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {request.table} WHERE {period}{where}"))
             row = rows[0] if rows and isinstance(rows[0], dict) else {}
             # Also fetch latest value for numerical summary
-            latest_rows = _extract_query_rows(run_sql(
-                f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"))
+
+            latest_rows_str = f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"
+            latest_rows = _extract_query_rows(run_sql(latest_rows_str))
             latest_row = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
             latest_value = latest_row.get(request.column) or (list(latest_row.values())[0] if latest_row else None)
             return {"success": True, "column_type": "numerical",

@@ -418,6 +418,28 @@
   border-bottom: 1px solid #dee2e6;
 }
 
+.uns-side-panel-description {
+  margin-bottom: 12px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
+}
+
+.uns-side-panel-description strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #495057;
+  font-size: 14px;
+}
+
+.uns-side-panel-description-text {
+  font-size: 13px;
+  color: #212529;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .uns-side-panel-info-row {
   margin-bottom: 10px;
   font-size: 14px;
@@ -701,6 +723,27 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.uns-sql-export-btns {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.uns-export-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.uns-export-btn:hover {
+  background-color: #0056b3;
 }
 
 .uns-side-panel-sql strong {

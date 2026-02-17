@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
-import UNSLineChart from './UNSLineChart';
 import { getRoot, getChildren, checkChildren, queryTable, queryCustom, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
