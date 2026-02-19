@@ -69,6 +69,10 @@
     "uns": {
       "enabled": true,
       "description": "Unified Namespace Plugin - Provides filesystem-like interface for blockchain metadata"
+    },
+    "videostreamviewer": {
+      "enabled": true,
+      "description": "Video Stream Viewer Plugin"
     }
   },
   "version": "1.0.0"
