@@ -310,6 +310,15 @@ def make_request(conn, method, command, topic=None, destination=None, payload=No
     timeout = 30
     anylog_conn = anylog_connector.AnyLogConnector(conn=conn, auth=auth, timeout=timeout)
 
+    if command.startswith("run client () sql"):
+        destination = 'network'
+        command = command.replace("run client () ", '')
+    elif command.startswith("run client ("):
+        end_index = command.find(")")
+        if end_index != -1:
+            destination = command[len("run client ("):end_index].strip()
+            command = command[end_index + 1:].strip()
+
     try:
         if method.upper() == "GET":
             response = anylog_conn.get(command=command, destination=destination)

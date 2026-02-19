@@ -28,7 +28,7 @@ const ViewFiles = () => {
   console.log('Node info:', nodeInfo);
 
   const files = Array.isArray(blobs)
-    ? blobs.map(obj => `${obj.dbms_name}.${obj.table_name}.${obj.file}`)
+    ? blobs.map(obj => `${obj.dbms_name}.${obj.video_table || obj.table_name}.${obj.file}`)
     : [];
   console.log('Files:', files);
 
@@ -83,7 +83,7 @@ const ViewFiles = () => {
       );
     } else {
       // Regular blob handling (existing code)
-      const name = `${blob.dbms_name}.${blob.table_name}.${blob.file}`;
+      const name = `${blob.dbms_name}.${blob.video_table || blob.table_name}.${blob.file}`;
       const url = `${BACKEND_URL}/static/${name}`;
       console.log("url", url);
       return (

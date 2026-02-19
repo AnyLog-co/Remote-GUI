@@ -19,15 +19,15 @@ def parse_table_fixed(text: str) -> list:
     if separator_index > 0:
         lines = lines[separator_index-1:]
 
-    print("Lines", lines)
-    print("Separator Index", separator_index)
+    # print("Lines", lines)
+    # print("Separator Index", separator_index)
     
     # Get the header and separator rows
     header_line = lines[0]
     separator_line = lines[1]
 
-    print("Header Line", header_line)
-    print("Separator Line", separator_line)
+    # print("Header Line", header_line)
+    # print("Separator Line", separator_line)
 
     try:
         cutoff_index = lines.index('')
@@ -35,7 +35,7 @@ def parse_table_fixed(text: str) -> list:
     except ValueError:
         pass  # No empty line found, proceed with the original lines
 
-    print("lines", lines)
+    # print("lines", lines)
 
     boundaries = [i for i, ch in enumerate(separator_line) if ch == ' ']
 

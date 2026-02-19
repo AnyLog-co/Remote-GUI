@@ -359,7 +359,7 @@ def construct_streaming_url(blob, connectInfo):
     
     # Extract blob details
     dbms = blob.get('dbms_name', '')
-    table = blob.get('table_name', '')
+    table = blob.get('video_table') or blob.get('table_name', '')
     blob_id = blob.get('file', '')  # Use 'file' instead of 'id' as blob_id
     
     # Construct the streaming URL using the blob's node
@@ -396,7 +396,7 @@ def view_streaming_blobs(request: dict):
                 'file': blob.get('file', ''),
                 'streaming_url': url,
                 'dbms': blob.get('dbms_name', ''),
-                'table': blob.get('table_name', ''),
+                'table': blob.get('video_table') or blob.get('table_name', ''),
                 'ip': blob.get('ip', ''),
                 'port': blob.get('port', '')
             })
@@ -441,7 +441,7 @@ def view_blobs(conn: Connection, blobs: dict):
 
         ip_port = f"{blob['ip']}:{blob['port']}"
         operator_dbms = blob['dbms_name']
-        operator_table = blob['table_name']
+        operator_table = blob.get('video_table') or blob.get('table_name', '')
         operator_file = blob['file']
         file_list.append(operator_file)
 

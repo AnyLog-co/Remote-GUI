@@ -17,9 +17,10 @@ print("✅ Report Generator router created with prefix:", api_router.prefix)
 try:
     import pandas as pd
     HAS_PANDAS = True
-except ImportError:
+except (ImportError, AttributeError) as e:
     HAS_PANDAS = False
     pd = None
+    print(f"⚠️  Could not import pandas: {e}")
 
 # Import reportgenerator functions - try both relative and absolute imports
 HAS_REPORTGENERATOR = False
@@ -37,7 +38,7 @@ try:
     )
     HAS_REPORTGENERATOR = True
     print("✅ Successfully imported reportgenerator functions")
-except ImportError as e1:
+except (ImportError, AttributeError) as e1:
     print(f"⚠️  Relative import failed: {e1}")
     try:
         # Try absolute import as fallback
@@ -54,12 +55,14 @@ except ImportError as e1:
         )
         HAS_REPORTGENERATOR = True
         print("✅ Successfully imported reportgenerator functions (absolute import)")
-    except ImportError as e2:
+    except (ImportError, AttributeError) as e2:
         HAS_REPORTGENERATOR = False
         print(f"❌ Could not import reportgenerator functions:")
         print(f"   Relative import error: {e1}")
         print(f"   Absolute import error: {e2}")
-        print(f"   This usually means missing dependencies: pandas, openpyxl, reportlab, requests")
+        print(f"   This usually means missing dependencies or version conflicts:")
+        print(f"   - pandas, openpyxl, reportlab, requests")
+        print(f"   - numpy version compatibility issue (try: pip install --upgrade numpy>=2.0.0 pandas>=2.2.0)")
         # Create dummy functions to prevent errors
         def check_data(*args, **kwargs):
             raise HTTPException(status_code=500, detail="Report generator module not available - missing dependencies")

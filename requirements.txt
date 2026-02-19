@@ -58,3 +58,10 @@ cryptography~=46.0
 rich~=13.9
 PyYAML~=6.0
 typing-extensions~=4.13
+
+# --------------
+# MCP packages
+# --------------
+mcp~=1.25.0
+mcp-proxy~=0.10.0
+ollama~=0.6.1

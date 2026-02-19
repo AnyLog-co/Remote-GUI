@@ -16,9 +16,18 @@ services:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/
       - report-configs:/app/CLI/local-cli-backend/plugins/reportgenerator/templates
+#  ollama-node:
+#    container_name: ollama
+#    image: ollama/ollama:latest
+#    ports:
+#      - "11435:11434"
+#    volumes:
+#      - ollama-data:/root/.ollama
+
 volumes:
   image-vol:
   usr-mgm-vol:
   report-configs:
+#  ollama-data:
 
 

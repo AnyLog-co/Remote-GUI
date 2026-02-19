@@ -13,11 +13,27 @@ For PDF conversion, LibreOffice must be installed:
     libreoffice --headless --convert-to pdf --outdir <output_dir> <excel_file>
 """
 
-import pandas as pd
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-from openpyxl.worksheet.page import PageMargins
-from openpyxl.drawing.image import Image
+# Try to import pandas - handle numpy compatibility issues
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except (ImportError, AttributeError) as e:
+    HAS_PANDAS = False
+    pd = None
+    print(f"⚠️  Could not import pandas (numpy compatibility issue?): {e}")
+    print("   Try: pip install --upgrade numpy>=2.0.0 pandas>=2.2.0")
+
+# Try to import openpyxl
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+    from openpyxl.worksheet.page import PageMargins
+    from openpyxl.drawing.image import Image
+    HAS_OPENPYXL = True
+except (ImportError, AttributeError) as e:
+    HAS_OPENPYXL = False
+    print(f"⚠️  Could not import openpyxl: {e}")
+
 from datetime import datetime, timedelta
 import subprocess
 import requests
@@ -41,7 +57,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 
 
-def _get_data(conn: str, command: str, destination: str = None):
+def _get_data(conn: str, command: str, destination: str = None, timeout: int = 60):
     headers = {
         "command": command,
         "User-Agent": "AnyLog/1.23"
@@ -50,10 +66,14 @@ def _get_data(conn: str, command: str, destination: str = None):
         headers["destination"] = destination
 
     try:
-        response = requests.get(url=f"http://{conn}", headers=headers)
+        response = requests.get(url=f"http://{conn}", headers=headers, timeout=timeout)
         response.raise_for_status()
+    except requests.exceptions.Timeout:
+        raise Exception(f"Request timeout after {timeout} seconds while executing command: {command}")
+    except requests.exceptions.RequestException as error:
+        raise Exception(f"Request failed: {str(error)}")
     except Exception as error:
-        raise Exception(error)
+        raise Exception(f"Unexpected error: {str(error)}")
     return response
 
 

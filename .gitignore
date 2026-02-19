@@ -1,6 +1,7 @@
+.pids/
 .DS_Store
 venv*/
 .venv*/
 .idea/
 __pycache__/
-output/
+outputs/
