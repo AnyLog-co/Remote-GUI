@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
-import UNSLineChart from './UNSLineChart';
 import { getRoot, getChildren, checkChildren, queryTable, queryCustom, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
@@ -608,7 +607,7 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchSqlData = async (dbms, table, whereClause) => {
+  const fetchSqlData = async (dbms, table, whereClause, column) => {
     if (!node || !dbms || !table) return;
 
     setSqlLoading(true);
@@ -621,6 +620,7 @@ const UNSPage = ({ node }) => {
         time_value: timeRangeValue,
         time_unit: timeRangeUnit,
         where: whereClause,
+        column,
       });
       
       console.log('UNS: SQL query result:', {
@@ -676,47 +676,32 @@ const UNSPage = ({ node }) => {
 
     try {
       const result = await queryCustom(node, { dbms, sql_query: sqlQuery });
-      
-      console.log('UNS: Custom SQL query result:', {
-        success: result.success,
-        dataLength: result.data ? result.data.length : 0,
-        dataType: Array.isArray(result.data) ? 'array' : typeof result.data
-      });
-      
-      if (result.success) {
-        console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
-        setSqlData(result.data);
+
+      const safeData = Array.isArray(result?.data) ? result.data : [];
+
+      if (result?.success) {
+        setSqlData(safeData);
       } else {
-        // Check if it's a "no data" error or a real error
-        const errorMsg = result.error || '';
-        const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                             errorMsg.toLowerCase().includes('connection broken') ||
-                             errorMsg.toLowerCase().includes('invalidchunklength') ||
-                             errorMsg.toLowerCase().includes('invalid literal') ||
-                             errorMsg.toLowerCase().includes('err_code') ||
-                             !errorMsg; // Empty error usually means no data
-        
-        if (isNoDataError) {
-          setSqlError('There is no table/data at this location');
-        } else {
-          setSqlError(result.error || 'Failed to execute custom SQL query');
-        }
+        setSqlData([]);
+        const errorMsg = result?.error || '';
+        const isNoDataError = !errorMsg ||
+          errorMsg.toLowerCase().includes('failed to load table metadata') ||
+          errorMsg.toLowerCase().includes('connection broken') ||
+          errorMsg.toLowerCase().includes('invalidchunklength') ||
+          errorMsg.toLowerCase().includes('invalid literal') ||
+          errorMsg.toLowerCase().includes('err_code');
+        setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
       }
     } catch (err) {
       console.error('Error executing custom SQL query:', err);
-      // Check if it's a "no data" error
-      const errorMsg = err.message || '';
+      setSqlData([]);
+      const errorMsg = err?.message || '';
       const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                           errorMsg.toLowerCase().includes('connection broken') ||
-                           errorMsg.toLowerCase().includes('invalidchunklength') ||
-                           errorMsg.toLowerCase().includes('invalid literal') ||
-                           errorMsg.toLowerCase().includes('err_code');
-      
-      if (isNoDataError) {
-        setSqlError('There is no table/data at this location');
-      } else {
-        setSqlError(err.message || 'Failed to execute custom SQL query');
-      }
+        errorMsg.toLowerCase().includes('connection broken') ||
+        errorMsg.toLowerCase().includes('invalidchunklength') ||
+        errorMsg.toLowerCase().includes('invalid literal') ||
+        errorMsg.toLowerCase().includes('err_code');
+      setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
     } finally {
       setSqlLoading(false);
     }
@@ -800,6 +785,7 @@ const UNSPage = ({ node }) => {
       setSqlError(null);
       setCustomSqlQuery(''); // Clear custom query when opening new item
       setSqlTab('timeRange'); // Reset to time range tab
+      setChartYKey(null); // Reset so chart defaults to policy column for new item
       
       // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
@@ -807,7 +793,7 @@ const UNSPage = ({ node }) => {
       const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
       const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
       if (hasDataAtLocation) {
-        fetchSqlData(itemData.dbms, itemData.table, itemData.where);
+        fetchSqlData(itemData.dbms, itemData.table, itemData.where, itemData.column);
       }
     }
   };

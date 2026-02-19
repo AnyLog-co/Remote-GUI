@@ -10,10 +10,11 @@ async function unsRequest(endpoint, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Server responded with status ${response.status}`);
+    throw new Error(data?.error || `Server responded with status ${response.status}`);
   }
-  return response.json();
+  return data;
 }
 
 export async function getRoot(conn, query) {
@@ -28,9 +29,10 @@ export async function checkChildren(conn, itemId) {
   return unsRequest("/uns/check-children", { conn, item_id: itemId });
 }
 
-export async function queryTable(conn, { dbms, table, time_value, time_unit, where }) {
+export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column }) {
   const body = { conn, dbms, table, time_value, time_unit };
   if (where?.trim()) body.where = where.trim();
+  if (column?.trim()) body.column = column.trim();
   return unsRequest("/uns/query-table", body);
 }
 

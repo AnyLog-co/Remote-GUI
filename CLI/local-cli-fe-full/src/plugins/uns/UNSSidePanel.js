@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
 import UNSColumnDetails from './UNSColumnDetails';
+import { exportToCSV, exportToPDF } from './unsExportUtils';
 
 const UNSSidePanel = ({
   isOpen,
@@ -34,6 +35,48 @@ const UNSSidePanel = ({
   const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
   const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
   const showTableSection = hasTableMeta && hasDataAtLocation;
+  const chartRef = useRef(null);
+
+  const sanitizeForFilename = (s) => (s != null ? String(s).replace(/[/\\:*?"<>|]/g, '-').trim() : '');
+
+  const getExportFilename = () => {
+    const parts = [
+      'uns',
+      selectedItem ? sanitizeForFilename(getItemName(selectedItem)) : null,
+      selectedItem ? sanitizeForFilename(getItemType(selectedItem)) : null,
+      itemData?.dbms ? sanitizeForFilename(itemData.dbms) : null,
+      itemData?.table ? sanitizeForFilename(itemData.table) : null,
+    ].filter(Boolean);
+    return parts.length > 1 ? parts.join('-') : (parts[0] || 'uns-data');
+  };
+
+  const handleExportCSV = () => {
+    if (Array.isArray(sqlData) && sqlData.length > 0) {
+      exportToCSV(sqlData, getExportFilename());
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!Array.isArray(sqlData)) return;
+    let chartUrl = null;
+    try {
+      if (chartRef.current?.getChartAsDataUrl) {
+        chartUrl = await chartRef.current.getChartAsDataUrl();
+      }
+    } catch (e) {
+      console.warn('Chart image not available for PDF:', e);
+    }
+    exportToPDF(sqlData, chartUrl, {
+      title: itemData?.table ? `UNS: ${itemData.table}` : 'UNS Report',
+      tableTitle: 'Table Data',
+      filename: getExportFilename(),
+      name: selectedItem ? getItemName(selectedItem) : null,
+      type: selectedItem ? getItemType(selectedItem) : null,
+      dbms: itemData?.dbms ?? null,
+      table: itemData?.table ?? null,
+      description: itemData?.description ?? null,
+    });
+  };
 
   return (
     <div className={`uns-side-panel ${isOpen ? 'open' : ''}`}>
@@ -50,6 +93,12 @@ const UNSSidePanel = ({
         {selectedItem && itemData && (
           <>
             <div className="uns-side-panel-info">
+              {itemData.description != null && String(itemData.description).trim() !== '' && (
+                <div className="uns-side-panel-description">
+                  <strong>Description:</strong>
+                  <div className="uns-side-panel-description-text">{String(itemData.description).trim()}</div>
+                </div>
+              )}
               <div className="uns-side-panel-info-row">
                 <strong>Name:</strong> {getItemName(selectedItem)}
               </div>
@@ -98,7 +147,7 @@ const UNSSidePanel = ({
                       <button
                         onClick={() => {
                           if (showTableSection) {
-                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where);
+                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where, itemData.column);
                           }
                         }}
                         disabled={sqlLoading}
@@ -137,9 +186,19 @@ const UNSSidePanel = ({
                         {timeRangeValue !== 1 ? 's' : ''}):
                       </strong>
                       {sqlData && sqlData.length > 0 && (
-                        <span className="uns-sql-row-count">
-                          ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
-                        </span>
+                        <>
+                          <span className="uns-sql-row-count">
+                            ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
+                          </span>
+                          <div className="uns-sql-export-btns">
+                            <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
+                              Export CSV
+                            </button>
+                            <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
+                              Export PDF
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                     {sqlLoading && (
@@ -156,7 +215,7 @@ const UNSSidePanel = ({
                         )}
                       </div>
                     )}
-                    {!sqlLoading && !sqlError && sqlData && (
+                    {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
                           {sqlData.length === 0 ? (
@@ -167,7 +226,7 @@ const UNSSidePanel = ({
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {Object.keys(sqlData[0]).map((key) => (
+                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
@@ -175,20 +234,28 @@ const UNSSidePanel = ({
                               <tbody>
                                 {sqlData.map((row, index) => (
                                   <tr key={index}>
-                                    {Object.values(row).map((value, cellIndex) => (
-                                      <td key={cellIndex}>
-                                        {typeof value === 'object'
-                                          ? JSON.stringify(value)
-                                          : String(value)}
-                                      </td>
-                                    ))}
+                                    {row && typeof row === 'object'
+                                      ? Object.values(row).map((value, cellIndex) => (
+                                          <td key={cellIndex}>
+                                            {typeof value === 'object' && value !== null
+                                              ? JSON.stringify(value)
+                                              : String(value ?? '')}
+                                          </td>
+                                        ))
+                                      : <td>{String(row ?? '')}</td>}
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           )}
                         </div>
-                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        <UNSLineChart
+                          ref={chartRef}
+                          sqlData={sqlData}
+                          chartYKey={chartYKey}
+                          onChartYKeyChange={onChartYKeyChange}
+                          preferredColumn={itemData?.column}
+                        />
                         {itemData?.column && (
                           <UNSColumnDetails
                             conn={conn}
@@ -211,9 +278,19 @@ const UNSSidePanel = ({
                     <div className="uns-sql-header">
                       <strong>Custom SQL Query:</strong>
                       {sqlData && sqlData.length > 0 && (
-                        <span className="uns-sql-row-count">
-                          ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
-                        </span>
+                        <>
+                          <span className="uns-sql-row-count">
+                            ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
+                          </span>
+                          <div className="uns-sql-export-btns">
+                            <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
+                              Export CSV
+                            </button>
+                            <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
+                              Export PDF
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                     <div className="uns-custom-query-container">
@@ -252,7 +329,7 @@ const UNSSidePanel = ({
                         )}
                       </div>
                     )}
-                    {!sqlLoading && !sqlError && sqlData && (
+                    {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
                           {sqlData.length === 0 ? (
@@ -261,7 +338,7 @@ const UNSSidePanel = ({
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {Object.keys(sqlData[0]).map((key) => (
+                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
@@ -269,20 +346,28 @@ const UNSSidePanel = ({
                               <tbody>
                                 {sqlData.map((row, index) => (
                                   <tr key={index}>
-                                    {Object.values(row).map((value, cellIndex) => (
-                                      <td key={cellIndex}>
-                                        {typeof value === 'object'
-                                          ? JSON.stringify(value)
-                                          : String(value)}
-                                      </td>
-                                    ))}
+                                    {row && typeof row === 'object'
+                                      ? Object.values(row).map((value, cellIndex) => (
+                                          <td key={cellIndex}>
+                                            {typeof value === 'object' && value !== null
+                                              ? JSON.stringify(value)
+                                              : String(value ?? '')}
+                                          </td>
+                                        ))
+                                      : <td>{String(row ?? '')}</td>}
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           )}
                         </div>
-                        <UNSLineChart sqlData={sqlData} chartYKey={chartYKey} onChartYKeyChange={onChartYKeyChange} />
+                        <UNSLineChart
+                          ref={chartRef}
+                          sqlData={sqlData}
+                          chartYKey={chartYKey}
+                          onChartYKeyChange={onChartYKeyChange}
+                          preferredColumn={itemData?.column}
+                        />
                         {itemData?.column && (
                           <UNSColumnDetails
                             conn={conn}

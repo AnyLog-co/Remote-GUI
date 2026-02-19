@@ -29,6 +29,7 @@ class QueryTableRequest(BaseModel):
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
+    column: Optional[str] = None  # When set, only fetch insert_timestamp and this column
 
 class QueryCustomRequest(BaseModel):
     conn: str
@@ -164,15 +165,21 @@ async def query_table(request: QueryTableRequest):
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
         
-        # Build SQL query: SELECT * FROM table WHERE period(...) [AND policy_where]
+        # Build SQL query: when column in policy, only fetch insert_timestamp + that column; else SELECT *
         time_value = request.time_value or 5.0
         time_unit = request.time_unit or "minute"
         
         # Convert to int if it's a whole number, otherwise keep as float
         time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
         
+        if request.column and request.column.strip():
+            col = _quote_identifier(request.column.strip())
+            select_clause = f"insert_timestamp, {col}"
+        else:
+            select_clause = "*"
+        
         # Base time filter
-        sql_query = f'SELECT * FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
+        sql_query = f'SELECT {select_clause} FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
         if request.where and request.where.strip():
             sql_query += f" AND ({request.where.strip()})"
         # Use the exact format that works in the client dashboard
@@ -270,90 +277,78 @@ async def query_table(request: QueryTableRequest):
 
 @api_router.post("/query-custom")
 async def query_custom(request: QueryCustomRequest):
-    """Execute a custom SQL query"""
+    """Execute a custom SQL query. On any error, returns success=False, data=[], error=message to avoid frontend crashes."""
+    def _error_response(msg: str):
+        return {"success": False, "error": msg, "data": []}
+
     try:
         if not request.dbms or not request.sql_query:
-            raise HTTPException(status_code=400, detail="dbms and sql_query are required")
-        
-        # Use the exact format that works in the client dashboard
+            return _error_response("dbms and sql_query are required")
+
         command = f'run client () sql {request.dbms} format = table "{request.sql_query}"'
-        
         print(f"UNS: Executing custom SQL command: {command}")
-        print(f"UNS: Connection: {request.conn}")
-        print(f"UNS: DBMS: {request.dbms}")
-        print(f"UNS: SQL Query: {request.sql_query}")
-        
-        # Use GET method like the client dashboard does
-        response = make_request(request.conn, "GET", command)
-        print("UNS: Custom query response", response)
-        
-        parsed = parse_response(response)
-        print("UNS: Custom query parsed", parsed)
-        
+
+        try:
+            response = make_request(request.conn, "GET", command)
+        except Exception as req_err:
+            error_msg = str(req_err)
+            print(f"UNS: Custom query request error: {error_msg}")
+            return _error_response(error_msg)
+
+        try:
+            parsed = parse_response(response)
+        except Exception as parse_err:
+            error_msg = str(parse_err)
+            print(f"UNS: Custom query parse error: {error_msg}")
+            return _error_response(error_msg)
+
+        if parsed is None:
+            return _error_response("No response received")
+
+        # Check for explicit error type
+        if isinstance(parsed, dict) and parsed.get("type") == "error":
+            return _error_response(parsed.get("data", "Unknown error occurred"))
+
         # Extract data from response
+        data = None
         if isinstance(parsed, dict) and "data" in parsed:
             data = parsed["data"]
         elif isinstance(parsed, list):
             data = parsed
-        elif isinstance(parsed, dict) and "type" in parsed:
-            # Check if it's an error response
-            if parsed.get("type") == "error":
-                return {
-                    "success": False,
-                    "error": parsed.get("data", "Unknown error occurred"),
-                    "data": None
-                }
-            data = parsed.get("data", parsed)
+        elif isinstance(parsed, dict):
+            data = parsed.get("data", parsed.get("Query"))
         else:
             data = parsed
-        
-        # Handle case where data might be a string (JSON string)
+
+        if data is None:
+            data = []
+
         if isinstance(data, str):
             try:
-                import json
                 data = json.loads(data)
             except (json.JSONDecodeError, ValueError):
-                pass
-        
-        # Ensure data is a list
+                return _error_response("Invalid response format")
+
         if not isinstance(data, list):
             data = [data] if data else []
-        
-        if isinstance(data, list) and len(data) > 0:
-            print(f"UNS: Custom query returned {len(data)} rows")
-            print(f"UNS: First row sample: {data[0]}")
-            print(f"UNS: Last row sample: {data[-1]}")
-        
-        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
-        # timestamp is excluded as insert_timestamp is used for the chart
+
+        # Filter out internal columns
         filtered_data = []
         columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
-        
         for row in data:
             if isinstance(row, dict):
-                # Filter out the internal columns
                 filtered_row = {k: v for k, v in row.items() if k not in columns_to_exclude}
                 filtered_data.append(filtered_row)
             elif isinstance(row, list):
-                # If it's a list (table format), we need to handle it differently
-                # For now, keep it as is if it's not a dict
                 filtered_data.append(row)
             else:
                 filtered_data.append(row)
-        
-        return {
-            "success": True,
-            "data": filtered_data,
-            "error": None
-        }
+
+        return {"success": True, "data": filtered_data, "error": None}
     except Exception as e:
         error_msg = str(e)
         print(f"UNS: Custom SQL query error: {error_msg}")
-        return {
-            "success": False,
-            "error": error_msg,
-            "data": None
-        }
+        return _error_response(error_msg)
 
 def _quote_identifier(name: str) -> str:
     """Quote identifier for SQL (e.g. column names with spaces)."""
@@ -401,8 +396,15 @@ async def column_details(request: ColumnDetailsRequest):
             rows = _extract_query_rows(run_sql(
                 f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {request.table} WHERE {period}{where}"))
             row = rows[0] if rows and isinstance(rows[0], dict) else {}
+            # Also fetch latest value for numerical summary
+
+            latest_rows_str = f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"
+            latest_rows = _extract_query_rows(run_sql(latest_rows_str))
+            latest_row = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
+            latest_value = latest_row.get(request.column) or (list(latest_row.values())[0] if latest_row else None)
             return {"success": True, "column_type": "numerical",
-                    "data": {"min": row.get("min"), "max": row.get("max"), "avg": row.get("avg")}, "error": None}
+                    "data": {"min": row.get("min"), "max": row.get("max"), "avg": row.get("avg"),
+                             "latest_value": latest_value}, "error": None}
 
         # string: latest value + last occurrence per value
         latest_rows = _extract_query_rows(run_sql(

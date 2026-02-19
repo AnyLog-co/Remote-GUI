@@ -110,6 +110,7 @@ const UNSColumnDetails = ({
           <div className="uns-column-details-stat"><span className="uns-column-details-label">Min:</span> {data.min != null ? Number(data.min).toLocaleString() : '—'}</div>
           <div className="uns-column-details-stat"><span className="uns-column-details-label">Max:</span> {data.max != null ? Number(data.max).toLocaleString() : '—'}</div>
           <div className="uns-column-details-stat"><span className="uns-column-details-label">Avg:</span> {data.avg != null ? Number(data.avg).toLocaleString() : '—'}</div>
+          <div className="uns-column-details-stat"><span className="uns-column-details-label">Latest:</span> {data.latest_value != null ? Number(data.latest_value).toLocaleString() : '—'}</div>
         </div>
       )}
       {colType === 'string' && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   LineChart,
   Line,
@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import './UNSPage.css';
 
-const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
+const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn }, ref) => {
   const [chartViewStart, setChartViewStart] = useState(0);
   const [chartViewEnd, setChartViewEnd] = useState(null);
   const chartContainerRef = useRef(null);
@@ -83,6 +83,53 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
     };
   }, []);
 
+  const getChartAsDataUrl = () => new Promise((resolve, reject) => {
+    if (!chartContainerRef.current) {
+      reject(new Error('Chart not ready'));
+      return;
+    }
+    const svgEl = chartContainerRef.current.querySelector('.recharts-wrapper svg') || chartContainerRef.current.querySelector('svg');
+    if (!svgEl) {
+      reject(new Error('Chart SVG not found'));
+      return;
+    }
+    const clone = svgEl.cloneNode(true);
+    const width = 800;
+    const height = 440;
+    clone.setAttribute('width', width);
+    clone.setAttribute('height', height);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) {
+        reject(e);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load chart image'));
+    };
+    img.src = url;
+  });
+
+  useImperativeHandle(ref, () => ({
+    getChartAsDataUrl,
+  }), []);
+
   if (!sqlData || !Array.isArray(sqlData) || sqlData.length === 0) {
     return null;
   }
@@ -105,7 +152,9 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
 
   const effectiveYKey = chartYKey && valueCandidates.includes(chartYKey)
     ? chartYKey
-    : valueCandidates[0];
+    : preferredColumn && valueCandidates.includes(preferredColumn)
+      ? preferredColumn
+      : valueCandidates[0];
 
   // Build chart data for Recharts: [{ time, value, fullTime }] sorted by time
   const chartData = sqlData
@@ -177,39 +226,12 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
   };
 
   const handleExportImage = () => {
-    if (!chartContainerRef.current) return;
-    const svgEl = chartContainerRef.current.querySelector('.recharts-wrapper svg') || chartContainerRef.current.querySelector('svg');
-    if (!svgEl) return;
-    const clone = svgEl.cloneNode(true);
-    const width = 800;
-    const height = 440;
-    clone.setAttribute('width', width);
-    clone.setAttribute('height', height);
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    const svgData = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        const pngUrl = canvas.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = pngUrl;
-        a.download = `chart-${effectiveYKey || 'export'}-${new Date().toISOString().slice(0, 10)}.png`;
-        a.click();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    };
-    img.onerror = () => URL.revokeObjectURL(url);
-    img.src = url;
+    getChartAsDataUrl().then((pngUrl) => {
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = `chart-${effectiveYKey || 'export'}-${new Date().toISOString().slice(0, 10)}.png`;
+      a.click();
+    }).catch(console.error);
   };
 
   return (
@@ -248,6 +270,7 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
         </div>
       </div>
       <div 
+        id="uns-chart-view"
         className="uns-sql-chart-body"
         ref={chartContainerRef}
         onMouseDown={(e) => {
@@ -294,6 +317,7 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
             className="uns-sql-chart-scrollbar"
             ref={scrollbarTrackRef}
             role="scrollbar"
+            aria-controls="uns-chart-view"
             aria-valuenow={startIndex}
             aria-valuemin={0}
             aria-valuemax={totalPoints - viewRange}
@@ -342,6 +366,8 @@ const UNSLineChart = ({ sqlData, chartYKey, onChartYKeyChange }) => {
       </div>
     </div>
   );
-};
+});
+
+UNSLineChart.displayName = 'UNSLineChart';
 
 export default UNSLineChart;
