@@ -120,6 +120,86 @@ Before you begin, ensure you have the following installed:
 
 ---
 
+## Local Deployment with Makefile
+
+This project includes a Makefile that starts and stops the local **FastAPI backend** and **React frontend** using fixed ports:
+
+* Backend: `http://localhost:8000`
+* Frontend: `http://localhost:3000`
+
+### Prerequisites
+
+* macOS/Linux with `make`, `bash`, `lsof`
+* Backend dependencies installed (Python venv recommended)
+* Frontend dependencies installed (`npm install` in the frontend directory)
+
+### Commands
+
+#### Start everything
+
+```bash
+make up
+```
+
+Starts:
+
+* FastAPI backend (`fastapi dev ...`) on port **8000**
+* React frontend (`npm start`) on port **3000**
+
+If a server is already running on that port, it won’t start a second instance.
+
+#### Start only backend
+
+```bash
+make backend
+```
+
+#### Start only frontend
+
+```bash
+make frontend
+```
+
+#### Check status
+
+```bash
+make status
+```
+
+Shows whether anything is currently listening on ports 8000 and 3000.
+
+#### View logs
+
+```bash
+make logs
+```
+
+Tails:
+
+* `.pids/backend.log`
+* `.pids/frontend.log`
+
+Press `Ctrl+C` to stop tailing.
+
+#### Stop everything
+
+```bash
+make clean
+```
+
+Stops both servers by killing any process listening on ports **8000** and **3000**, then removes the PID files:
+
+* `.pids/backend.pid`
+* `.pids/frontend.pid`
+
+### Notes
+
+* Logs and PID files are stored in: `/.pids` under the repo root.
+* If ports are in use by something else, `make clean` will terminate those processes too (because it targets the port, not a specific PID).
+
+
+---
+
 ## Supabase
 
 (Documentation pending – to be expanded in future versions.)
