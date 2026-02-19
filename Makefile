@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-GITHUB_PATH := /Users/roy/Github-Repos/Remote-GUI
+GITHUB_PATH := $HOME/VideoStreamDemo/Remote-GUI
 
 BACKEND_DIR := $(GITHUB_PATH)/CLI/local-cli-backend
 BACKEND_APP := $(BACKEND_DIR)/main.py
