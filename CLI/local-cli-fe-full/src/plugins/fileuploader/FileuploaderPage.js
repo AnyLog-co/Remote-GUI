@@ -3,6 +3,8 @@ import '../../styles/FileuploaderPage.css';
 import FileList from './FileList';
 import FileDropzone from './FileDropzone';
 
+const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+
 function FileuploaderPage({ node }) {
 
   const [files, setFiles] = useState([]);
@@ -23,6 +25,31 @@ function FileuploaderPage({ node }) {
     const index = files.findIndex((element) => element.id === id);
     files.splice(index, 1);
     setFiles([...files]);
+  }
+
+  const uploadFiles = async() => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files", file.file);
+      console.log(file);
+    })
+
+    try {
+      const response = await fetch(`${API_URL}/fileuploader/upload`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await response.json();
+      return data.results;
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  const handleUploadButtonClick = async() => {
+    if (files.length > 0) {
+      const results = await uploadFiles();
+    }
   }
 
   return (
@@ -63,6 +90,7 @@ function FileuploaderPage({ node }) {
           className="upload-button"
           disabled={!canSubmit}
           title={!canSubmit ? "You must select at least one file to upload" : "Upload all selected files"}
+          onClick={handleUploadButtonClick}
         >
           {loading ? "Uploading..." : "Upload"}
         </button>
