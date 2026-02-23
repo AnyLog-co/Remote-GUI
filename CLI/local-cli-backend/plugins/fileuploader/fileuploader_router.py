@@ -4,7 +4,8 @@ from typing import Dict, List
 import shutil
 import uuid
 from pathlib import Path
-from .documentvalidator import DocumentValidator
+from .documentvalidator import validate_file
+import requests
 
 # Create the API router
 api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
@@ -12,10 +13,6 @@ api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
 # Create upload directory
 UPLOAD_DIR = Path("upload_dir")
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-# File Handling
-FILE_LIMIT = 10
-doc_validator = DocumentValidator(max_size=25 * 1024 * 1024)
 
 # API endpoints
 @api_router.get("/")
@@ -47,13 +44,11 @@ async def add_file(file: UploadFile = File(...)) -> Dict[str, str | int | None]:
 @api_router.post("/upload")
 async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
-    if len(files) > FILE_LIMIT:
-        raise HTTPException(status_code=400, detail=f"Too many files. Limit is {FILE_LIMIT}.")
     
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
     for file in files:
-        validation = await doc_validator.validate_file(file)
+        validation = await validate_file(file)
 
         if not validation['valid']:
             results.append({
