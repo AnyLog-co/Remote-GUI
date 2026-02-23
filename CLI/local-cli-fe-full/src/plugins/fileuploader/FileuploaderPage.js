@@ -27,28 +27,47 @@ function FileuploaderPage({ node }) {
     setFiles([...files]);
   }
 
-  const uploadFiles = async() => {
-    const formData = new FormData();
-    files.forEach((file) => {
-      formData.append("files", file.file);
-      console.log(file);
-    })
-
-    try {
-      const response = await fetch(`${API_URL}/fileuploader/upload`, {
-        method: "POST",
-        body: formData
-      });
-      const data = await response.json();
-      return data.results;
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  const handleUploadButtonClick = async() => {
+  const handleUploadButtonClick = async () => {
     if (files.length > 0) {
-      const results = await uploadFiles();
+      try {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        
+        const formData = new FormData();
+        files.forEach((file) => {
+          formData.append("files", file.file);
+        })
+
+        const response = await fetch(`${API_URL}/fileuploader/upload`, {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // add upload result to each file to be displayed in the file list
+        const filesWithResult = files.map((file, index) => ({
+          ...file,
+          result: data.results[index],
+        }));
+        setFiles(filesWithResult);
+        
+        // array to hold each line
+        setSuccess([`Total files: ${data.total_files}`,
+          `Number of files successfully uploaded: ${data.successful}`,
+          `Number of files failed to be uploaded: ${data.failed}`,
+        ]);
+      } catch (err) {
+        setError(err.message || 'Failed to upload files');
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
@@ -94,6 +113,20 @@ function FileuploaderPage({ node }) {
         >
           {loading ? "Uploading..." : "Upload"}
         </button>
+
+        {error && (
+          <div className="error-message">
+            <strong>Error:</strong>
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="success-message">
+            <strong>Result: </strong>
+            {success.map((line) => `\n${line}`)}
+          </div>
+        )}
 
       </div>
     </div>

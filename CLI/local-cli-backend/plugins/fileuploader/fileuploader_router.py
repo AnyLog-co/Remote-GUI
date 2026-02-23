@@ -12,7 +12,6 @@ api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
 
 # Create upload directory
 UPLOAD_DIR = Path("upload_dir")
-UPLOAD_DIR.mkdir(exist_ok=True)
 
 # API endpoints
 @api_router.get("/")
@@ -29,6 +28,8 @@ async def add_file(file: UploadFile = File(...)) -> Dict[str, str | int | None]:
     if file.filename == "" or file.filename is None:
         raise HTTPException(status_code=400, detail="No file selected")
     
+    # create upload directory even if it exists
+    UPLOAD_DIR.mkdir(exist_ok=True)
     file_path = UPLOAD_DIR / file.filename
 
     with open(file_path, "wb") as buffer:
@@ -46,7 +47,8 @@ async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List
     """Upload a list of files to the upload directory"""
     
     results: List[Dict[str, str | bool | List[str] | None]] = []
-
+    
+    UPLOAD_DIR.mkdir(exist_ok=True)
     for file in files:
         validation = await validate_file(file)
 
@@ -58,8 +60,11 @@ async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List
             })
             continue
 
+        filename = Path(file.filename).stem
         file_ext = Path(file.filename).suffix
-        unique_filename = f"{uuid.uuid4()}{file_ext}"
+
+        # format: filename-uuid.[file-extension]
+        unique_filename = f"{filename}-{uuid.uuid4()}{file_ext}"
         file_path = UPLOAD_DIR / unique_filename
 
         try:
