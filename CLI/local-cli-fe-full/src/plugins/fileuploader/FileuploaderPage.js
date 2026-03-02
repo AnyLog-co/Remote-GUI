@@ -29,6 +29,7 @@ function FileuploaderPage({ node }) {
 
   const uploadFiles = async() => {
     const formData = new FormData();
+    formData.set("conn", node);
     files.forEach((file) => {
       formData.append("files", file.file);
       console.log(file);
