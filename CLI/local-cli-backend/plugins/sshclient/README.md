@@ -21,16 +21,6 @@ This service allows clients to establish SSH connections, interact with remote s
 
 ---
 
-## 📦 Tech Stack
-
-- FastAPI
-- Paramiko
-- Pydantic
-- Asyncio
-- WebSockets
-
----
-
 ## 📂 API Overview
 
 ### WebSocket Endpoint
