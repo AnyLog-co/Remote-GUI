@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cliState } from '../state/state';
-import { FaWindowClose } from 'react-icons/fa';
 import { FaCircle } from 'react-icons/fa6';
+import './StatusBar.css';
 
 export const TimeCounter = ({ customStart, enabled }) => {
   const [seconds, setSeconds] = useState(customStart || 0);
@@ -30,17 +30,7 @@ export const TimeCounter = ({ customStart, enabled }) => {
     return [hrs, mins, secs].map((n) => String(n).padStart(2, '0')).join(':');
   };
 
-  return (
-    <div
-      style={{
-        fontFamily: 'monospace',
-        fontSize: 12,
-        letterSpacing: 1,
-      }}
-    >
-      {formatTime(seconds)}
-    </div>
-  );
+  return <div className="time-counter">{formatTime(seconds)}</div>;
 };
 
 const StatusBar = ({ id, conn }) => {
@@ -55,89 +45,29 @@ const StatusBar = ({ id, conn }) => {
   };
 
   return (
-    <div
-      style={{
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'row',
-        alignContent: 'center',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        background: '#FFFFFF',
-        borderTopLeftRadius: 8,
-        borderTopRightRadius: 8,
-        boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          alignContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        {/* <FaWindowClose
-          size={30}
-          color="red"
-          style={{
-            marginRight: 20,
-            paddingLeft: 4,
-            paddingRight: 4,
-            cursor: "pointer",
-          }}
-          onClick={() => removeActiveConnection()}
-        /> */}
+    <div className="statusbar">
+      <div className="statusbar-left">
         <span
-          style={{
-            color: 'red',
-            fontWeight: 'medium',
-            fontSize: 14,
-            padding: 4,
-            cursor: 'pointer',
-          }}
+          className="exit-button"
           onClick={() => removeActiveConnection(id)}
         >
           Exit
         </span>
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          alignContent: 'center',
-          alignItems: 'center',
-          gap: 4,
-        }}
-      >
+
+      <div className="statusbar-center">
         <FaCircle
           size={10}
           color={isConnected ? 'green' : 'red'}
-          style={{ verticalAlign: 'middle' }}
+          className="status-icon"
         />
-        <span
-          style={{
-            margin: 0,
-            fontFamily: 'monospace',
-            lineHeight: '1',
-            fontSize: 14,
-          }}
-        >
+        <span className="hostname">
           {conn.hostname ?? 'Host'}({conn.ip ?? 'IP'})
         </span>
       </div>
-      <div
-        style={{
-          color: '#64748b',
-          fontSize: '14px',
-          margin: '2px 0',
-          fontWeight: '700',
-        }}
-      >
-        T-ID:{getConnID(id)}
-      </div>
+
+      <div className="connection-id">T-ID:{getConnID(id)}</div>
+
       <TimeCounter enabled={isConnected} />
     </div>
   );

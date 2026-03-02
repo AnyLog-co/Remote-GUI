@@ -3,6 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { cliState } from '../state/state';
+import './TerminalView.css';
 
 const TerminalView = ({ id, host, user, credential, action, authType }) => {
   const terminalRef = useRef(null);
@@ -69,9 +70,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         if (rect.width > 0 && rect.height > 0) {
           try {
             fitRef.current.fit();
-          } catch (e) {
-            // add resize error logic
-          }
+          } catch (e) {}
         }
       };
 
@@ -80,6 +79,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
       const resizeObserver = new ResizeObserver(() => {
         fitTerminal();
       });
+
       if (terminalRef.current) {
         resizeObserver.observe(terminalRef.current);
       }
@@ -107,7 +107,6 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('Sending: ', host, conn_method.method);
         ws.send(
           JSON.stringify({
             action: action,
@@ -179,11 +178,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     <div
       id="terminal-overall-div"
       ref={terminalRef}
-      style={{
-        width: '100%',
-        height: '100%',
-        minHeight: '120px',
-      }}
+      className="terminal-overall-div"
     />
   );
 };
