@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List
 import shutil
@@ -7,13 +7,10 @@ from pathlib import Path
 from .documentvalidator import validate_file
 import helpers
 import requests
+from pathlib import Path
 
 # Create the API router
 api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
-
-# Create upload directory
-UPLOAD_DIR = Path("upload_dir")
-UPLOAD_DIR.mkdir(exist_ok=True)
 
 # API endpoints
 @api_router.get("/")
@@ -24,28 +21,10 @@ async def fileuploader_info():
         "version": "1.0.0",
     }
 
-@api_router.post("/upload-single")
-async def add_file(file: UploadFile = File(...)) -> Dict[str, str | int | None]:
-    """Upload a file"""
-    if file.filename == "" or file.filename is None:
-        raise HTTPException(status_code=400, detail="No file selected")
-    
-    file_path = UPLOAD_DIR / file.filename
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "size": file.size,
-        "location": str(file_path)
-    }
-
 def get_directories(dir_response: str) -> List[str]:
     if "Directory does not exist" in dir_response:
         return []
-    return [line.replace("/app/AnyLog-Network/data/", "") for line in dir_response.split("\n")]
+    return [line.replace("\r", "").replace("/app/AnyLog-Network/data/", "") for line in dir_response.split("\n")]
 
 def _create_dir(conn: str) -> requests.Response | None:
     headers = {
@@ -81,14 +60,53 @@ def create_upload_dir(conn: str) -> bool:
     else:
         return False
 
+def _get_files(helper_response: str, dir: str) -> List[str]:
+    if "No files with path provided:" in helper_response:
+        return []
+    return [line.replace("\r", "").replace(dir, "") for line in helper_response.split("\n")]
+
+def get_filename(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/upload_dir/') -> str:
+    command = f"get files {dir}"
+    helper_response = helpers.make_request(conn=conn, method="GET", command=command)
+
+    if isinstance(helper_response, dict):
+        raise ValueError("AnyLog raised an error when accessing files") 
+    
+    files = _get_files(helper_response, dir)
+    if file.filename not in files:
+        return file.filename
+    
+    path = Path(file.filename)
+
+    i = 1
+    while f"{path.stem}-{i}{path.suffix}" in files:
+        i += 1
+    return f"{path.stem}-{i}{path.suffix}"
+
+def push_file(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/upload_dir/') -> str:
+    filename = get_filename(conn, file, dir)
+
+    command = f"file to {dir}{filename}"
+
+    headers = {
+        'User-Agent': 'AnyLog/1.23',
+        'Content-Type': 'application/octet-stream',
+        'command': command,
+        'Accept': '*/*'
+    }
+
+    requests.post(f'http://{conn}', headers=headers, data=file.file)
+    return filename
+
 @api_router.post("/upload")
-async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
+async def add_files(files: List[UploadFile] = File(...),
+                    conn: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
 
-    conn = "50.116.9.238:32349"
     dest_exists = create_upload_dir(conn)
     if not dest_exists:
         raise HTTPException(status_code=501, detail="upload directory does not exist")
+    dir = "/app/AnyLog-Network/data/upload_dir/"
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
@@ -103,19 +121,14 @@ async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List
             })
             continue
 
-        file_ext = Path(file.filename).suffix
-        unique_filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = UPLOAD_DIR / unique_filename
-
         try:
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            stored_name = push_file(conn, file, dir)
 
             results.append({
                 "filename": file.filename,
-                "stored_filename": unique_filename,
+                "stored_filename": stored_name,
                 "success": True,
-                "location": str(file_path)
+                "location": f'{dir}{stored_name}'
             })
         except Exception as e:
             results.append({
