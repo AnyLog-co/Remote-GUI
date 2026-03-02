@@ -12,6 +12,7 @@ import Presets from './Presets';
 import Bookmarks from './Bookmarks';
 import SqlQueryGenerator from './SqlQueryGenerator';
 import BlockchainManager from './BlockchainManager';
+import About from './About';
 
 // Import plugin loader
 import { getPluginPages } from '../plugins/loader';
@@ -191,7 +192,7 @@ const Dashboard = () => {
         onClearStoredData={clearStoredData}
       />
       <div className="dashboard-content">
-        <Sidebar />
+        <Sidebar selectedNode={selectedNode} />
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}
@@ -233,6 +234,9 @@ const Dashboard = () => {
             
             {/* User Profile - Always available */}
             <Route path="userprofile" element={<UserProfile node={selectedNode} />} />
+
+            {/* About - Always available */}
+            <Route path="about" element={<About node={selectedNode} />} />
             
             {/* Plugin Routes - Auto-loaded and filtered by feature config */}
             {configLoaded && Object.entries(pluginPages)

@@ -1,6 +1,42 @@
 // src/services/api.js
 const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
 
+/** Run blockchain get license on the connected node. Returns parsed license data or null. */
+export async function getLicenseInfo({ connectInfo }) {
+  if (!connectInfo) return null;
+  try {
+    const response = await sendCommand({
+      connectInfo,
+      method: 'GET',
+      command: 'blockchain get license',
+    });
+    if (!response?.data) return null;
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    const first = data[0];
+    return first?.license ?? first ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Run get version on the connected node. Returns version string or null. */
+export async function getNodeVersion({ connectInfo }) {
+  if (!connectInfo) return null;
+  try {
+    const response = await sendCommand({
+      connectInfo,
+      method: 'GET',
+      command: 'get version',
+    });
+    if (!response?.data) return null;
+    if (typeof response.data === 'string') return response.data;
+    if (typeof response.data === 'object' && response.data?.version) return response.data.version;
+    return JSON.stringify(response.data);
+  } catch (e) {
+    return null;
+  }
+}
+
 /** Fetch app version from backend (GET /version). Returns { version, commit, branch, dirty, ... } or null on failure. */
 export async function getVersion() {
   try {
