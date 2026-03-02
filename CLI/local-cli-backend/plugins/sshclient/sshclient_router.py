@@ -1,10 +1,7 @@
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from typing import Optional, List, Dict
-import os
 import io
 import asyncio
-import json
 import paramiko
 
 api_router = APIRouter(prefix="/sshclient", tags=["SSH Client"])
@@ -12,7 +9,6 @@ api_router = APIRouter(prefix="/sshclient", tags=["SSH Client"])
 ALLOWED_METHODS = ["direct_ssh", "docker_attach", "docker_exec"]
 # Possible Allowed Conn method: 
 ALLOWED_CONNECTION_METHODS = ["password","key-string","keyfile"]
-
 
 sessions = {}
 
