@@ -6,5 +6,7 @@
     "calculator",
     "mcpclient",
     "sshclient"
+    "mcpclient",
+    "videostreamviewer"
   ]
 }

@@ -1,6 +1,16 @@
 // src/services/api.js
 const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
 
+/** Fetch app version from backend (GET /version). Returns { version, commit, branch, dirty, ... } or null on failure. */
+export async function getVersion() {
+  try {
+    const response = await fetch(`${API_URL}/version`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (e) {
+    return null;
+  }
+}
 
 // Example: "sendCommand" function that POSTs a command to your server
 export async function sendCommand({ connectInfo, method, command }) {
