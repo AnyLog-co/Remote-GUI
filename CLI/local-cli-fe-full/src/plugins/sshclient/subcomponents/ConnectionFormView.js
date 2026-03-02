@@ -1,4 +1,4 @@
-import './ConnectionFormView.css';
+import '../styles/ConnectionFormView.css';
 
 export const FormField = ({
   label,

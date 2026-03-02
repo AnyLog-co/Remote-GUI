@@ -1,5 +1,5 @@
 import { cliState } from '../state/state';
-import './Header.css';
+import '../styles/Header.css';
 
 const Header = () => {
   const setModalView = cliState((state) => state.setModalView);

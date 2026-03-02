@@ -10,7 +10,7 @@ import {
   FormField,
   FormButton,
 } from './ConnectionFormView';
-import './VaultView.css';
+import '../styles/VaultViews.css';
 
 const VaultView = ({ onClose }) => {
   const [dbInstance, setDbInstance] = useState(null);

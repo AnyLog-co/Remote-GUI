@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cliState } from '../state/state';
 import { FaCircle } from 'react-icons/fa6';
-import './StatusBar.css';
+import '../styles/StatusBar.css';
 
 export const TimeCounter = ({ customStart, enabled }) => {
   const [seconds, setSeconds] = useState(customStart || 0);
