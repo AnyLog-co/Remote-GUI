@@ -3,7 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { cliState } from '../state/state';
-import './TerminalView.css';
+import '../styles/TerminalView.css';
 
 const TerminalView = ({ id, host, user, credential, action, authType }) => {
   const terminalRef = useRef(null);
@@ -102,8 +102,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
           data: credential,
         };
       }
-
-      const ws = new WebSocket(`ws://${strippedURL}cli/ws`);
+      const ws = new WebSocket(`ws://${strippedURL}sshclient/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
