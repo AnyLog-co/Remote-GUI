@@ -5,6 +5,7 @@ import shutil
 import uuid
 from pathlib import Path
 from .documentvalidator import validate_file
+import helpers
 import requests
 
 # Create the API router
@@ -41,10 +42,54 @@ async def add_file(file: UploadFile = File(...)) -> Dict[str, str | int | None]:
         "location": str(file_path)
     }
 
+def get_directories(dir_response: str) -> List[str]:
+    if "Directory does not exist" in dir_response:
+        return []
+    return [line.replace("/app/AnyLog-Network/data/", "") for line in dir_response.split("\n")]
+
+def _create_dir(conn: str) -> requests.Response | None:
+    headers = {
+        "command": "system mkdir -p /app/AnyLog-Network/data/upload_dir",
+        "User-Agent": "AnyLog/1.23",
+        "Content-Type": "text/plain"
+    }
+
+    try:
+        response = requests.post(f"http://{conn}", data='', headers=headers)
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+    return response
+
+def create_upload_dir(conn: str) -> bool:
+    # Check if directory already exists in the node
+    command = "get directories /app/AnyLog-Network/data/"
+    helper_response = helpers.make_request(conn=conn, method="GET", command=command)
+    if not isinstance(helper_response, dict): 
+        directories = get_directories(helper_response)
+    else:
+        directories = None
+
+    if directories is not None and "upload_dir" in directories:
+        return True
+
+    # If directory doesn't exit, create it
+    print("Couldn't find upload_dir, attempting to create it...")
+    request_response = _create_dir(conn)
+    if request_response is not None and request_response.status_code == 200:
+        return True
+    else:
+        return False
+
 @api_router.post("/upload")
 async def add_files(files: List[UploadFile] = File(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
-    
+
+    conn = "50.116.9.238:32349"
+    dest_exists = create_upload_dir(conn)
+    if not dest_exists:
+        raise HTTPException(status_code=501, detail="upload directory does not exist")
+
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
     for file in files:
