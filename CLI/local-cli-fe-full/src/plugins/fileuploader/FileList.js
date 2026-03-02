@@ -23,23 +23,34 @@ function FileList({ files, handleDeleteButtonClick }) {
   return (
     <React.Fragment>
       {files.map((file) => (
-        <div key={file.id}className="file-list-item">
-          <div className="uns-item-icon">
-            {getFileExtensionEmoji(file.file.name)}
+        <div key={file.id} className="file-list-item-container">
+          <div className="file-list-item-info">
+            <div className="uns-item-icon">
+              {getFileExtensionEmoji(file.file.name)}
+            </div>
+            <div className="file-list-item-name">
+              {file.file.name}
+            </div>
+            <div className="file-list-item-actions">
+              <button
+                className="file-list-item-delete-btn"
+                onClick={() => handleDeleteButtonClick(file.id)}
+                title={`Remove selected file ${file.file.name}`}
+                aria-label={`Remove selected file ${file.file.name}`}
+              >
+                ❌
+              </button>
+            </div>
           </div>
-          <div className="file-list-item-name">
-            {file.file.name}
+          {file.result && (file.result.success ?
+          <div className="file-list-item-success">
+            Stored as: {file.result.location}
           </div>
-          <div className="file-list-item-actions">
-            <button
-              className="file-list-item-delete-btn"
-              onClick={() => handleDeleteButtonClick(file.id)}
-              title={`Remove selected file ${file.file.name}`}
-              aria-label={`Remove selected file ${file.file.name}`}
-            >
-              ❌
-            </button>
+          :
+          <div className="file-list-item-error">
+            Error(s): {file.result.errors.map((error) => `${error}\n`)}
           </div>
+          )}
         </div>
       ))}
     </React.Fragment>

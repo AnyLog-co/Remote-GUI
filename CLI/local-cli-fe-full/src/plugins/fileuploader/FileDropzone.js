@@ -24,7 +24,8 @@ function FileDropzone({ setFilesCallback }) {
     acceptedFiles.map((file) => {
       filesToBeAdded.push({
         id: uuidv4(),
-        file: file
+        file: file,
+        result: null,
       });
     })
     setFilesCallback(filesToBeAdded);

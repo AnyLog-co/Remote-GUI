@@ -11,9 +11,13 @@ function FileuploaderPage({ node }) {
   const changeFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
 
   const [canSubmit, setCanSubmit] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
+
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  const [loading, setLoading] = useState(false); // upload button
+  const [loadingDeleteUploaded, setLoadingDeleteUploaded] = useState(false);
 
   // upload button becomes valid if there are files selected
   useEffect(() =>{
@@ -21,35 +25,76 @@ function FileuploaderPage({ node }) {
     else setCanSubmit(false);
   }, [files]);
 
+  // remove individual file
   const handleDeleteButtonClick = (id) => {
     const index = files.findIndex((element) => element.id === id);
     files.splice(index, 1);
     setFiles([...files]);
   }
 
-  const uploadFiles = async() => {
-    const formData = new FormData();
-    formData.set("conn", node);
-    files.forEach((file) => {
-      formData.append("files", file.file);
-      console.log(file);
-    })
-
-    try {
-      const response = await fetch(`${API_URL}/fileuploader/upload`, {
-        method: "POST",
-        body: formData
-      });
-      const data = await response.json();
-      return data.results;
-    } catch (error) {
-      console.error(error);
+  // remove all successfully uploaded buttons (instead of deleting them manually)
+  const handleDeleteUploadedButtonClick = () => {
+    setLoadingDeleteUploaded(true);
+    for (let i = files.length - 1; i >= 0; i--) {
+      if (files[i].result.success) {
+          files.splice(i, 1);
+      }
     }
+    setFiles([...files]);
+    setCanDeleteUploaded(false);
+    setLoadingDeleteUploaded(false);
   }
 
-  const handleUploadButtonClick = async() => {
+  const handleUploadButtonClick = async () => {
     if (files.length > 0) {
-      const results = await uploadFiles();
+      try {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        
+        const formData = new FormData();
+        formData.set("conn", node);
+        files.forEach((file) => {
+          formData.append("files", file.file);
+        })
+
+        const response = await fetch(`${API_URL}/fileuploader/upload`, {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // add upload result to each file to be displayed in the file list
+        // if there is a successful file, allow it to be deleted
+        let hasSuccess = false;
+        const filesWithResult = files.map((file, index) => {
+          if (data.results[index].success)
+            hasSuccess = true;
+          return ({
+            ...file,
+            result: data.results[index],
+          });
+        });
+        setFiles(filesWithResult);
+        if (hasSuccess)
+          setCanDeleteUploaded(true);
+        
+        // array of strings to hold each line
+        setSuccess([`Total files: ${data.total_files}`,
+          `Number of files successfully uploaded: ${data.successful}`,
+          `Number of files failed to be uploaded: ${data.failed}`,
+        ]);
+      } catch (err) {
+        setError(err.message || 'Failed to upload files');
+      } finally {
+          setLoading(false);
+      }
     }
   }
 
@@ -71,6 +116,10 @@ function FileuploaderPage({ node }) {
           <FileDropzone setFilesCallback={changeFiles}/>
         </div>
 
+        {/* <div className="form-section">
+          <h3>Settings</h3>
+        </div> */}
+
         <div className="form-section">
           <div
             className="file-list-container"
@@ -85,6 +134,28 @@ function FileuploaderPage({ node }) {
               />
             </div>
           </div>
+
+          <div
+            className="file-list-action-container"
+          >
+            <button 
+              className="delete-button"
+              disabled={!canDeleteUploaded}
+              title={!canDeleteUploaded ? "You must have successfully uploaded at least one file" : "Delete all successfully uploaded files"}
+              onClick={handleDeleteUploadedButtonClick}
+            >
+              {loadingDeleteUploaded ? "Removing Uploaded..." : "Remove All Uploaded"}
+            </button>
+
+            <button 
+              className="delete-button"
+              disabled={!canSubmit}
+              title={!canSubmit ? "You must select files in order to delete all of them" : "Delete all selected files"}
+              onClick={() => {setFiles([])}}
+            >
+              Delete All
+            </button>
+          </div>
         </div>
 
         <button 
@@ -95,6 +166,20 @@ function FileuploaderPage({ node }) {
         >
           {loading ? "Uploading..." : "Upload"}
         </button>
+
+        {error && (
+          <div className="error-message">
+            <strong>Error:</strong>
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="success-message">
+            <strong>Result: </strong>
+            {success.map((line) => `\n${line}`)}
+          </div>
+        )}
 
       </div>
     </div>
