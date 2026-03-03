@@ -1,7 +1,8 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../../styles/FileuploaderPage.css';
 import FileList from './FileList';
 import FileDropzone from './FileDropzone';
+import SelectDirectory from './SelectDirectory';
 
 const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
 
@@ -9,6 +10,10 @@ function FileuploaderPage({ node }) {
 
   const [files, setFiles] = useState([]);
   const changeFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
+
+  const defaultDirectory = "/app/AnyLog-Network/data/upload_dir";
+  const [directory, setDirectory] = useState({label: defaultDirectory, value: defaultDirectory});
+  const [isValidDirectory, setIsValidDirectory] = useState(true);
 
   const [canSubmit, setCanSubmit] = useState(false);
   const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
@@ -21,9 +26,20 @@ function FileuploaderPage({ node }) {
 
   // upload button becomes valid if there are files selected
   useEffect(() =>{
-    if (files.length > 0) setCanSubmit(true);
-    else setCanSubmit(false);
+    if (files.length > 0)
+      setCanSubmit(true);
+    else 
+      setCanSubmit(false);
   }, [files]);
+
+  // validate directory
+  useEffect(() => {
+    if (directory?.label?.includes("..")) 
+      setIsValidDirectory(false);
+    else
+      setIsValidDirectory(true);
+    console.log(directory, isValidDirectory);
+  }, [directory]);
 
   // remove individual file
   const handleDeleteButtonClick = (id) => {
@@ -36,7 +52,7 @@ function FileuploaderPage({ node }) {
   const handleDeleteUploadedButtonClick = () => {
     setLoadingDeleteUploaded(true);
     for (let i = files.length - 1; i >= 0; i--) {
-      if (files[i].result.success) {
+      if (files[i].result?.success) {
           files.splice(i, 1);
       }
     }
@@ -98,6 +114,17 @@ function FileuploaderPage({ node }) {
     }
   }
 
+  // get correct title for upload button when you hover over it
+  const getUploadButtonTitle = () => {
+    if (!isValidDirectory) {
+      return "You must select a valid directory to upload your files";
+    } else if (!canSubmit) {
+      return "You must select at least one file to upload";
+    } else {
+      return "Upload all selected files";
+    }
+  }
+
   return (
     <div className="fileuploader-page">
       <div className="fileuploader-header">
@@ -111,18 +138,40 @@ function FileuploaderPage({ node }) {
       </div>
 
       <div className="fileuploader-form">
+
+        <div className="form-section">
+          <h3>Configuration</h3>
+          <div className="form-group">
+            <span>Destination folder: {directory ? `${directory?.label}` : "Not selected"}</span>
+            <div className="form-row">
+              <button
+                className="reset-button"
+                onClick={() => setDirectory({label: defaultDirectory, value: defaultDirectory})}
+              >
+                Reset to Default
+              </button>
+            </div>
+            <span>Choose upload directory (one will be created if it doesn't exist)</span>
+            <SelectDirectory
+              defaultDirectory={defaultDirectory}
+              setDirectoryCallback={setDirectory}
+            />
+            {!isValidDirectory &&
+              <small className="form-text text-muted select-error">
+                Upload directory cannot contain ".."
+              </small>
+            }
+          </div>
+        </div>
+
         <div className="form-section">
           <h3>File Drop Zone</h3>
           <FileDropzone setFilesCallback={changeFiles}/>
         </div>
 
-        {/* <div className="form-section">
-          <h3>Settings</h3>
-        </div> */}
-
         <div className="form-section">
           <div
-            className="file-list-container"
+            className="file-list-container form-group"
           >
             <div className="file-list-container-header">
               Files selected ({files.length})
@@ -136,7 +185,7 @@ function FileuploaderPage({ node }) {
           </div>
 
           <div
-            className="file-list-action-container"
+            className="form-row"
           >
             <button 
               className="delete-button"
@@ -160,8 +209,8 @@ function FileuploaderPage({ node }) {
 
         <button 
           className="upload-button"
-          disabled={!canSubmit}
-          title={!canSubmit ? "You must select at least one file to upload" : "Upload all selected files"}
+          disabled={!canSubmit || !isValidDirectory}
+          title={getUploadButtonTitle()}
           onClick={handleUploadButtonClick}
         >
           {loading ? "Uploading..." : "Upload"}
