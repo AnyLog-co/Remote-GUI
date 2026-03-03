@@ -235,8 +235,8 @@ const Dashboard = () => {
             {/* User Profile - Always available */}
             <Route path="userprofile" element={<UserProfile node={selectedNode} />} />
 
-            {/* About - Always available */}
-            <Route path="about" element={<About node={selectedNode} />} />
+            {/* About - Always available, key forces reload when node changes */}
+            <Route path="about" element={<About key={selectedNode ? (typeof selectedNode === 'string' ? selectedNode : JSON.stringify(selectedNode)) : 'no-node'} node={selectedNode} />} />
             
             {/* Plugin Routes - Auto-loaded and filtered by feature config */}
             {configLoaded && Object.entries(pluginPages)
