@@ -29,7 +29,8 @@ class QueryTableRequest(BaseModel):
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
-    column: Optional[str] = None  # When set, only fetch insert_timestamp and this column
+    column: Optional[str] = None  # When set, only fetch time_column and this column
+    time_column: Optional[str] = "insert_timestamp"  # Time-based column for filtering: insert_timestamp or timestamp
 
 class QueryCustomRequest(BaseModel):
     conn: str
@@ -172,14 +173,18 @@ async def query_table(request: QueryTableRequest):
         # Convert to int if it's a whole number, otherwise keep as float
         time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
         
+        time_col = (request.time_column or "insert_timestamp").strip()
+        if time_col not in ("insert_timestamp", "timestamp"):
+            time_col = "insert_timestamp"
+
         if request.column and request.column.strip():
             col = _quote_identifier(request.column.strip())
-            select_clause = f"insert_timestamp, {col}"
+            select_clause = f"{time_col}, {col}"
         else:
             select_clause = "*"
         
-        # Base time filter
-        sql_query = f'SELECT {select_clause} FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
+        # Base time filter using selected time column
+        sql_query = f'SELECT {select_clause} FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), {time_col})'
         if request.where and request.where.strip():
             sql_query += f" AND ({request.where.strip()})"
         # Use the exact format that works in the client dashboard
@@ -241,14 +246,13 @@ async def query_table(request: QueryTableRequest):
             print(f"UNS: First row sample: {data[0]}")
             print(f"UNS: Last row sample: {data[-1]}")
         
-        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
-        # timestamp is excluded as insert_timestamp is used for the chart
+        # Filter out only internal columns (row_id, tsd_name, tsd_id).
+        # Keep both time columns - frontend will choose which to display and put it first.
         filtered_data = []
-        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
+        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id'}
         
         for row in data:
             if isinstance(row, dict):
-                # Filter out the internal columns
                 filtered_row = {k: v for k, v in row.items() if k not in columns_to_exclude}
                 filtered_data.append(filtered_row)
             elif isinstance(row, list):
