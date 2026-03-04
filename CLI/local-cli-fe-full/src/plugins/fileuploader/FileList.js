@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import '../../styles/FileuploaderPage.css';
 
 function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRename }) {
@@ -7,10 +7,6 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
   const inputRef = useRef();
   const [activeFile, setActiveFile] = useState(null);
   const [activeValue, setActiveValue] = useState("");
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [activeFile]);
 
   const getFileExtensionEmoji = (fileName) => {
     const fileExtension = fileName.split('.').pop();

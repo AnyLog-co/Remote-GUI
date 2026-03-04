@@ -53,7 +53,7 @@ function FileuploaderPage({ node }) {
       setHasConflicts(true);
     else
       setHasConflicts(false);
-    setNameConflictObject(duplicates);
+    setNameConflictObject({...duplicates});
   }, [files]);
 
   // directory validation every time it changes
