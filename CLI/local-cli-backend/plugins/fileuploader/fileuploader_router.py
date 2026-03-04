@@ -10,7 +10,6 @@ import requests
 from pathlib import Path
 from pydantic import BaseModel
 import re
-import os
 
 # Create the API router
 api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
@@ -117,9 +116,6 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
     conn = request.conn
     directory_path = request.directory_path
 
-    # ex: /app/AnyLog-Network/data/test -> /app/AnyLog-Network/data
-    parent_path = os.path.split(directory_path)[0]
-
     # file validation (does not use AfterValidator since we want our loader to have an empty directory sent back)
     if re.search("^/app/.*$", directory_path) is None:
         return []
@@ -127,6 +123,11 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
         return []
     elif ".." in directory_path:
         return []
+    
+    # ex: /app/AnyLog-Network/data/test -> /app/AnyLog-Network/data
+    parent_path = directory_path
+    if directory_path[len(directory_path) - 1] != '/':
+        parent_path = Path(directory_path).parent
 
     try:
         # Check if directory already exists in the node
@@ -136,9 +137,6 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
             if "Directory does not exists" in helper_response or "No sub directories" in helper_response:
                 return []
             directories = [line.replace("\r", "") for line in helper_response.split("\n")]
-            
-            if len(directories) == 0:
-                return []
 
             if directories[0] == '':
                 directories.pop(0)
