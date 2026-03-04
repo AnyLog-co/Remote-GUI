@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, } from 'react';
 import '../../styles/FileuploaderPage.css';
 import FileList from './FileList';
 import FileDropzone from './FileDropzone';
@@ -12,8 +12,10 @@ function FileuploaderPage({ node }) {
   const changeFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
 
   const defaultDirectory = "/app/AnyLog-Network/data/upload_dir";
-  const [directory, setDirectory] = useState({label: defaultDirectory, value: defaultDirectory});
+  // const [directory, setDirectory] = useState({label: defaultDirectory, value: defaultDirectory});
+  const [directory, setDirectory] = useState(defaultDirectory);
   const [isValidDirectory, setIsValidDirectory] = useState(true);
+  const [directoryError, setDirectoryError] = useState("");
 
   const [canSubmit, setCanSubmit] = useState(false);
   const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
@@ -32,13 +34,26 @@ function FileuploaderPage({ node }) {
       setCanSubmit(false);
   }, [files]);
 
-  // validate directory
+  // directory validation every time it changes
   useEffect(() => {
-    if (directory?.label?.includes("..")) 
+    const appCheckRegex = /^\/app\/.*$/;
+    const filePathRegex = /^\/app(\/([^/\s]+))*\/?$/;
+    // allowSpaces = ^\/app((\/'[^\/]*')|(\/"[^\/]*")|(\/[^\/ ]+))*\/?$
+
+    if (!appCheckRegex.test(directory)) {
       setIsValidDirectory(false);
+      setDirectoryError("Upload folder path must start with /app/");
+    }
+    else if (!filePathRegex.test(directory)) {
+      setIsValidDirectory(false);
+      setDirectoryError("Invalid folder path (cannot contain consecutive /'s, '..', or spaces)");
+    }
+    else if (directory.includes("..")) {
+      setIsValidDirectory(false);
+      setDirectoryError("Upload folder path cannot contain '..'");
+    }
     else
       setIsValidDirectory(true);
-    console.log(directory, isValidDirectory);
   }, [directory]);
 
   // remove individual file
@@ -109,7 +124,7 @@ function FileuploaderPage({ node }) {
       } catch (err) {
         setError(err.message || 'Failed to upload files');
       } finally {
-          setLoading(false);
+        setLoading(false);
       }
     }
   }
@@ -142,23 +157,28 @@ function FileuploaderPage({ node }) {
         <div className="form-section">
           <h3>Configuration</h3>
           <div className="form-group">
-            <span>Destination folder: {directory ? `${directory?.label}` : "Not selected"}</span>
+            <span
+              className={!isValidDirectory ? "error-text-color" : ""}
+            >
+              Destination folder: {directory}
+            </span>
             <div className="form-row">
               <button
                 className="reset-button"
-                onClick={() => setDirectory({label: defaultDirectory, value: defaultDirectory})}
+                onClick={() => setDirectory(defaultDirectory)}
               >
                 Reset to Default
               </button>
             </div>
-            <span>Choose upload directory (one will be created if it doesn't exist)</span>
+            <span>Choose upload folder starting with /app/. There is an option to create a folder if it doesn't exist.</span>
             <SelectDirectory
+              node={node}
               defaultDirectory={defaultDirectory}
               setDirectoryCallback={setDirectory}
             />
             {!isValidDirectory &&
               <small className="form-text text-muted select-error">
-                Upload directory cannot contain ".."
+                {directoryError}
               </small>
             }
           </div>

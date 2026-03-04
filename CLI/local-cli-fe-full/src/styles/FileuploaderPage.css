@@ -368,7 +368,7 @@
   font-style: italic;
 }
 
-.form-text.text-muted.select-error {
+.form-text.text-muted.select-error, .form-group .error-text-color {
   color: #dc3545;
 }
 
