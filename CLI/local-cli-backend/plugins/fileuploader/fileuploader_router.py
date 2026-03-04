@@ -8,9 +8,16 @@ from .documentvalidator import validate_file
 import helpers
 import requests
 from pathlib import Path
+from pydantic import BaseModel
+import re
+import os
 
 # Create the API router
 api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
+
+class getDirectoriesRequest(BaseModel):
+    conn: str
+    directory_path: str
 
 # API endpoints
 @api_router.get("/")
@@ -19,6 +26,11 @@ async def fileuploader_info():
     return {
         "name": "File Uploader Plugin",
         "version": "1.0.0",
+        "description": "Upload files to a directory",
+        "endpoints": [
+            "/upload - Upload a list of files to the upload directory",
+            "/get-directories - Get all directories in a given a directory path",
+        ]
     }
 
 def get_directories(dir_response: str) -> List[str]:
@@ -97,6 +109,53 @@ def push_file(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/
 
     requests.post(f'http://{conn}', headers=headers, data=file.file)
     return filename
+
+@api_router.post("/get-directories")
+async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
+    """Get all directories in a given a directory path"""
+
+    conn = request.conn
+    directory_path = request.directory_path
+
+    # ex: /app/AnyLog-Network/data/test -> /app/AnyLog-Network/data
+    parent_path = os.path.split(directory_path)[0]
+
+    # file validation (does not use AfterValidator since we want our loader to have an empty directory sent back)
+    if re.search("^/app/.*$", directory_path) is None:
+        return []
+    elif re.search("^/app(/([^/]+))*/?$", directory_path) is None:
+        return []
+    elif ".." in directory_path:
+        return []
+
+    try:
+        # Check if directory already exists in the node
+        command = f"get directories {parent_path}"
+        helper_response = helpers.make_request(conn=conn, method="GET", command=command)
+        if not isinstance(helper_response, dict):
+            if "Directory does not exists" in helper_response or "No sub directories" in helper_response:
+                return []
+            directories = [line.replace("\r", "") for line in helper_response.split("\n")]
+            
+            if len(directories) == 0:
+                return []
+
+            if directories[0] == '':
+                directories.pop(0)
+            
+            # put matching directories at the front (iterate backwards to prevent index shifting)
+            matches = []
+            for i in range(len(directories) - 1, -1, -1):
+                if directory_path.lower() in directories[i].lower():
+                    matches.append(directories.pop(i))
+            
+            # reverse list of matching directories to preserve its order in the original list
+            return matches[::-1] + directories
+        else:
+            return []
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get directories: {str(e)}")
 
 @api_router.post("/upload")
 async def add_files(files: List[UploadFile] = File(...),
