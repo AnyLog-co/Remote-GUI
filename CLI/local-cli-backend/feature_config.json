@@ -66,6 +66,10 @@
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
     },
+    "sshclient": {
+      "enabled": true,
+      "description": "SSH Client Plugin"
+    },
     "uns": {
       "enabled": true,
       "description": "Unified Namespace Plugin - Provides filesystem-like interface for blockchain metadata"
