@@ -208,13 +208,28 @@
   align-items: center;
 }
 
-.file-list-item-name {
+.file-list-item-name-container {
   flex: 1;
   font-size: 14px;
   color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-list-item-duplicate {
+  border: 2px solid #dc3545;
+}
+
+input.file-list-item-name {
+  border: none;
+  padding: 0px;
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Segoe UI', Arial, sans-serif;
 }
 
 .file-list-item-action {
@@ -370,6 +385,7 @@
 
 .form-text.text-muted.select-error, .form-group .error-text-color {
   color: #dc3545;
+  white-space: pre-wrap;
 }
 
 /* Import section specific styling - matching Bookmarks.css */

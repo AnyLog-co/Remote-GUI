@@ -1,7 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../../styles/FileuploaderPage.css';
 
-function FileList({ files, handleDeleteButtonClick }) {
+function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRename }) {
+
+  // only one state needed to handle renaming of one file
+  const inputRef = useRef();
+  const [activeFile, setActiveFile] = useState(null);
+  const [activeValue, setActiveValue] = useState("");
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [activeFile]);
+
   const getFileExtensionEmoji = (fileName) => {
     const fileExtension = fileName.split('.').pop();
     
@@ -20,16 +30,46 @@ function FileList({ files, handleDeleteButtonClick }) {
     }
   }
 
+  const handleChange = (event) => {
+    setActiveValue(event.target.value);
+  }
+
   return (
     <React.Fragment>
       {files.map((file) => (
-        <div key={file.id} className="file-list-item-container">
+        <div 
+          key={file.id}
+          className={`file-list-item-container 
+              ${file.file.name in nameConflictObject ? "file-list-item-duplicate" : ""}`}
+        >
           <div className="file-list-item-info">
             <div className="uns-item-icon">
               {getFileExtensionEmoji(file.file.name)}
             </div>
-            <div className="file-list-item-name">
-              {file.file.name}
+            <div 
+              className="file-list-item-name-container"
+              title={file.file.name}
+            >
+              <input
+                ref={activeFile === file.id ? inputRef : null}
+                type="text"
+                className="file-list-item-name"
+                value={activeFile === file.id ? activeValue : file.file.name}
+                onChange={handleChange}
+                onFocus={() => {
+                  setActiveValue(file.file.name);
+                  setActiveFile(file.id);
+                }}
+                onKeyDown={(e) => {if (e.key === "Enter") {
+                  inputRef.current.blur();
+                  handleRename(file.id, file.file.name, activeValue);
+                  setActiveFile(null);
+                }}}
+                onBlur={() => {
+                  handleRename(file.id, file.file.name, activeValue);
+                  setActiveFile(null);
+                }}  
+              />
             </div>
             <div className="file-list-item-actions">
               <button

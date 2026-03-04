@@ -130,7 +130,6 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
         parent_path = Path(directory_path).parent
 
     try:
-        # Check if directory already exists in the node
         command = f"get directories {parent_path}"
         helper_response = helpers.make_request(conn=conn, method="GET", command=command)
         if not isinstance(helper_response, dict):

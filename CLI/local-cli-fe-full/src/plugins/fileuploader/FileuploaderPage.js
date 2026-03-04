@@ -17,6 +17,8 @@ function FileuploaderPage({ node }) {
   const [isValidDirectory, setIsValidDirectory] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
 
+  const [nameConflictObject, setNameConflictObject] = useState({});
+  const [hasConflicts, setHasConflicts] = useState(false);
   const [canSubmit, setCanSubmit] = useState(false);
   const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
 
@@ -27,11 +29,31 @@ function FileuploaderPage({ node }) {
   const [loadingDeleteUploaded, setLoadingDeleteUploaded] = useState(false);
 
   // upload button becomes valid if there are files selected
+  // also checks for duplicate file names
   useEffect(() =>{
     if (files.length > 0)
       setCanSubmit(true);
     else 
       setCanSubmit(false);
+
+    // build duplicates object
+    const names = {};
+    const duplicates = {};
+    let hasDuplicates = false;
+    for (const file of files) {
+      const name = file.file.name;
+      if (name in names) {
+        duplicates[name] = 1;
+        hasDuplicates = true;
+      }
+      else
+        names[name] = 1;
+    }
+    if (hasDuplicates)
+      setHasConflicts(true);
+    else
+      setHasConflicts(false);
+    setNameConflictObject(duplicates);
   }, [files]);
 
   // directory validation every time it changes
@@ -60,6 +82,21 @@ function FileuploaderPage({ node }) {
   const handleDeleteButtonClick = (id) => {
     const index = files.findIndex((element) => element.id === id);
     files.splice(index, 1);
+    setFiles([...files]);
+  }
+
+  // rename individual file
+  const handleRename = (id, oldName, newName) => {
+    const index = files.findIndex((element) => element.id === id);
+
+    // check for file extension matching, append correct file extension if it doesn't match
+    const oldFileExtension = oldName.split('.').pop();
+    const newFileExtension = newName.split('.').pop();
+    if (oldFileExtension !== newFileExtension) {
+      newName = newName.concat(`.${oldFileExtension}`);
+    }
+
+    files[index].file = new File([files[index].file], newName, {type: files[index].file.type});
     setFiles([...files]);
   }
 
@@ -135,6 +172,8 @@ function FileuploaderPage({ node }) {
       return "You must select a valid directory to upload your files";
     } else if (!canSubmit) {
       return "You must select at least one file to upload";
+    } else if (hasConflicts) {
+      return "You must resolve the duplicate file names to upload";
     } else {
       return "Upload all selected files";
     }
@@ -155,7 +194,7 @@ function FileuploaderPage({ node }) {
       <div className="fileuploader-form">
 
         <div className="form-section">
-          <h3>Configuration</h3>
+          <h3>Search Folder</h3>
           <div className="form-group">
             <span
               className={!isValidDirectory ? "error-text-color" : ""}
@@ -190,6 +229,19 @@ function FileuploaderPage({ node }) {
         </div>
 
         <div className="form-section">
+          <h3>File List View</h3>
+          <div className="form-group">
+            <span>You can view, rename, delete, and choose what happens to files with the same name in the upload directory.</span>
+            {hasConflicts &&
+              <span
+                className="error-text-color"
+              >
+                The files you selected have duplicate names. You must remove the duplicate files or rename them by clicking on the file name. 
+                Check the files with these names:
+                {Object.keys(nameConflictObject).map((line) => `\n- ${line}`)}
+              </span>
+            }
+          </div>
           <div
             className="file-list-container form-group"
           >
@@ -199,7 +251,9 @@ function FileuploaderPage({ node }) {
             <div className="file-list-content">
               <FileList 
                 files={files}
+                nameConflictObject={nameConflictObject}
                 handleDeleteButtonClick={handleDeleteButtonClick}
+                handleRename={handleRename}
               />
             </div>
           </div>
@@ -220,7 +274,7 @@ function FileuploaderPage({ node }) {
               className="delete-button"
               disabled={!canSubmit}
               title={!canSubmit ? "You must select files in order to delete all of them" : "Delete all selected files"}
-              onClick={() => {setFiles([])}}
+              onClick={() => {setFiles([]); setCanDeleteUploaded(false);}}
             >
               Delete All
             </button>
@@ -229,7 +283,7 @@ function FileuploaderPage({ node }) {
 
         <button 
           className="upload-button"
-          disabled={!canSubmit || !isValidDirectory}
+          disabled={!canSubmit || !isValidDirectory || hasConflicts}
           title={getUploadButtonTitle()}
           onClick={handleUploadButtonClick}
         >
