@@ -1,4 +1,4 @@
-import React, { useState, useEffect, } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import '../../styles/FileuploaderPage.css';
 import FileList from './FileList';
 import FileDropzone from './FileDropzone';
@@ -17,10 +17,21 @@ function FileuploaderPage({ node }) {
   const [isValidDirectory, setIsValidDirectory] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
 
+  // "hashtable" representation of file names
   const [nameConflictObject, setNameConflictObject] = useState({});
+  const filenamesInfo = useMemo(() => {
+    const list = Object.keys(nameConflictObject);
+    return {
+      list: list,
+      length: list.length,
+      maxDisplayed: 10,
+    }
+  }, [nameConflictObject]);
   const [hasConflicts, setHasConflicts] = useState(false);
   const [canSubmit, setCanSubmit] = useState(false);
   const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
+
+  const duplicateHandlingOptions = ["skip", "replace", "keep"];
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -30,11 +41,14 @@ function FileuploaderPage({ node }) {
 
   // upload button becomes valid if there are files selected
   // also checks for duplicate file names
+  // triggered by FileDropzone.js and FileList.js
   useEffect(() =>{
     if (files.length > 0)
       setCanSubmit(true);
-    else 
+    else {
       setCanSubmit(false);
+      setCanDeleteUploaded(false);
+    }
 
     // build duplicates object
     const names = {};
@@ -56,7 +70,7 @@ function FileuploaderPage({ node }) {
     setNameConflictObject({...duplicates});
   }, [files]);
 
-  // directory validation every time it changes
+  // directory validation every time it changes (triggered by buttons and SelectDirectory.js)
   useEffect(() => {
     const appCheckRegex = /^\/app\/.*$/;
     const filePathRegex = /^\/app(\/([^/\s]+))*\/?$/;
@@ -78,14 +92,14 @@ function FileuploaderPage({ node }) {
       setIsValidDirectory(true);
   }, [directory]);
 
-  // remove individual file
+  // remove individual file (prop used by FileList.js)
   const handleDeleteButtonClick = (id) => {
     const index = files.findIndex((element) => element.id === id);
     files.splice(index, 1);
     setFiles([...files]);
-  }
+  };
 
-  // rename individual file
+  // rename individual file (prop used by FileList.js)
   const handleRename = (id, oldName, newName) => {
     const index = files.findIndex((element) => element.id === id);
 
@@ -98,7 +112,25 @@ function FileuploaderPage({ node }) {
 
     files[index].file = new File([files[index].file], newName, {type: files[index].file.type});
     setFiles([...files]);
-  }
+  };
+
+  // change if individual file should skip this file, replace, or keep both source and destination
+  // (prop used by FileList.js)
+  const changeDuplicateOption = (id, newOption) => {
+    if (duplicateHandlingOptions.includes(newOption)) {
+      const index = files.findIndex((element) => element.id === id);
+      files[index].duplicateHandlingOption = newOption;
+      setFiles([...files]);
+    }
+  };
+
+  // used by reset buttons
+  const changeDuplicateOptionAll = (newOption) => {
+    if (duplicateHandlingOptions.includes(newOption)) {
+      files.forEach((file) => file.duplicateHandlingOption = newOption);
+      setFiles([...files]);
+    }
+  };
 
   // remove all successfully uploaded buttons (instead of deleting them manually)
   const handleDeleteUploadedButtonClick = () => {
@@ -111,7 +143,7 @@ function FileuploaderPage({ node }) {
     setFiles([...files]);
     setCanDeleteUploaded(false);
     setLoadingDeleteUploaded(false);
-  }
+  };
 
   const handleUploadButtonClick = async () => {
     if (files.length > 0) {
@@ -164,7 +196,7 @@ function FileuploaderPage({ node }) {
         setLoading(false);
       }
     }
-  }
+  };
 
   // get correct title for upload button when you hover over it
   const getUploadButtonTitle = () => {
@@ -177,7 +209,7 @@ function FileuploaderPage({ node }) {
     } else {
       return "Upload all selected files";
     }
-  }
+  };
 
   return (
     <div className="fileuploader-page">
@@ -193,6 +225,7 @@ function FileuploaderPage({ node }) {
 
       <div className="fileuploader-form">
 
+        {/* Search for directory using react-select */}
         <div className="form-section">
           <h3>Search Folder</h3>
           <div className="form-group">
@@ -203,7 +236,7 @@ function FileuploaderPage({ node }) {
             </span>
             <div className="form-row">
               <button
-                className="reset-button"
+                className="reset-button reset-button-width"
                 onClick={() => setDirectory(defaultDirectory)}
               >
                 Reset to Default
@@ -223,22 +256,68 @@ function FileuploaderPage({ node }) {
           </div>
         </div>
 
+        {/* Drag and Drop functionality through react-dropzone */}
         <div className="form-section">
           <h3>File Drop Zone</h3>
           <FileDropzone setFilesCallback={changeFiles}/>
         </div>
 
+        {/* Configure file settings if there exist duplicate file names, and file view with deletion settings */}
         <div className="form-section">
           <h3>File List View</h3>
           <div className="form-group">
-            <span>You can view, rename, delete, and choose what happens to files with the same name in the upload directory.</span>
+            <span>You can view, rename, and delete files, as well as 
+              choose what happens to files with the same name in the upload directory.</span>
+            <div
+              className="reset-button-row"
+            >
+              <button 
+                className="reset-button"
+                disabled={!canSubmit}
+                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
+                  : "Set all files to skip their upload if a file with the same name already exists in the upload directory"
+                }
+                onClick={() => changeDuplicateOptionAll('skip')}
+              >
+                Skip These Files
+              </button>
+
+              <button 
+                className="reset-button"
+                disabled={!canSubmit}
+                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
+                  : "Set all files to replace a file with the same name if it already exists in the upload directory"
+                }
+                onClick={() => changeDuplicateOptionAll('replace')}
+              >
+                Replace Existing Files
+              </button>
+
+              <button 
+                className="reset-button"
+                disabled={!canSubmit}
+                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
+                  : "Set all files to upload with a number if there is an existing file with the same name in the upload directory"
+                }
+                onClick={() => changeDuplicateOptionAll('keep')}
+              >
+                Keep Both Files
+              </button>
+            </div>
+            {/* Limit number of duplicate file name conflicts to filenamesInfo.maxDisplayed */}
             {hasConflicts &&
               <span
-                className="error-text-color"
+                className="form-group error-text-color"
               >
                 The files you selected have duplicate names. You must remove the duplicate files or rename them by clicking on the file name. 
                 Check the files with these names:
-                {Object.keys(nameConflictObject).map((line) => `\n- ${line}`)}
+                {filenamesInfo.list.slice(0, filenamesInfo.maxDisplayed).map(
+                  (line) => `\n- ${line}`
+                )}
+                {filenamesInfo.length > filenamesInfo.maxDisplayed ?
+                  `\n...and ${filenamesInfo.length - filenamesInfo.maxDisplayed} more`
+                : ''
+                } 
               </span>
             }
           </div>
@@ -254,6 +333,7 @@ function FileuploaderPage({ node }) {
                 nameConflictObject={nameConflictObject}
                 handleDeleteButtonClick={handleDeleteButtonClick}
                 handleRename={handleRename}
+                changeDuplicateOption={changeDuplicateOption}
               />
             </div>
           </div>
@@ -274,7 +354,7 @@ function FileuploaderPage({ node }) {
               className="delete-button"
               disabled={!canSubmit}
               title={!canSubmit ? "You must select files in order to delete all of them" : "Delete all selected files"}
-              onClick={() => {setFiles([]); setCanDeleteUploaded(false);}}
+              onClick={() => setFiles([])}
             >
               Delete All
             </button>

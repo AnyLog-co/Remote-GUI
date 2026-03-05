@@ -95,8 +95,18 @@
   background-color: #0056b3;
 }
 
-.reset-button {
+.reset-button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 1rem;
+}
+
+.reset-button-width {
   width: fit-content;
+}
+
+.reset-button {
   padding: 10px;
   font-size: 16px;
   background-color: #6c757d;
@@ -210,11 +220,16 @@
 
 .file-list-item-name-container {
   flex: 1;
+  padding-right: 8px;
   font-size: 14px;
   color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-list-item-name-container:not(.name-focused) {
+  mask-image: linear-gradient(90deg, #000 90%, transparent);
 }
 
 .file-list-item-duplicate {
@@ -224,19 +239,58 @@
 input.file-list-item-name {
   border: none;
   padding: 0px;
+  margin-right: 8px;
   font-size: 14px;
   color: #333;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* text-overflow: ellipsis; */
+  /* white-space: pre-line; */
   font-family: 'Segoe UI', Arial, sans-serif;
 }
 
-.file-list-item-action {
+.file-list-item-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* Duplicate handling options toggle */
+.duplicate-handling-options-toggle {
+  display: flex;
+  gap: 5px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.mode-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6c757d;
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover:not(:disabled) {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.mode-btn.active {
+  background: #007bff;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mode-btn.active:hover {
+  background: #0056b3;
+  color: white;
 }
 
 .file-list-item-delete-btn {

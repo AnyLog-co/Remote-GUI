@@ -25,6 +25,7 @@ function FileDropzone({ setFilesCallback }) {
       filesToBeAdded.push({
         id: uuidv4(),
         file: file,
+        duplicateHandlingOption: "skip",
         result: null,
       });
     })
