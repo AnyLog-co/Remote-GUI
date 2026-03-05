@@ -154,6 +154,7 @@ function FileuploaderPage({ node }) {
         
         const formData = new FormData();
         formData.set("conn", node);
+        formData.set("dir", "AnyLog-Network/data/upload_dir");
         files.forEach((file) => {
           formData.append("files", file.file);
         })

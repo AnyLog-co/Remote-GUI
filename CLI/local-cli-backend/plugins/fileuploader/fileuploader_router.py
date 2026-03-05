@@ -10,6 +10,7 @@ import requests
 from pathlib import Path
 from pydantic import BaseModel
 import re
+from .pathparser import PathParser
 
 # Create the API router
 api_router = APIRouter(prefix="/fileuploader", tags=["File Uploader"])
@@ -32,20 +33,46 @@ async def fileuploader_info():
         ]
     }
 
-def get_directories(dir_response: str) -> List[str]:
+def get_directories(dir_response: str, dir_parent: str) -> List[str]:
     if "Directory does not exist" in dir_response:
         return []
-    return [line.replace("\r", "").replace("/app/AnyLog-Network/data/", "") for line in dir_response.split("\n")]
+    return [line.replace("\r", "").replace(dir_parent, "") for line in dir_response.split("\n")]
 
-def _create_dir(conn: str) -> requests.Response | None:
+def get_server_info(conn: str) -> Dict[str, str]:
+    helper_response_raw = helpers.make_request(conn=conn, method="GET", command="get rest server info")
+    if not isinstance(helper_response_raw, str):
+        return {}
+    helper_response_better = helper_response_raw.replace(' ', '')
+    helper_response_lines = helper_response_better.split('\n')
+
+    info_pairs = [line.split("|") for line in helper_response_lines]
+    server_info = {pair[0]: pair[1] for pair in info_pairs if len(pair) >= 2}
+    return server_info
+
+conn_map: Dict[str, str] = {}
+def get_raw_connection(conn: str) -> str:
+    try:
+        return conn_map[conn]
+    except KeyError:
+        pass
+
+    server_info = get_server_info(conn)
+    try:
+        connection = server_info['connection']
+        conn_map[conn] = connection
+        return connection
+    except KeyError:
+        return f"http://{conn}"
+
+def _create_dir(conn: str, dir: str = "/app/AnyLog-Network/data/upload_dir") -> requests.Response | None:
     headers = {
-        "command": "system mkdir -p /app/AnyLog-Network/data/upload_dir",
+        "command": f"system mkdir -p {dir}",
         "User-Agent": "AnyLog/1.23",
         "Content-Type": "text/plain"
     }
 
     try:
-        response = requests.post(f"http://{conn}", data='', headers=headers)
+        response = requests.post(get_raw_connection(conn), data='', headers=headers)
     except Exception as e:
         print(f"Error: {e}")
         return None
@@ -71,12 +98,37 @@ def create_upload_dir(conn: str) -> bool:
     else:
         return False
 
-def _get_files(helper_response: str, dir: str) -> List[str]:
+def create_dir(conn: str, dir: str) -> bool:
+    path = PathParser(dir)
+    if path.hasExt():
+        raise ValueError("Directory must not have an extension")
+    parent = path.parent()
+
+    # Check if directory already exists in the node
+    command = f"get directories {parent}"
+    helper_response = helpers.make_request(conn=conn, method="GET", command=command)
+    if not isinstance(helper_response, dict): 
+        directories = get_directories(helper_response, str(parent))
+    else:
+        directories = None
+
+    if directories is not None and path.stem() in directories:
+        return True
+
+    # If directory doesn't exist, create it
+    print(f"Couldn't find directory {path}, attempting to create it...")
+    request_response = _create_dir(conn, str(path))
+    if request_response is not None and request_response.status_code == 200:
+        return True
+    else:
+        return False
+
+def _get_files(helper_response: str, dir: PathParser) -> List[str]:
     if "No files with path provided:" in helper_response:
         return []
-    return [line.replace("\r", "").replace(dir, "") for line in helper_response.split("\n")]
+    return [line.replace("\r", "").replace(f"{dir}/", "") for line in helper_response.split("\n")]
 
-def get_filename(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/upload_dir/') -> str:
+def get_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
     command = f"get files {dir}"
     helper_response = helpers.make_request(conn=conn, method="GET", command=command)
 
@@ -94,10 +146,10 @@ def get_filename(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/da
         i += 1
     return f"{path.stem}-{i}{path.suffix}"
 
-def push_file(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/upload_dir/') -> str:
+def push_file(conn: str, file: UploadFile, dir: PathParser) -> str:
     filename = get_filename(conn, file, dir)
 
-    command = f"file to {dir}{filename}"
+    command = f"file to {dir}/{filename}"
 
     headers = {
         'User-Agent': 'AnyLog/1.23',
@@ -106,7 +158,9 @@ def push_file(conn: str, file: UploadFile, dir: str = '/app/AnyLog-Network/data/
         'Accept': '*/*'
     }
 
-    requests.post(f'http://{conn}', headers=headers, data=file.file)
+    r = requests.post(get_raw_connection(conn), headers=headers, data=file.file)
+    if (r.status_code != 200):
+        print(f"REPORTED PUSH FAILURE ({r.status_code})")
     return filename
 
 @api_router.post("/get-directories")
@@ -156,13 +210,14 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
 
 @api_router.post("/upload")
 async def add_files(files: List[UploadFile] = File(...),
-                    conn: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
+                    conn: str = Form(...), dir: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
 
-    dest_exists = create_upload_dir(conn)
+    dest_exists = create_dir(conn, dir)
     if not dest_exists:
         raise HTTPException(status_code=501, detail="upload directory does not exist")
-    dir = "/app/AnyLog-Network/data/upload_dir/"
+
+    dir_path = PathParser(dir)
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
@@ -178,13 +233,13 @@ async def add_files(files: List[UploadFile] = File(...),
             continue
 
         try:
-            stored_name = push_file(conn, file, dir)
+            stored_name = push_file(conn, file, dir_path)
 
             results.append({
                 "filename": file.filename,
                 "stored_filename": stored_name,
                 "success": True,
-                "location": f'{dir}{stored_name}'
+                "location": f'{dir_path}/{stored_name}'
             })
         except Exception as e:
             results.append({
