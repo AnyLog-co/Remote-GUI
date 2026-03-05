@@ -5,6 +5,8 @@
     "nodecheck",
     "calculator",
     "mcpclient",
+    "sshclient"
+    "mcpclient",
     "videostreamviewer"
   ]
 }
