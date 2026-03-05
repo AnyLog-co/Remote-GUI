@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import './UNSPage.css';
 
-const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn }, ref) => {
+const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn, timeColumnKey = 'insert_timestamp' }, ref) => {
   const [chartViewStart, setChartViewStart] = useState(0);
   const [chartViewEnd, setChartViewEnd] = useState(null);
   const chartContainerRef = useRef(null);
@@ -24,11 +24,11 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   const scrollbarDragStartXRef = useRef(0);
   const scrollbarDragStartViewRef = useRef({ start: 0, end: 0 });
 
-  // Reset chart zoom/pan when data or value column changes
+  // Reset chart zoom/pan when data, value column, or time column changes
   useEffect(() => {
     setChartViewStart(0);
     setChartViewEnd(null);
-  }, [sqlData, chartYKey]);
+  }, [sqlData, chartYKey, timeColumnKey]);
 
   // Global mouse handlers for chart drag and scrollbar thumb drag
   useEffect(() => {
@@ -135,12 +135,16 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   }
 
   const firstRow = sqlData[0];
-  if (!firstRow || !('insert_timestamp' in firstRow)) {
+  const desiredTimeKey = timeColumnKey || 'insert_timestamp';
+  const timeKey = firstRow && (desiredTimeKey in firstRow)
+    ? desiredTimeKey
+    : firstRow && Object.keys(firstRow).find((k) => k.toLowerCase() === (desiredTimeKey || '').toLowerCase());
+  if (!firstRow || !timeKey) {
     return null;
   }
 
   const valueCandidates = Object.keys(firstRow).filter((key) => {
-    if (['row_id', 'tsd_name', 'tsd_id', 'insert_timestamp'].includes(key)) return false;
+    if (['row_id', 'tsd_name', 'tsd_id', 'insert_timestamp', 'timestamp'].includes(key)) return false;
     const v = firstRow[key];
     if (typeof v === 'number') return true;
     return !Number.isNaN(parseFloat(v));
@@ -159,7 +163,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   // Build chart data for Recharts: [{ time, value, fullTime }] sorted by time
   const chartData = sqlData
     .map((row) => {
-      const tsRaw = row.insert_timestamp;
+      const tsRaw = row[timeKey];
       const t = Date.parse(tsRaw);
       const vRaw = row[effectiveYKey];
       const v = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
