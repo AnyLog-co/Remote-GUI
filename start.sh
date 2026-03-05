@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Set default API URL
 export REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+export REMOTE_GUI_FE=${REMOTE_GUI_FE:-31800}
+export REMOTE_GUI_BE=${REMOTE_GUI_BE:-8080}
 
 # # Inject runtime API URL into config.js (only if you really need to do this at runtime)
 # CONFIG_PATH="/app/CLI/local-cli-fe-full/public/config.js"
@@ -20,10 +22,10 @@ EOF
 # Don't build frontend here — frontend is already built in the image!
 
 # Start backend
-$VIRTUAL_ENV/bin/uvicorn CLI.local-cli-backend.main:app --host 0.0.0.0 --port 8000 &
+$VIRTUAL_ENV/bin/uvicorn CLI.local-cli-backend.main:app --host 0.0.0.0 --port ${REMOTE_GUI_BE} &
 
 # # Serve the frontend build folder using python's simple HTTP server on port 3001
 # cd /app/CLI/local-cli-fe-full/build
 # python3 -m http.server 3001
 
-serve -s "${BUILD_DIR}" -l 3001
+serve -s "${BUILD_DIR}" -l ${REMOTE_GUI_FE}
