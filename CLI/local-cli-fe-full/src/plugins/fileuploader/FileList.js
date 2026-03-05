@@ -38,7 +38,10 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
           className={`file-list-item-container 
               ${file.file.name in nameConflictObject ? 'file-list-item-duplicate' : ''}`}
         >
-          <div className="file-list-item-info">
+          <div
+            className={`file-list-item-info
+            ${file.result ? 'message' : ''}`}
+          >
             <div className="file-list-item-icon">
               {getFileExtensionEmoji(file.file.name)}
             </div>

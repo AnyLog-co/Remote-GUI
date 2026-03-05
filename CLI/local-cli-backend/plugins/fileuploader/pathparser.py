@@ -22,6 +22,11 @@ def _parse(path: str, dest: List[str]) -> None:
     else:
         return
 
+    # we want this file upload system to upload only through the /app top directory
+    if parsed_elements[0] != 'app':
+        dest.clear()
+        raise ValueError("File path must start with /app/")
+
     found_ext = False
     for element in parsed_elements:
         if found_ext:
@@ -46,7 +51,7 @@ class PathParser:
 
     def __repr__(self) -> str:
         if len(self.elements) > 0:
-            return f"./{'/'.join(self.elements)}"
+            return f"/{'/'.join(self.elements)}"
         return "."
 
     def stem(self) -> str | None:

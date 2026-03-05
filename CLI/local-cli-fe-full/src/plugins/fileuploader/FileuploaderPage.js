@@ -154,9 +154,10 @@ function FileuploaderPage({ node }) {
         
         const formData = new FormData();
         formData.set("conn", node);
-        formData.set("dir", "AnyLog-Network/data/upload_dir");
+        formData.set("dir", directory);
         files.forEach((file) => {
           formData.append("files", file.file);
+          formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
         })
 
         const response = await fetch(`${API_URL}/fileuploader/upload`, {

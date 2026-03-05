@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import shutil
 import uuid
 from pathlib import Path
@@ -36,7 +36,7 @@ async def fileuploader_info():
 def get_directories(dir_response: str, dir_parent: str) -> List[str]:
     if "Directory does not exist" in dir_response:
         return []
-    return [line.replace("\r", "").replace(dir_parent, "") for line in dir_response.split("\n")]
+    return [line.replace("\r", "").replace(dir_parent, "")[1:] for line in dir_response.split("\n")]
 
 def get_server_info(conn: str) -> Dict[str, str]:
     helper_response_raw = helpers.make_request(conn=conn, method="GET", command="get rest server info")
@@ -123,12 +123,7 @@ def create_dir(conn: str, dir: str) -> bool:
     else:
         return False
 
-def _get_files(helper_response: str, dir: PathParser) -> List[str]:
-    if "No files with path provided:" in helper_response:
-        return []
-    return [line.replace("\r", "").replace(f"{dir}/", "") for line in helper_response.split("\n")]
-
-def get_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
+def exec_get_files(conn: str, dir: PathParser) -> List[str]:
     command = f"get files {dir}"
     helper_response = helpers.make_request(conn=conn, method="GET", command=command)
 
@@ -136,6 +131,15 @@ def get_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
         raise ValueError("AnyLog raised an error when accessing files") 
     
     files = _get_files(helper_response, dir)
+    return files
+
+def _get_files(helper_response: str, dir: PathParser) -> List[str]:
+    if "No files with path provided:" in helper_response:
+        return []
+    return [line.replace("\r", "").replace(f"{dir}/", "") for line in helper_response.split("\n")]
+
+def get_numbered_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
+    files = exec_get_files(conn, dir)
     if file.filename not in files:
         return file.filename
     
@@ -146,8 +150,7 @@ def get_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
         i += 1
     return f"{path.stem}-{i}{path.suffix}"
 
-def push_file(conn: str, file: UploadFile, dir: PathParser) -> str:
-    filename = get_filename(conn, file, dir)
+def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> str:
 
     command = f"file to {dir}/{filename}"
 
@@ -209,7 +212,7 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
         raise HTTPException(status_code=500, detail=f"Failed to get directories: {str(e)}")
 
 @api_router.post("/upload")
-async def add_files(files: List[UploadFile] = File(...),
+async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOptions: List[str] = Form(...),
                     conn: str = Form(...), dir: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
 
@@ -221,7 +224,7 @@ async def add_files(files: List[UploadFile] = File(...),
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
-    for file in files:
+    for file, option in zip(files, duplicateHandlingOptions):
         validation = await validate_file(file)
 
         if not validation['valid']:
@@ -233,7 +236,28 @@ async def add_files(files: List[UploadFile] = File(...),
             continue
 
         try:
-            stored_name = push_file(conn, file, dir_path)
+            stored_name = ""
+
+            # first, check if file name exists
+            if file.filename in exec_get_files(conn, dir_path):
+
+                # if on skip option, abort the upload for this file
+                if option == 'skip':
+                    results.append({
+                        "filename": file.filename,
+                        "success": False,
+                        "errors": ["File already exists in directory and the 'Skip' option was selected"]
+                    })
+                    continue
+                
+                # if on keep option, get a numbered file name
+                if option == 'keep':
+                    stored_name = push_file(conn, file, get_numbered_filename(conn, file, dir), dir_path)
+                elif option == 'replace':
+                    stored_name = push_file(conn, file, file.filename, dir_path)
+            else:
+                # otherwise, push file as normal
+                stored_name = push_file(conn, file, file.filename, dir_path)
 
             results.append({
                 "filename": file.filename,

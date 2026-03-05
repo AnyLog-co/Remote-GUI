@@ -218,6 +218,10 @@
   align-items: center;
 }
 
+.file-list-item-info.message {
+  margin-bottom: 8px;
+}
+
 .file-list-item-name-container {
   flex: 1;
   padding-right: 8px;
