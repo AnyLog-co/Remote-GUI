@@ -1,6 +1,6 @@
 // src/services/api.js
-// const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
-const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8000";
+// const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8080";
 
 /** Run blockchain get license on the connected node. Returns parsed license data or null. */
 export async function getLicenseInfo({ connectInfo }) {
