@@ -138,11 +138,8 @@ def _get_files(helper_response: str, dir: PathParser) -> List[str]:
         return []
     return [line.replace("\r", "").replace(f"{dir}/", "") for line in helper_response.split("\n")]
 
-def get_numbered_filename(conn: str, file: UploadFile, dir: PathParser) -> str:
-    files = exec_get_files(conn, dir)
-    if file.filename not in files:
-        return file.filename
-    
+# numbering system for duplicate file names: append a "-n" to the end, where n is a number
+def get_numbered_filename(file: UploadFile, files: List[str]) -> str:
     path = Path(file.filename)
 
     i = 1
@@ -163,7 +160,14 @@ def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> st
 
     r = requests.post(get_raw_connection(conn), headers=headers, data=file.file)
     if (r.status_code != 200):
+        # r.text prints whole response, including body as a dictionary string
+        r_text = r.text.split('\r\n\r\n')[-1]
+        r_text = r_text.strip("{}")
+
+        # # removes quotes in each key-value pair and makes string dictionary into dictionary
+        r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
         print(f"REPORTED PUSH FAILURE ({r.status_code})")
+        raise HTTPException(status_code=500, detail=r_dict.get("err_text"))
     return filename
 
 @api_router.post("/get-directories")
@@ -224,6 +228,7 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
+    dir_files = exec_get_files(conn, dir_path)
     for file, option in zip(files, duplicateHandlingOptions):
         validation = await validate_file(file)
 
@@ -239,20 +244,22 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
             stored_name = ""
 
             # first, check if file name exists
-            if file.filename in exec_get_files(conn, dir_path):
+            file_already_exists = file.filename in exec_get_files(conn, dir_path)
+            if file_already_exists:
 
                 # if on skip option, abort the upload for this file
                 if option == 'skip':
                     results.append({
                         "filename": file.filename,
                         "success": False,
-                        "errors": ["File already exists in directory and the 'Skip' option was selected"]
+                        "errors": ["File already exists in this folder and the 'Skip' option was selected"]
                     })
                     continue
                 
                 # if on keep option, get a numbered file name
                 if option == 'keep':
-                    stored_name = push_file(conn, file, get_numbered_filename(conn, file, dir), dir_path)
+                    stored_name = get_numbered_filename(file, files) if file_already_exists else file.filename
+                    stored_name = push_file(conn, file, stored_name, dir_path)
                 elif option == 'replace':
                     stored_name = push_file(conn, file, file.filename, dir_path)
             else:

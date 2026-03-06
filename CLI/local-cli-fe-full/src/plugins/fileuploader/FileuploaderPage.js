@@ -239,6 +239,7 @@ function FileuploaderPage({ node }) {
             <div className="form-row">
               <button
                 className="reset-button reset-button-width"
+                title={`Reset to default upload folder ${defaultDirectory}`}
                 onClick={() => setDirectory(defaultDirectory)}
               >
                 Reset to Default
