@@ -20,7 +20,8 @@ const fetchPluginOrder = async () => {
   
   orderFetchPromise = (async () => {
     try {
-      const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+      // const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+      const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8000";
       const response = await fetch(`${API_URL}/plugins/order`);
       if (response.ok) {
         const data = await response.json();
@@ -69,49 +70,31 @@ const sortPluginsByOrder = (plugins, order) => {
 // Uses webpack's require.context to find all plugin Page.js files
 export const discoverPluginPages = () => {
   const pluginPages = {};
-  
-  // Use require.context to get all plugin Page.js files
-  // Pattern: ./pluginname/PluginnamePage.js
-  const pluginContext = require.context('./', true, /^\.\/[^/]+\/[A-Z][^/]*Page\.js$/);
-  
-  pluginContext.keys().forEach(modulePath => {
+
+  // Vite's replacement for webpack's require.context
+  const modules = import.meta.glob('./*/**Page.js', { eager: true });
+
+  Object.entries(modules).forEach(([modulePath, module]) => {
     try {
-      // Extract plugin name from path: ./pluginname/PluginnamePage.js
       const pathParts = modulePath.split('/');
-      const pluginName = pathParts[1]; // Get the folder name
-      const pageFileName = pathParts[2]; // Get the Page.js filename
-      
-      // Skip if we've already loaded this plugin
-      if (pluginPages[pluginName]) {
-        return;
-      }
-      
-      // Import the module synchronously to get metadata
-      const module = pluginContext(modulePath);
-      
-      // Get metadata from the module (each Page.js should export pluginMetadata)
+      const pluginName = pathParts[1];
+      const pageFileName = pathParts[2];
+
+      if (pluginPages[pluginName]) return;
+
       const metadata = module.pluginMetadata || {};
-      
-      // Create lazy-loaded component that imports dynamically
-      // Store the modulePath for dynamic import
-      const importPath = modulePath.replace(/^\.\//, './').replace(/\.js$/, '');
-      
-      const PluginPage = React.lazy(() => 
-        import(`./${pluginName}/${pageFileName}`)
-        // import(`./${pluginName}/${pageFileName.replace(/\.js$/, '')}`)
-          .catch(() => {
-            // Fallback if import fails
-            return {
-              default: () => (
-                <div style={{ padding: '20px' }}>
-                  <h1>Plugin Not Found</h1>
-                  <p>The {pluginName} plugin could not be loaded.</p>
-                </div>
-              )
-            };
-          })
+
+      const PluginPage = React.lazy(() =>
+        import(`./${pluginName}/${pageFileName}`).catch(() => ({
+          default: () => (
+            <div style={{ padding: '20px' }}>
+              <h1>Plugin Not Found</h1>
+              <p>The {pluginName} plugin could not be loaded.</p>
+            </div>
+          )
+        }))
       );
-      
+
       pluginPages[pluginName] = {
         component: PluginPage,
         path: pluginName,
@@ -122,7 +105,7 @@ export const discoverPluginPages = () => {
       console.warn(`Failed to load plugin from ${modulePath}:`, error);
     }
   });
-  
+
   return pluginPages;
 };
 
