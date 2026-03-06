@@ -8,7 +8,6 @@ import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import { getPresetGroups, getPresetsByGroup, addPreset, addPresetGroup } from '../services/file_auth';
 import '../styles/Client.css'; // Optional: create client-specific CSS
 import { useEffect } from 'react';
-import { set } from 'mongoose';
 
 const Client = ({ node }) => {
   const navigate = useNavigate();

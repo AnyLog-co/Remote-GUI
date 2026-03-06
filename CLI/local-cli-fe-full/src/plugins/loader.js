@@ -97,7 +97,8 @@ export const discoverPluginPages = () => {
       const importPath = modulePath.replace(/^\.\//, './').replace(/\.js$/, '');
       
       const PluginPage = React.lazy(() => 
-        import(`./${pluginName}/${pageFileName.replace(/\.js$/, '')}`)
+        import(`./${pluginName}/${pageFileName}`)
+        // import(`./${pluginName}/${pageFileName.replace(/\.js$/, '')}`)
           .catch(() => {
             // Fallback if import fails
             return {

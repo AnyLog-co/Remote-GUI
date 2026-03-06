@@ -11,25 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential python3 git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy fixed package.json and install deps
+# Copy package.json and install deps
 COPY CLI/local-cli-fe-full/package.json ./
-RUN npm install --legacy-peer-deps --no-audit --progress=false \
-    # Remove nested ajv/ajv-keywords inside fork-ts-checker so it uses top-level ajv@8
-    && rm -rf /app/node_modules/fork-ts-checker-webpack-plugin/node_modules/ajv \
-    && rm -rf /app/node_modules/fork-ts-checker-webpack-plugin/node_modules/ajv-keywords \
-    && rm -rf /app/node_modules/fork-ts-checker-webpack-plugin/node_modules/schema-utils
+RUN npm install --legacy-peer-deps --no-audit --progress=false
 
 # Copy frontend source (node_modules must be excluded in .dockerignore)
 COPY CLI/local-cli-fe-full ./
 
-# Build-time API URL
-ARG REACT_APP_API_URL=http://127.0.0.1:8000
-ENV REACT_APP_API_URL=${REACT_APP_API_URL}
+# Build-time API URL (passed in by docker-compose, defaults to backend port)
+ARG VITE_API_URL=http://127.0.0.1:8080
+ENV VITE_API_URL=${VITE_API_URL}
 
-# Build frontend — env vars inline to guarantee subprocess inheritance
-# GENERATE_SOURCEMAP=false cuts webpack memory 2-3x (no source maps needed in prod)
-# CI=false prevents warnings from aborting the build
-RUN GENERATE_SOURCEMAP=false CI=false NODE_OPTIONS="--max_old_space_size=1536" npm run build
+# Build frontend
+RUN npm run build
 
 # =====================
 # Backend build stage
@@ -77,7 +71,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # User-defined at deployment via -e or --build-arg
 ENV CLI_IP=0.0.0.0
-ARG EXPOSE_PORT=8000
+ARG EXPOSE_PORT=8080
 ENV CLI_PORT=${EXPOSE_PORT}
 
 # Install minimal runtime deps
