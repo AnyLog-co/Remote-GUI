@@ -9,9 +9,6 @@ export default defineConfig({
       transformMixedEsModules: true
     }
   },
-  server: {
-    port: 31800
-  },
   esbuild: {
     loader: 'jsx',
     include: /src\/.*\.js$/,
