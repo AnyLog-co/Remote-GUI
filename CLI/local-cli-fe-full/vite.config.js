@@ -4,10 +4,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: 'build'
-  },
-  commonjsOptions: {
-    transformMixedEsModules: true
+    outDir: 'build',
+    commonjsOptions: {
+      transformMixedEsModules: true
+    }
   },
   server: {
     port: 31800
@@ -19,6 +19,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
+      'tslib',
       'dexie-encrypted',
       'jspdf',
       'jspdf-autotable',
