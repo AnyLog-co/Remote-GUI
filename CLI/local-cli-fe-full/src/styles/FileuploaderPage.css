@@ -232,6 +232,7 @@
   white-space: nowrap;
 }
 
+/* Fading gradient indicates that file name is long */
 .file-list-item-name-container:not(.name-focused) {
   mask-image: linear-gradient(90deg, #000 90%, transparent);
 }

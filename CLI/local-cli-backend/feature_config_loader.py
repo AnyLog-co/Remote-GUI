@@ -54,31 +54,29 @@ def load_feature_config() -> Dict:
 
 def is_feature_enabled(feature_name: str) -> bool:
     """
-    Check if a core feature is enabled
-    Returns True if feature is enabled, False otherwise
-    If feature is not in config, defaults to True (backward compatibility)
+    Check if a core feature is enabled.
+    Returns True only if the feature is listed in config and enabled.
+    If feature is not in config, returns False (config is the source of truth).
     """
     config = load_feature_config()
     features = config.get("features", {})
     
     if feature_name not in features:
-        # Feature not in config, default to enabled for backward compatibility
-        return True
+        return False
     
     return features[feature_name].get("enabled", True)
 
 def is_plugin_enabled(plugin_name: str) -> bool:
     """
-    Check if a plugin is enabled
-    Returns True if plugin is enabled, False otherwise
-    If plugin is not in config, defaults to True (backward compatibility)
+    Check if a plugin is enabled.
+    Returns True only if the plugin is listed in config and enabled.
+    If plugin is not in config, returns False (config is the source of truth).
     """
     config = load_feature_config()
     plugins = config.get("plugins", {})
     
     if plugin_name not in plugins:
-        # Plugin not in config, default to enabled for backward compatibility
-        return True
+        return False
     
     return plugins[plugin_name].get("enabled", True)
 

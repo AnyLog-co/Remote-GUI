@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
-
-const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+import UNSSidePanel from './UNSSidePanel';
+import { getRoot, getChildren, checkChildren, queryTable, queryCustom, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ const UNSPage = ({ node }) => {
   const [hoverTimeout, setHoverTimeout] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null); // Selected item for side panel
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false); // Side panel visibility
-  const [rootQuery, setRootQuery] = useState('blockchain get *'); // Configurable root query
+  const [rootQuery, setRootQuery] = useState('blockchain get root policies'); // Configurable root query
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
   const [sqlData, setSqlData] = useState(null); // SQL query results
@@ -24,6 +24,12 @@ const UNSPage = ({ node }) => {
   const [sqlError, setSqlError] = useState(null); // SQL query error
   const [sqlTab, setSqlTab] = useState('timeRange'); // 'timeRange' or 'advanced'
   const [customSqlQuery, setCustomSqlQuery] = useState(''); // Custom SQL query text
+  const [chartYKey, setChartYKey] = useState(null); // Selected value column for line chart
+  const [itemsWithData, setItemsWithData] = useState(new Map()); // Cache: item key (dbms:table) -> has_data (boolean)
+  const [checkingData, setCheckingData] = useState(new Set()); // Track items currently being checked
+  const checkTimeoutsRef = useRef([]); // Track all pending timeout IDs for cleanup
+  const [checkingChildren, setCheckingChildren] = useState(new Set()); // Track items currently being checked for children
+  const childrenCheckTimeoutsRef = useRef([]); // Track all pending timeout IDs for children checks
 
   // Load root items on mount or when node changes
   useEffect(() => {
@@ -42,6 +48,195 @@ const UNSPage = ({ node }) => {
     };
   }, [hoverTimeout]);
 
+
+  // Background check for table data when layers change
+  useEffect(() => {
+    // Cancel all pending checks from previous layers
+    checkTimeoutsRef.current.forEach(timeoutId => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
+    checkTimeoutsRef.current = [];
+    
+    // Clear checking state for items not in current layer
+    if (layers.length === 0 || !node) {
+      setCheckingData(new Set());
+      return;
+    }
+
+    // Get the current layer (last one)
+    const currentLayer = layers[layers.length - 1];
+    if (!currentLayer || currentLayer.length === 0) {
+      setCheckingData(new Set());
+      return;
+    }
+
+    // Build set of cache keys for items in current layer
+    const currentLayerCacheKeys = new Set();
+    for (const item of currentLayer) {
+      const itemData = getItemData(item);
+      if (itemData && itemData.dbms && itemData.table) {
+        const cacheKey = `${itemData.dbms}:${itemData.table}`;
+        currentLayerCacheKeys.add(cacheKey);
+      }
+    }
+
+    // Clear checking state for items not in current layer
+    setCheckingData(prev => {
+      const newSet = new Set();
+      for (const key of prev) {
+        if (currentLayerCacheKeys.has(key)) {
+          newSet.add(key);
+        }
+      }
+      return newSet;
+    });
+
+    // Find items with dbms and table that haven't been checked yet
+    const itemsToCheck = [];
+    for (const item of currentLayer) {
+      const itemData = getItemData(item);
+      if (itemData && itemData.dbms && itemData.table) {
+        const cacheKey = `${itemData.dbms}:${itemData.table}`;
+        // Only check if not already cached and not currently checking
+        if (!itemsWithData.has(cacheKey) && !checkingData.has(cacheKey)) {
+          itemsToCheck.push({ dbms: itemData.dbms, table: itemData.table, cacheKey });
+        }
+      }
+    }
+
+    // Process items one at a time with a delay to avoid overwhelming the server
+    if (itemsToCheck.length > 0) {
+      let index = 0;
+      let cancelled = false;
+      
+      const processNext = () => {
+        if (cancelled || index >= itemsToCheck.length) return;
+        
+        const item = itemsToCheck[index];
+        checkTableData(item.dbms, item.table).then(() => {
+          if (cancelled) return;
+          index++;
+          // Add a small delay between checks (200ms) to avoid overwhelming the server
+          if (index < itemsToCheck.length) {
+            const timeoutId = setTimeout(processNext, 200);
+            checkTimeoutsRef.current.push(timeoutId);
+          }
+        });
+      };
+      
+      // Start processing after a short delay
+      const initialTimeoutId = setTimeout(processNext, 100);
+      checkTimeoutsRef.current.push(initialTimeoutId);
+      
+      // Cleanup: cancel pending checks if layers change or component unmounts
+      return () => {
+        cancelled = true;
+        checkTimeoutsRef.current.forEach(timeoutId => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+        });
+        checkTimeoutsRef.current = [];
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, node]); // Re-check when layers or node changes
+
+  // Background check for children when layers change
+  useEffect(() => {
+    // Cancel all pending children checks from previous layers
+    childrenCheckTimeoutsRef.current.forEach(timeoutId => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
+    childrenCheckTimeoutsRef.current = [];
+    
+    if (layers.length === 0 || !node) {
+      setCheckingChildren(new Set());
+      return;
+    }
+
+    // Get the current layer (last one)
+    const currentLayer = layers[layers.length - 1];
+    if (!currentLayer || currentLayer.length === 0) {
+      setCheckingChildren(new Set());
+      return;
+    }
+
+    // Build set of item IDs in current layer
+    const currentLayerItemIds = new Set();
+    for (const item of currentLayer) {
+      const itemId = getItemId(item);
+      if (itemId) {
+        currentLayerItemIds.add(itemId);
+      }
+    }
+
+    // Clear checking state for items not in current layer
+    setCheckingChildren(prev => {
+      const newSet = new Set();
+      for (const itemId of prev) {
+        if (currentLayerItemIds.has(itemId)) {
+          newSet.add(itemId);
+        }
+      }
+      return newSet;
+    });
+
+    // Find items that haven't been checked for children yet
+    const itemsToCheck = [];
+    for (const item of currentLayer) {
+      const itemId = getItemId(item);
+      if (itemId) {
+        const itemKey = `${layers.length - 1}-${itemId}`;
+        // Only check if not already cached and not currently checking
+        if (!itemsWithChildren.has(itemKey) && !itemsWithoutChildren.has(itemKey) && !checkingChildren.has(itemId)) {
+          itemsToCheck.push({ itemId, itemKey });
+        }
+      }
+    }
+
+    // Process items one at a time with a delay to avoid overwhelming the server
+    if (itemsToCheck.length > 0) {
+      let index = 0;
+      let cancelled = false;
+      
+      const processNext = () => {
+        if (cancelled || index >= itemsToCheck.length) return;
+        
+        const item = itemsToCheck[index];
+        checkItemChildren(item.itemId, item.itemKey).then(() => {
+          if (cancelled) return;
+          index++;
+          // Add a small delay between checks (200ms) to avoid overwhelming the server
+          if (index < itemsToCheck.length) {
+            const timeoutId = setTimeout(processNext, 200);
+            childrenCheckTimeoutsRef.current.push(timeoutId);
+          }
+        });
+      };
+      
+      // Start processing after a short delay
+      const initialTimeoutId = setTimeout(processNext, 100);
+      childrenCheckTimeoutsRef.current.push(initialTimeoutId);
+      
+      // Cleanup: cancel pending checks if layers change or component unmounts
+      return () => {
+        cancelled = true;
+        childrenCheckTimeoutsRef.current.forEach(timeoutId => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+        });
+        childrenCheckTimeoutsRef.current = [];
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, node]); // Re-check when layers or node changes
+
   const loadRootItems = async () => {
     if (!node) {
       setError('No node selected. Please select a node first.');
@@ -57,19 +252,7 @@ const UNSPage = ({ node }) => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/get-root`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, query: rootQuery.trim() }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await getRoot(node, rootQuery);
       
       if (result.success && result.data) {
         // Log the structure for debugging
@@ -218,22 +401,61 @@ const UNSPage = ({ node }) => {
   };
 
   const hasChildren = async (itemId) => {
-    // Check if item has children by trying to fetch them
     try {
-      const response = await fetch(`${API_URL}/uns/get-children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, item_id: itemId }),
-      });
-
-      if (!response.ok) return false;
-
-      const result = await response.json();
+      const result = await getChildren(node, itemId);
       return result.success && result.data && result.data.length > 0;
     } catch {
       return false;
+    }
+  };
+
+  const checkItemChildren = async (itemId, itemKey) => {
+    if (!node || !itemId) return false;
+    
+    // If already cached, return cached value
+    if (itemsWithChildren.has(itemKey)) {
+      return true;
+    }
+    if (itemsWithoutChildren.has(itemKey)) {
+      return false;
+    }
+    
+    // If currently checking, return null (don't check again)
+    if (checkingChildren.has(itemId)) {
+      return null;
+    }
+    
+    // Mark as checking
+    setCheckingChildren(prev => new Set(prev).add(itemId));
+    
+    try {
+      const result = await checkChildren(node, itemId);
+      
+      // Only consider it has_children if success is True AND has_children is True
+      const hasChildren = result.success === true && result.has_children === true;
+      
+      // Cache the result
+      if (result.success !== undefined) {
+        if (hasChildren) {
+          setItemsWithChildren(prev => new Set(prev).add(itemKey));
+        } else {
+          setItemsWithoutChildren(prev => new Set(prev).add(itemKey));
+        }
+      }
+      
+      return hasChildren;
+    } catch (err) {
+      console.error('Error checking children:', err);
+      // On error, assume no children and cache that
+      setItemsWithoutChildren(prev => new Set(prev).add(itemKey));
+      return false;
+    } finally {
+      // Remove from checking set
+      setCheckingChildren(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
     }
   };
 
@@ -275,19 +497,7 @@ const UNSPage = ({ node }) => {
     });
 
     try {
-      const response = await fetch(`${API_URL}/uns/get-children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ conn: node, item_id: itemId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await getChildren(node, itemId);
       
       console.log('UNS: Response received:', {
         success: result.success,
@@ -397,32 +607,21 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchSqlData = async (dbms, table) => {
+  const fetchSqlData = async (dbms, table, whereClause, column) => {
     if (!node || !dbms || !table) return;
 
     setSqlLoading(true);
     setSqlError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/query-table`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          dbms: dbms,
-          table: table,
-          time_value: timeRangeValue,
-          time_unit: timeRangeUnit
-        }),
+      const result = await queryTable(node, {
+        dbms,
+        table,
+        time_value: timeRangeValue,
+        time_unit: timeRangeUnit,
+        where: whereClause,
+        column,
       });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
-
-      const result = await response.json();
       
       console.log('UNS: SQL query result:', {
         success: result.success,
@@ -434,11 +633,36 @@ const UNSPage = ({ node }) => {
         console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
         setSqlData(result.data);
       } else {
-        setSqlError(result.error || 'Failed to fetch table data');
+        // Check if it's a "no data" error or a real error
+        const errorMsg = result.error || '';
+        const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
+                             errorMsg.toLowerCase().includes('connection broken') ||
+                             errorMsg.toLowerCase().includes('invalidchunklength') ||
+                             errorMsg.toLowerCase().includes('invalid literal') ||
+                             errorMsg.toLowerCase().includes('err_code') ||
+                             !errorMsg; // Empty error usually means no data
+        
+        if (isNoDataError) {
+          setSqlError('There is no table/data at this location');
+        } else {
+          setSqlError(result.error || 'Failed to fetch table data');
+        }
       }
     } catch (err) {
       console.error('Error fetching SQL data:', err);
-      setSqlError(err.message || 'Failed to fetch table data');
+      // Check if it's a "no data" error
+      const errorMsg = err.message || '';
+      const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
+                           errorMsg.toLowerCase().includes('connection broken') ||
+                           errorMsg.toLowerCase().includes('invalidchunklength') ||
+                           errorMsg.toLowerCase().includes('invalid literal') ||
+                           errorMsg.toLowerCase().includes('err_code');
+      
+      if (isNoDataError) {
+        setSqlError('There is no table/data at this location');
+      } else {
+        setSqlError(err.message || 'Failed to fetch table data');
+      }
     } finally {
       setSqlLoading(false);
     }
@@ -451,41 +675,93 @@ const UNSPage = ({ node }) => {
     setSqlError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uns/query-custom`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conn: node,
-          dbms: dbms,
-          sql_query: sqlQuery.trim()
-        }),
-      });
+      const result = await queryCustom(node, { dbms, sql_query: sqlQuery });
 
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
+      const safeData = Array.isArray(result?.data) ? result.data : [];
 
-      const result = await response.json();
-      
-      console.log('UNS: Custom SQL query result:', {
-        success: result.success,
-        dataLength: result.data ? result.data.length : 0,
-        dataType: Array.isArray(result.data) ? 'array' : typeof result.data
-      });
-      
-      if (result.success) {
-        console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
-        setSqlData(result.data);
+      if (result?.success) {
+        setSqlData(safeData);
       } else {
-        setSqlError(result.error || 'Failed to execute custom SQL query');
+        setSqlData([]);
+        const errorMsg = result?.error || '';
+        const isNoDataError = !errorMsg ||
+          errorMsg.toLowerCase().includes('failed to load table metadata') ||
+          errorMsg.toLowerCase().includes('connection broken') ||
+          errorMsg.toLowerCase().includes('invalidchunklength') ||
+          errorMsg.toLowerCase().includes('invalid literal') ||
+          errorMsg.toLowerCase().includes('err_code');
+        setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
       }
     } catch (err) {
       console.error('Error executing custom SQL query:', err);
-      setSqlError(err.message || 'Failed to execute custom SQL query');
+      setSqlData([]);
+      const errorMsg = err?.message || '';
+      const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
+        errorMsg.toLowerCase().includes('connection broken') ||
+        errorMsg.toLowerCase().includes('invalidchunklength') ||
+        errorMsg.toLowerCase().includes('invalid literal') ||
+        errorMsg.toLowerCase().includes('err_code');
+      setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
     } finally {
       setSqlLoading(false);
+    }
+  };
+
+  const checkTableData = async (dbms, table) => {
+    if (!node || !dbms || !table) return false;
+    
+    // Create a cache key
+    const cacheKey = `${dbms}:${table}`;
+    
+    // If already cached, return cached value
+    if (itemsWithData.has(cacheKey)) {
+      return itemsWithData.get(cacheKey);
+    }
+    
+    // If currently checking, return null (don't check again)
+    if (checkingData.has(cacheKey)) {
+      return null;
+    }
+    
+    // Mark as checking
+    setCheckingData(prev => new Set(prev).add(cacheKey));
+    
+    try {
+      const result = await checkTable(node, { dbms, table });
+      
+      // Only consider it has_data if success is True AND has_data is True
+      // If success is False or has_data is False, treat as no data
+      const hasData = result.success === true && result.has_data === true;
+      
+      // Only cache if we got a definitive result (true or false)
+      // Don't cache errors or undefined states
+      if (result.success !== undefined) {
+        setItemsWithData(prev => {
+          const newMap = new Map(prev);
+          // Only cache true values - false means no data, don't cache false to allow re-checking
+          // Actually, let's cache false too so we don't keep re-checking failed tables
+          newMap.set(cacheKey, hasData);
+          return newMap;
+        });
+      }
+      
+      return hasData;
+    } catch (err) {
+      console.error('Error checking table data:', err);
+      // On any error (network, parsing, etc.), assume no data and cache that
+      setItemsWithData(prev => {
+        const newMap = new Map(prev);
+        newMap.set(cacheKey, false);
+        return newMap;
+      });
+      return false;
+    } finally {
+      // Remove from checking set
+      setCheckingData(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(cacheKey);
+        return newSet;
+      });
     }
   };
 
@@ -509,11 +785,15 @@ const UNSPage = ({ node }) => {
       setSqlError(null);
       setCustomSqlQuery(''); // Clear custom query when opening new item
       setSqlTab('timeRange'); // Reset to time range tab
+      setChartYKey(null); // Reset so chart defaults to policy column for new item
       
-      // Check if item has dbms and table, then fetch SQL data
+      // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
-      if (itemData && itemData.dbms && itemData.table) {
-        fetchSqlData(itemData.dbms, itemData.table);
+      const hasTableMeta = itemData && itemData.dbms && itemData.table;
+      const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
+      const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
+      if (hasDataAtLocation) {
+        fetchSqlData(itemData.dbms, itemData.table, itemData.where, itemData.column);
       }
     }
   };
@@ -532,22 +812,34 @@ const UNSPage = ({ node }) => {
     const hasNoChildren = itemsWithoutChildren.has(itemKey);
     // If we've already checked and it has children, or if it's expanded (meaning we loaded children), it has children
     const hasChildren = itemsWithChildren.has(itemKey) || isExpanded;
-    // If we haven't checked yet, assume it might have children (we'll find out when expanding)
-    const mightHaveChildren = !hasNoChildren;
+    // Check if currently checking for children
+    const isCheckingChildren = checkingChildren.has(itemId);
     
-    // Determine icon based on whether item has children (not based on type)
+    // Check if item has table data (for visual indicator)
+    const hasTable = itemData && itemData.dbms && itemData.table;
+    const tableCacheKey = hasTable ? `${itemData.dbms}:${itemData.table}` : null;
+    const hasData = tableCacheKey ? (itemsWithData.get(tableCacheKey) ?? null) : null;
+    const isCheckingData = tableCacheKey ? checkingData.has(tableCacheKey) : false;
+    
+    // Determine icon based on whether item has children
     let icon = '📄'; // Default file icon
-    if (mightHaveChildren) {
-      icon = isExpanded ? '📂' : '📁'; // Folder icons
+    if (hasChildren) {
+      icon = isExpanded ? '📂' : '📁'; // Folder icons (open/closed)
     } else if (hasNoChildren) {
       // Item confirmed to have no children - use file icon
       icon = '📄';
+    } else if (isCheckingChildren) {
+      // Still checking - show folder icon as placeholder (will update when check completes)
+      icon = '📁';
+    } else {
+      // Not checked yet - show folder icon as default (will be updated when background check completes)
+      icon = '📁';
     }
 
     const handleItemClick = (e) => {
-      // Left click: only expand/collapse if item has children
+      // Left click: only expand/collapse if item has children or might have children
       // Don't expand if clicking on the info button
-      if (mightHaveChildren && !e.target.closest('.uns-item-info-btn')) {
+      if ((hasChildren || !hasNoChildren) && !e.target.closest('.uns-item-info-btn')) {
         expandItem(item, layerIndex);
       }
     };
@@ -565,21 +857,36 @@ const UNSPage = ({ node }) => {
     };
 
     const isSelected = selectedItem && getItemId(selectedItem) === itemId;
+    
+    // Add data indicator class ONLY if item definitively has data (true)
+    // Don't add any class if hasData is false or null (no data or not checked)
+    const dataIndicatorClass = hasData === true ? 'has-data' : '';
+    const checkingClass = isCheckingData ? 'checking-data' : '';
 
     return (
       <div
         key={`${layerIndex}-${itemIndex}-${itemId}`}
-        className={`uns-item ${isExpanded ? 'expanded' : ''} ${isSelected ? 'selected' : ''}`}
+        className={`uns-item ${isExpanded ? 'expanded' : ''} ${isSelected ? 'selected' : ''} ${dataIndicatorClass} ${checkingClass}`}
         onMouseEnter={(e) => handleItemHover(e, item)}
         onMouseLeave={handleItemLeave}
         onClick={handleItemClick}
         onContextMenu={handleItemRightClick}
-        style={{ cursor: mightHaveChildren ? 'pointer' : 'default' }}
+        style={{ cursor: (hasChildren || !hasNoChildren) ? 'pointer' : 'default' }}
       >
         <div className="uns-item-icon">
           {icon}
         </div>
-        <div className="uns-item-name">{itemName}</div>
+        <div className="uns-item-name">
+          {itemName}
+          {/* Only show data indicator if we have a definitive result (true = has data) */}
+          {/* Don't show anything if hasData is false or null (no data or not checked yet) */}
+          {hasTable && hasData === true && (
+            <span className="uns-item-data-indicator" title="Table has data"> 💾</span>
+          )}
+          {hasTable && isCheckingData && (
+            <span className="uns-item-data-indicator checking" title="Checking for data..."> ⏳</span>
+          )}
+        </div>
         <div className="uns-item-actions">
           <button
             className="uns-item-info-btn"
@@ -589,7 +896,7 @@ const UNSPage = ({ node }) => {
           >
             ℹ️
           </button>
-          {mightHaveChildren && (
+          {(hasChildren || !hasNoChildren) && (
             <div className="uns-item-expand">
               {isExpanded ? '▼' : '▶'}
             </div>
@@ -657,6 +964,7 @@ const UNSPage = ({ node }) => {
       </div>
     );
   };
+
 
   return (
     <div className="uns-container">
@@ -735,236 +1043,40 @@ const UNSPage = ({ node }) => {
           </div>
         </div>
 
-        {/* Side Panel for detailed view - always rendered but hidden when closed */}
-        <div className={`uns-side-panel ${isSidePanelOpen ? 'open' : ''}`}>
-          <div className="uns-side-panel-header">
-            <h3>Item Details</h3>
-            <button 
-              className="uns-side-panel-close"
-              onClick={() => {
-                setIsSidePanelOpen(false);
-                setSelectedItem(null);
-                setSqlData(null);
-                setSqlError(null);
-                setCustomSqlQuery('');
-                setSqlTab('timeRange');
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div className="uns-side-panel-content">
-            {selectedItem && (() => {
-              const itemData = getItemData(selectedItem);
-              const hasTable = itemData && itemData.dbms && itemData.table;
-              
-              return (
-                <>
-                  <div className="uns-side-panel-info">
-                    <div className="uns-side-panel-info-row">
-                      <strong>Name:</strong> {getItemName(selectedItem)}
-                    </div>
-                    <div className="uns-side-panel-info-row">
-                      <strong>Type:</strong> {getItemType(selectedItem)}
-                    </div>
-                    <div className="uns-side-panel-info-row">
-                      <strong>ID:</strong> {getItemId(selectedItem)}
-                    </div>
-                    {hasTable && (
-                      <>
-                        <div className="uns-side-panel-info-row">
-                          <strong>DBMS:</strong> {itemData.dbms}
-                        </div>
-                        <div className="uns-side-panel-info-row">
-                          <strong>Table:</strong> {itemData.table}
-                        </div>
-                        <div className="uns-side-panel-time-range">
-                          <label htmlFor="time-range-value">Time Range:</label>
-                          <div className="uns-time-range-controls">
-                            <input
-                              id="time-range-value"
-                              type="number"
-                              min="0.01"
-                              step="0.01"
-                              value={timeRangeValue}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 5;
-                                setTimeRangeValue(value);
-                              }}
-                              className="uns-time-range-input"
-                            />
-                            <select
-                              id="time-range-unit"
-                              value={timeRangeUnit}
-                              onChange={(e) => {
-                                setTimeRangeUnit(e.target.value);
-                              }}
-                              className="uns-time-range-unit"
-                            >
-                              <option value="minute">Minutes</option>
-                              <option value="hour">Hours</option>
-                              <option value="day">Days</option>
-                              <option value="week">Weeks</option>
-                            </select>
-                            <button
-                              onClick={() => {
-                                if (hasTable) {
-                                  fetchSqlData(itemData.dbms, itemData.table);
-                                }
-                              }}
-                              disabled={sqlLoading}
-                              className="uns-time-range-refresh-btn"
-                            >
-                              {sqlLoading ? 'Loading...' : '🔄 Refresh'}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {hasTable && (
-                    <div className="uns-side-panel-sql">
-                      <div className="uns-sql-tabs">
-                        <button
-                          className={`uns-sql-tab ${sqlTab === 'timeRange' ? 'active' : ''}`}
-                          onClick={() => setSqlTab('timeRange')}
-                        >
-                          Time Range Query
-                        </button>
-                        <button
-                          className={`uns-sql-tab ${sqlTab === 'advanced' ? 'active' : ''}`}
-                          onClick={() => setSqlTab('advanced')}
-                        >
-                          Advanced Query
-                        </button>
-                      </div>
-
-                      {sqlTab === 'timeRange' && (
-                        <div className="uns-sql-tab-content">
-                          <div className="uns-sql-header">
-                            <strong>Table Data (Last {timeRangeValue} {timeRangeUnit}{timeRangeValue !== 1 ? 's' : ''}):</strong>
-                            {sqlData && sqlData.length > 0 && (
-                              <span className="uns-sql-row-count">({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})</span>
-                            )}
-                          </div>
-                          {sqlLoading && (
-                            <div className="uns-sql-loading">Loading table data...</div>
-                          )}
-                          {sqlError && (
-                            <div className="uns-sql-error">
-                              <strong>Error:</strong> {sqlError}
-                            </div>
-                          )}
-                          {!sqlLoading && !sqlError && sqlData && (
-                            <div className="uns-sql-table-container">
-                              {sqlData.length === 0 ? (
-                                <div className="uns-sql-empty">No data found for the specified time range.</div>
-                              ) : (
-                                <table className="uns-sql-table">
-                                  <thead>
-                                    <tr>
-                                      {Object.keys(sqlData[0]).map((key) => (
-                                        <th key={key}>{key}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sqlData.map((row, index) => (
-                                      <tr key={index}>
-                                        {Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {sqlTab === 'advanced' && (
-                        <div className="uns-sql-tab-content">
-                          <div className="uns-sql-header">
-                            <strong>Custom SQL Query:</strong>
-                            {sqlData && sqlData.length > 0 && (
-                              <span className="uns-sql-row-count">({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})</span>
-                            )}
-                          </div>
-                          <div className="uns-custom-query-container">
-                            <textarea
-                              value={customSqlQuery}
-                              onChange={(e) => setCustomSqlQuery(e.target.value)}
-                              placeholder={`Enter your SQL query here...\nExample: SELECT * FROM ${itemData?.table || 'table_name'} WHERE column = 'value'`}
-                              className="uns-custom-query-input"
-                              rows={6}
-                            />
-                            <button
-                              onClick={() => {
-                                if (itemData?.dbms && customSqlQuery.trim()) {
-                                  fetchCustomSqlData(itemData.dbms, customSqlQuery);
-                                }
-                              }}
-                              disabled={sqlLoading || !itemData?.dbms || !customSqlQuery.trim()}
-                              className="uns-custom-query-execute-btn"
-                            >
-                              {sqlLoading ? 'Executing...' : '▶ Execute Query'}
-                            </button>
-                          </div>
-                          {sqlLoading && (
-                            <div className="uns-sql-loading">Executing query...</div>
-                          )}
-                          {sqlError && (
-                            <div className="uns-sql-error">
-                              <strong>Error:</strong> {sqlError}
-                            </div>
-                          )}
-                          {!sqlLoading && !sqlError && sqlData && (
-                            <div className="uns-sql-table-container">
-                              {sqlData.length === 0 ? (
-                                <div className="uns-sql-empty">No data returned from query.</div>
-                              ) : (
-                                <table className="uns-sql-table">
-                                  <thead>
-                                    <tr>
-                                      {Object.keys(sqlData[0]).map((key) => (
-                                        <th key={key}>{key}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sqlData.map((row, index) => (
-                                      <tr key={index}>
-                                        {Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="uns-side-panel-json">
-                    <strong>JSON Data:</strong>
-                    <pre>{JSON.stringify(itemData, null, 2)}</pre>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+        {/* Side Panel for detailed view */}
+        <UNSSidePanel
+          isOpen={isSidePanelOpen}
+          selectedItem={selectedItem}
+          itemsWithData={itemsWithData}
+          conn={node}
+          sqlData={sqlData}
+          sqlLoading={sqlLoading}
+          sqlError={sqlError}
+          sqlTab={sqlTab}
+          timeRangeValue={timeRangeValue}
+          timeRangeUnit={timeRangeUnit}
+          customSqlQuery={customSqlQuery}
+          onClose={() => {
+            setIsSidePanelOpen(false);
+            setSelectedItem(null);
+            setSqlData(null);
+            setSqlError(null);
+            setCustomSqlQuery('');
+            setSqlTab('timeRange');
+          }}
+          onTimeRangeValueChange={setTimeRangeValue}
+          onTimeRangeUnitChange={setTimeRangeUnit}
+          onFetchTimeRange={fetchSqlData}
+          onTabChange={setSqlTab}
+          onCustomQueryChange={setCustomSqlQuery}
+          onExecuteCustomQuery={fetchCustomSqlData}
+          getItemName={getItemName}
+          getItemType={getItemType}
+          getItemId={getItemId}
+          getItemData={getItemData}
+          chartYKey={chartYKey}
+          onChartYKeyChange={setChartYKey}
+        />
       </div>
 
       {hoveredItem && (

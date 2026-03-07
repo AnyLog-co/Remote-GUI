@@ -26,7 +26,7 @@
       "backend_router": "sql_router"
     },
     "blockchain": {
-      "enabled": false,
+      "enabled": true,
       "description": "Blockchain Manager"
     },
     "presets": {
@@ -69,6 +69,18 @@
     "fileuploader": {
       "enabled": true,
       "description": "File Uploader Plugin"
+    },
+    "sshclient": {
+      "enabled": true,
+      "description": "SSH Client Plugin"
+    },
+    "uns": {
+      "enabled": true,
+      "description": "Unified Namespace Plugin - Provides filesystem-like interface for blockchain metadata"
+    },
+    "videostreamviewer": {
+      "enabled": true,
+      "description": "Video Stream Viewer Plugin"
     }
   },
   "version": "1.0.0"
