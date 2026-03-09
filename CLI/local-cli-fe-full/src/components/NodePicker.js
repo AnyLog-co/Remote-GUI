@@ -6,7 +6,13 @@ import '../styles/NodePicker.css'; // Optional: create a CSS file for node picke
 import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
 
-const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAdded }) => {
+const NodePicker = ({
+  nodes,
+  selectedNode,
+  onAddNode,
+  onSelectNode,
+  onBookmarkAdded,
+}) => {
   const [newNode, setNewNode] = useState('');
   const [error, setError] = useState(null);
   const [local, setLocal] = useState(false);
@@ -38,23 +44,23 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
     setError(null);
 
     try {
-      console.log("Selected Node is this:", selectedNode);
+      console.log('Selected Node is this:', selectedNode);
       const fetchedNodes = await getConnectedNodes({ selectedNode });
       for (const node of fetchedNodes.data) {
         console.log(node);
         onAddNode(node);
       }
-
     } catch (err) {
-      setError("Failed to test network.");
+      setError('Failed to test network.');
     }
   };
 
   const makeLocal = (node, isLocal) => {
-    if (!node) return node;  // Return if node is empty
+    if (!node) return node; // Return if node is empty
     const parts = node.split(':');
-    if (isLocal && parts.length === 2) {  // Check if local is true and node is in "ip:port" format
-      console.log("MADE LOCAL")
+    if (isLocal && parts.length === 2) {
+      // Check if local is true and node is in "ip:port" format
+      console.log('MADE LOCAL');
       return `127.0.0.1:${parts[1]}`;
     }
     return node;
@@ -63,10 +69,10 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
   const handleLocalChange = (e) => {
     const isLocal = e.target.checked;
     setLocal(isLocal);
-    console.log("Local mode is now:", e.target.checked);
+    console.log('Local mode is now:', e.target.checked);
     // console.log("makeLocal is now:", makeLocal(selectedNode));
     onSelectNode(makeLocal(selectedNode, isLocal));
-  }
+  };
 
   const handleBookmark = async () => {
     if (!selectedNode) {
@@ -80,10 +86,10 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
       if (isLoggedIn()) {
         await bookmarkNode({ node: selectedNode });
         setBookmarkMsg(`Bookmarked ${selectedNode}!`);
-        
+
         // Dispatch event to refresh bookmarks globally
         window.dispatchEvent(new Event('bookmark-refresh'));
-        
+
         // Call the callback to refresh bookmarks in parent component
         if (onBookmarkAdded) {
           onBookmarkAdded();
@@ -103,6 +109,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
       onSelectNode(value);
       setShowAddNode(false);
     }
+    localStorage.removeItem('starredConnections');
   };
 
   // If no node is selected, show connection input
@@ -122,16 +129,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
             Connect
           </button>
         </div>
-        {bookmarkMsg && (
-          <div className="bookmark-msg">
-            {bookmarkMsg}
-          </div>
-        )}
-        {error && (
-          <div className="error">
-            {error}
-          </div>
-        )}
+        {bookmarkMsg && <div className="bookmark-msg">{bookmarkMsg}</div>}
+        {error && <div className="error">{error}</div>}
       </div>
     );
   }
@@ -152,7 +151,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
           ))}
           <option value="add-node">+ Add New Node</option>
         </select>
-        
+
         <button className="node-picker-btn secondary" onClick={handleBookmark}>
           Bookmark
         </button>
@@ -171,28 +170,22 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
           <button className="node-picker-btn primary" onClick={handleAdd}>
             Add & Connect
           </button>
-          <button className="node-picker-btn cancel" onClick={() => {
-            setShowAddNode(false);
-            setNewNode('');
-          }}>
+          <button
+            className="node-picker-btn cancel"
+            onClick={() => {
+              setShowAddNode(false);
+              setNewNode('');
+            }}
+          >
             Cancel
           </button>
         </div>
       )}
 
-      {bookmarkMsg && (
-        <div className="bookmark-msg">
-          {bookmarkMsg}
-        </div>
-      )}
-      {error && (
-        <div className="error">
-          {error}
-        </div>
-      )}
+      {bookmarkMsg && <div className="bookmark-msg">{bookmarkMsg}</div>}
+      {error && <div className="error">{error}</div>}
     </div>
   );
 };
-
 
 export default NodePicker;

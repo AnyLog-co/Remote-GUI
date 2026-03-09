@@ -11,27 +11,32 @@ export const cliState = create(
       activeConnection: {},
       connectionsList: [],
       focusedTerminalId: null,
-      
+
       setCredLocked: (lockedState) => set({ credLocked: lockedState }),
-      
+
       cacheSecrets: (secrets) => set({ secretsCache: secrets }),
-      
+
       clearSecretsCache: () => set({ secretsCache: {} }),
-      
+
       setModalView: (name) => set({ modalView: name }),
 
       setFocusedTerminalId: (id) => set({ focusedTerminalId: id }),
 
-      setConnectionsList: (connections) => set({ connectionsList: connections }),
-      
-      addConnection: (connection) => set((state) => ({
-        connectionsList: [...state.connectionsList, connection]
-      })),
-      
-      removeConnection: (id) => set((state) => ({
-        connectionsList: state.connectionsList.filter(conn => conn.id !== id)
-      })),
-      
+      setConnectionsList: (connections) =>
+        set({ connectionsList: connections }),
+
+      addConnection: (connection) =>
+        set((state) => ({
+          connectionsList: [...state.connectionsList, connection],
+        })),
+
+      removeConnection: (id) =>
+        set((state) => ({
+          connectionsList: state.connectionsList.filter(
+            (conn) => conn.id !== id,
+          ),
+        })),
+
       setActiveConnection: (id, conn) =>
         set((state) => ({
           activeConnection: {
@@ -39,14 +44,14 @@ export const cliState = create(
             [id]: conn,
           },
         })),
-        
+
       removeActiveConnection: (id) =>
         set((state) => {
           const updatedConnections = { ...state.activeConnection };
           delete updatedConnections[id];
           return { activeConnection: updatedConnections };
         }),
-        
+
       setIsConnected: (id, connState) =>
         set((state) => {
           const connection = state.activeConnection[id];
@@ -58,24 +63,24 @@ export const cliState = create(
             },
           };
         }),
-        
+
       lockSession: () => {
         set({
           credLocked: true,
           secretsCache: {},
           activeConnection: {},
-          modalView: null
+          modalView: null,
         });
         sessionStorage.removeItem('cli-session-state');
-      }
+      },
     }),
     {
       name: 'cli-session-state',
       storage: createJSONStorage(() => hiddenStorage),
-      
-      partialize: (state) => ({ 
+
+      partialize: (state) => ({
         credLocked: state.credLocked,
       }),
-    }
-  )
+    },
+  ),
 );
