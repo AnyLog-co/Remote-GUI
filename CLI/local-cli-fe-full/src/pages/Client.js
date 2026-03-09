@@ -4,6 +4,7 @@ import DataTable from '../components/DataTable'; // Adjust path as needed
 import BlobsTable from '../components/BlobsTable'; // Adjust path as needed
 import CommandInfoModal from '../components/CommandInfoModal'; // Command info modal
 import { sendCommand, viewBlobs, viewStreamingBlobs, getBasePresetPolicy } from '../services/api'; // Adjust path as needed
+import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import { getPresetGroups, getPresetsByGroup, addPreset, addPresetGroup } from '../services/file_auth';
 import '../styles/Client.css'; // Optional: create client-specific CSS
 import { useEffect } from 'react';
@@ -675,6 +676,16 @@ const Client = ({ node }) => {
           
           {resultType === 'table' && Array.isArray(responseData) && (
             <>
+              {responseData.length > 0 && (
+                <div className="table-export-buttons">
+                  <button type="button" onClick={() => exportToCSV(responseData, 'client-query')} className="table-export-btn" title="Export table to CSV">
+                    Export CSV
+                  </button>
+                  <button type="button" onClick={() => exportToPDF(responseData, null, { title: 'Client Query Results', filename: 'client-query', command: lastExecutedCommand?.command })} className="table-export-btn" title="Export table to PDF">
+                    Export PDF
+                  </button>
+                </div>
+              )}
               <DataTable data={responseData} />
               {additionalContent && (
                 <div className="additional-content">
