@@ -139,7 +139,7 @@ def _get_files(helper_response: str, dir: PathParser) -> List[str]:
         return []
     return [line.replace("\r", "").replace(f"{dir}/", "") for line in helper_response.split("\n")]
 
-# numbering system for duplicate file names: append a "-n" to the end, where n is a number
+# numbering system for duplicate file names: append a "-n" to the end, where n is the smallest valid number
 def get_numbered_filename(file: UploadFile, files: List[str]) -> str:
     path = Path(file.filename)
 
@@ -251,7 +251,6 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
-    dir_files = exec_get_files(conn, dir_path)
     for file, option in zip(files, duplicateHandlingOptions):
         validation = await validate_file(file)
 
