@@ -3,7 +3,8 @@ from pydantic import BaseModel
 from typing import Dict, List, Tuple
 import shutil
 import uuid
-from pathlib import Path
+import pathlib
+from requests_toolbelt import MultipartEncoder
 from .documentvalidator import validate_file
 import helpers
 import requests
@@ -149,26 +150,48 @@ def get_numbered_filename(file: UploadFile, files: List[str]) -> str:
 
 def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> str:
 
-    command = f"file to {dir}/{filename}"
+    try:
 
-    headers = {
-        'User-Agent': 'AnyLog/1.23',
-        'Content-Type': 'application/octet-stream',
-        'command': command,
-        'Accept': '*/*'
-    }
+        # write to temp file so that we can access its file path
+        with open(file.filename, 'wb') as f:
+            shutil.copyfileobj(file.file, f)
 
-    r = requests.post(get_raw_connection(conn), headers=headers, data=file.file)
-    if (r.status_code != 200):
-        # r.text prints whole response, including body as a dictionary string
-        r_text = r.text.split('\r\n\r\n')[-1]
-        r_text = r_text.strip("{}")
+        with open(file.filename, 'rb') as f:
 
-        # # removes quotes in each key-value pair and makes string dictionary into dictionary
-        r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
-        print(f"REPORTED PUSH FAILURE ({r.status_code})")
-        raise HTTPException(status_code=500, detail=r_dict.get("err_text"))
-    return filename
+            fileField = MultipartEncoder(
+                fields={
+                    'file': (file.filename, f, "text/plain")
+                }
+            )
+
+            command = f"file to {dir}/{filename}"
+
+            headers = {
+                'User-Agent': 'AnyLog/1.23',
+                'Content-Type': fileField.content_type,
+                'command': command,
+                'Accept': '*/*'
+            }
+
+            r = requests.post(get_raw_connection(conn), headers=headers, data=fileField)
+            if (r.status_code != 200):
+                # r.text prints whole response, including body as a dictionary string
+                r_text = r.text.split('\r\n\r\n')[-1]
+                r_text = r_text.strip("{}")
+
+                # # removes quotes in each key-value pair and makes string dictionary into dictionary
+                r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
+                print(f"REPORTED PUSH FAILURE ({r.status_code}, {r_dict.get("err_code")})")
+                raise Exception(r_dict.get("err_text"))
+            return filename
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+    finally:
+
+        # delete temp file if it exists
+        if Path(file.filename).exists():
+            pathlib.Path(file.filename).unlink()
+        file.file.close()
 
 @api_router.post("/get-directories")
 async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
