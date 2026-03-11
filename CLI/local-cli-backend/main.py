@@ -239,6 +239,9 @@ def send_command(conn: Connection, command: Command):
             print(f"Full error response: {raw_response}")
             return raw_response
 
+        if command.raw_text:
+            return {"type": "raw", "data": str(raw_response) if raw_response is not None else ""}
+
         structured_data = parse_response(raw_response)
         print("structured_data", structured_data)
         return structured_data

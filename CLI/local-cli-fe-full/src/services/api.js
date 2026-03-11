@@ -50,7 +50,7 @@ export async function getVersion() {
 }
 
 // Example: "sendCommand" function that POSTs a command to your server
-export async function sendCommand({ connectInfo, method, command }) {
+export async function sendCommand({ connectInfo, method, command, rawText }) {
   if (!connectInfo || !command || !method) {
     alert('Missing required fields');
     return;
@@ -59,7 +59,7 @@ export async function sendCommand({ connectInfo, method, command }) {
   try {
     // Construct your request body
     const requestBody = {
-      command: { type: method, cmd: command },
+      command: { type: method, cmd: command, raw_text: !!rawText },
       conn: { conn: connectInfo },
     };
 
