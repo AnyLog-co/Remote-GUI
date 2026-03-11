@@ -54,7 +54,7 @@ This project has been migrated from Create React App to Vite. Environment variab
 const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8080";
 
 // ❌ Wrong
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.VITE_API_URL;
 ```
 
 ### Keep `package.json` clean

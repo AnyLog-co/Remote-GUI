@@ -236,12 +236,12 @@ You can connect to a node in two ways:
 
 2. Run (local):
    ```bash
-   docker run -it --rm -p 8000:8000 -p 3001:3001      -e REACT_APP_API_URL=http://127.0.0.1:8000      --name gui oshadmon/gui:test
+   docker run -it --rm -p 8000:8000 -p 3001:3001      -e VITE_API_URL=http://127.0.0.1:8000      --name gui oshadmon/gui:test
    ```
 
 3. Run (production):
    ```bash
-   docker run -d      --name gui      -p 8000:8000      -p 3001:3001      -e REACT_APP_API_URL=http://${EXTERNAL_IP}:8000      -e FRONTEND_URL=http://${EXTERNAL_IP}:3001      oshadmon/gui:test
+   docker run -d      --name gui      -p 8000:8000      -p 3001:3001      -e VITE_API_URL=http://${EXTERNAL_IP}:8000      -e FRONTEND_URL=http://${EXTERNAL_IP}:3001      oshadmon/gui:test
    ```
 
 ---
