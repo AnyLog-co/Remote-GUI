@@ -3,9 +3,10 @@ name: Version Update — os-dev
 on:
   push:
     branches:
-      - os-dev
-      - pre-develop
       - main
+      - pre-develop
+      - pranav
+      - os-dev
 
 permissions:
   contents: write
