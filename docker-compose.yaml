@@ -6,8 +6,8 @@ services:
     stdin_open: true
     tty: true
     environment:
-      # REACT_APP_API_URL: http://127.0.0.1:8000
-      REACT_APP_API_URL: http://192.168.1.206:8000
+      # VITE_API_URL: http://127.0.0.1:8000
+      VITE_API_URL: http://192.168.1.206:8000
       #GRAFANA_URL: http://23.239.12.151:3100/dashboards
     ports:
       - "3000:3000"
