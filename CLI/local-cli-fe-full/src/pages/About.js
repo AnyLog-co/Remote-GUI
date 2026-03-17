@@ -72,6 +72,7 @@ const About = ({ node }) => {
           <p><strong>Valid through</strong> {expiration}</p>
           <p><strong>License Status:</strong> {licenseStatus}</p>
           <p><strong>Code Version:</strong> {codeVersion}</p>
+          <p><strong>Remote-GUI version:</strong> {appVersion?.remote_gui_version ?? appVersion?.version ?? '—'}</p>
         </section>
 
         <section className="about-footer">

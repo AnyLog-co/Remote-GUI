@@ -1,4 +1,5 @@
 # (venv) ➜  Remote-GUI git:(bchain-optimz) ✗ uvicorn CLI.local-cli-backend.main:app --reload
+import configparser
 import os
 import sys
 
@@ -62,11 +63,12 @@ async def feature_check_middleware(request: Request, call_next):
     """Middleware to block access to disabled features"""
     path = request.url.path
     
-    # Skip feature checks for static files, docs, and config endpoints
+    # Skip feature checks for static files, docs, config, and version endpoints
     if (path.startswith("/static/") or 
         path.startswith("/docs") or 
         path.startswith("/openapi.json") or
         path == "/" or
+        path == "/version" or
         path == "/feature-config"):
         response = await call_next(request)
         return response
@@ -161,6 +163,26 @@ else:
 
 # Load plugins (will respect feature config internally)
 load_plugins(app)
+
+def _get_remote_gui_version() -> str:
+    """Read Remote-GUI version from setup.cfg at project root."""
+    try:
+        project_root = os.path.dirname(os.path.dirname(BASE_DIR))
+        setup_cfg_path = os.path.join(project_root, 'setup.cfg')
+        if os.path.exists(setup_cfg_path):
+            config = configparser.ConfigParser()
+            config.read(setup_cfg_path)
+            return config.get('metadata', 'version', fallback='—')
+    except Exception:
+        pass
+    return '—'
+
+
+@app.get("/version")
+def get_version_endpoint():
+    """Return Remote-GUI version from setup.cfg for the About page."""
+    return {"version": _get_remote_gui_version(), "remote_gui_version": _get_remote_gui_version()}
+
 
 # Feature configuration endpoint for frontend
 @app.get("/feature-config")
