@@ -116,10 +116,15 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
             Stored as: {file.result.location}
           </div>
           :
+          (file.result.skipped ?
+          <div className="file-list-item-warning">
+            Warning: {file.result.warning}
+          </div>
+          :
           <div className="file-list-item-error">
             Error(s): {file.result.errors.map((error) => `${error}\n`)}
           </div>
-          )}
+          ))}
         </div>
       ))}
     </React.Fragment>

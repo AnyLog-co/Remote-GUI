@@ -143,6 +143,8 @@ def _get_files(helper_response: str, dir: PathParser) -> List[str]:
 def get_numbered_filename(file: UploadFile, files: List[str]) -> str:
     path = Path(file.filename)
 
+    print(files)
+
     i = 1
     while f"{path.stem}-{i}{path.suffix}" in files:
         i += 1
@@ -240,14 +242,14 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
 
 @api_router.post("/upload")
 async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOptions: List[str] = Form(...),
-                    conn: str = Form(...), dir: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
+                    conn: str = Form(...), directory_path: str = Form(...)) -> Dict[str, int | List[Dict[str, str | bool | List[str] | None]]]:
     """Upload a list of files to the upload directory"""
 
-    dest_exists = create_dir(conn, dir)
+    dest_exists = create_dir(conn, directory_path)
     if not dest_exists:
         raise HTTPException(status_code=501, detail="upload directory does not exist")
 
-    dir_path = PathParser(dir)
+    dir_path = PathParser(directory_path)
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
@@ -266,21 +268,24 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
             stored_name = ""
 
             # first, check if file name exists
-            file_already_exists = file.filename in exec_get_files(conn, dir_path)
+            file_list = exec_get_files(conn, dir_path)
+            file_already_exists = file.filename in file_list
             if file_already_exists:
 
-                # if on skip option, abort the upload for this file
+                # if on skip option, abort the upload for this file and give warning (instead of error)
                 if option == 'skip':
                     results.append({
                         "filename": file.filename,
                         "success": False,
-                        "errors": ["File already exists in this folder and the 'Skip' option was selected"]
+                        "skipped": True,
+                        "warning": "File already exists in this folder and the 'Skip' option was selected"
                     })
                     continue
                 
                 # if on keep option, get a numbered file name
                 if option == 'keep':
-                    stored_name = get_numbered_filename(file, files) if file_already_exists else file.filename
+                    stored_name = get_numbered_filename(file, file_list) if file_already_exists else file.filename
+                    print(stored_name)
                     stored_name = push_file(conn, file, stored_name, dir_path)
                 elif option == 'replace':
                     stored_name = push_file(conn, file, file.filename, dir_path)
@@ -292,12 +297,14 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
                 "filename": file.filename,
                 "stored_filename": stored_name,
                 "success": True,
+                "skipped": False,
                 "location": f'{dir_path}/{stored_name}'
             })
         except Exception as e:
             results.append({
                 "filename": file.filename,
                 "success": False,
+                "skipped": False,
                 "errors": [f"Upload failed: {str(e)}"]
             })
 

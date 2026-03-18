@@ -131,7 +131,7 @@ File naming constraints are described [here](#List).
 - Conflicting files are also outlined in red
 - The user will be unable to upload if there are conflicting files
 
-If a file has the `Skip` option selected and a user attempts to upload when a file with the same name exists in the upload directory, an error message will be displayed. Otherwise, other error messages may be displayed, such as a failure to upload.
+If a file has the `Skip` option selected and a user attempts to upload when a file with the same name exists in the upload directory, a warning message will be displayed. Otherwise, error messages may be displayed, such as a failure to upload.
 
 ### Upload Button
 
