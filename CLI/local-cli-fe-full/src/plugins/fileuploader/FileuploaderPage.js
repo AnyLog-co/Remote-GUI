@@ -154,7 +154,7 @@ function FileuploaderPage({ node }) {
         
         const formData = new FormData();
         formData.set("conn", node);
-        formData.set("dir", directory);
+        formData.set("directory_path", directory);
         files.forEach((file) => {
           formData.append("files", file.file);
           formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
