@@ -1,3 +1,6 @@
+// Creates a persistent state ( in Localstorage ) which handles vault information
+// and connection information and states which are shared globally across multiple components
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { hiddenStorage } from '../storage/session';

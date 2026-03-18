@@ -18,6 +18,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     (state) => state.activeConnection[id]?.isConnected ?? false,
   );
 
+  // Check if the WS connection is already open
   useEffect(() => {
     const wsStatusCheck = setInterval(() => {
       const isOpen = wsRef.current?.readyState === WebSocket.OPEN;
@@ -27,6 +28,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     return () => clearInterval(wsStatusCheck);
   }, [id, setIsConnected]);
 
+  // Check terminal connection
   useEffect(() => {
     console.log('isConnected:', isConnected);
     if (!isConnected) {
@@ -40,6 +42,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     }
   }, [isConnected]);
 
+  // Initial terminal websocket connection
   useEffect(() => {
     if ((!host || !user || !credential || !action, !authType)) return;
     if (termRef.current) return;
