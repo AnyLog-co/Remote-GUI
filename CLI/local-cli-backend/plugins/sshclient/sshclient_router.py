@@ -163,7 +163,7 @@ async def ws_handler(ws: WebSocket):
 
                         # Relay shell ready status
                         await ws.send_text(
-                            f"Attached to anylog-{node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
+                            f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
                         )
 
                     if action == "docker_exec":
