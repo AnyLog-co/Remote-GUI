@@ -3,7 +3,8 @@ name: Version Update — os-dev
 on:
   push:
     branches:
-      - data-generator2
+      - dummy-branch
+#      - os-dev
 
 permissions:
   contents: write
