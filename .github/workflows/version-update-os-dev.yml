@@ -3,10 +3,7 @@ name: Version Update — os-dev
 on:
   push:
     branches:
-#      - main
-#      - pre-develop
-      - pranav
-      - os-dev
+      - data-generator2
 
 permissions:
   contents: write
