@@ -112,7 +112,8 @@ const ConnectionView = ({ conn }) => {
                */}
               <TerminalView
                 id={id}
-                host={c.ip}
+                name={c.name}
+                ip={c.ip}
                 user={c.user}
                 credential={c.credential}
                 action={c.action ?? "direct_ssh"}

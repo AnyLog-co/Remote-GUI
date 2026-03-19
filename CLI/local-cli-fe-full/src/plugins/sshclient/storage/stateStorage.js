@@ -1,11 +1,12 @@
 import { cliState } from "../state/state";
 import { Vault } from "./vault";
 
-/**
- * Allowlist of valid credential types.
- * Validate `type` argument in storage functions,
- */
-const CREDENTIAL_TYPES = ["password", "keyfile"];
+const CREDENTIAL_TYPES = {
+  PASSWORD: "password",
+  KEYFILE: "keyfile",
+};
+
+const isValidType = (type) => Object.values(CREDENTIAL_TYPES).includes(type);
 
 /**
  * Retrieves credential for hostname from Zustand secrets cache.
@@ -18,7 +19,7 @@ const CREDENTIAL_TYPES = ["password", "keyfile"];
  * @throws {Error} If `type` is invalid
  */
 export const retrieveStoredCredential = (hostname, type) => {
-  if (!CREDENTIAL_TYPES.includes(type)) {
+  if (!isValidType(type)) {
     throw new Error(`Invalid credential type: ${type}`);
   }
 
@@ -27,10 +28,10 @@ export const retrieveStoredCredential = (hostname, type) => {
 
   if (!hostCreds) return null;
 
-  if (type === "password") {
+  if (type === CREDENTIAL_TYPES.PASSWORD) {
     return hostCreds.password || null;
-  } else if (type === "keyfile") {
-    console.log(`providing data from ${hostCreds.keyfile?.name}`);
+  } else if (type === CREDENTIAL_TYPES.KEYFILE) {
+    console.log("Providing keyfile from cache");
     return hostCreds.keyfile || null;
   }
 
@@ -50,7 +51,7 @@ export const retrieveStoredCredential = (hostname, type) => {
  * @throws {Error} If `type` is invalid
  */
 export const storeCredentialInSession = (hostname, type, value) => {
-  if (!CREDENTIAL_TYPES.includes(type)) {
+  if (!isValidType(type)) {
     throw new Error(`Invalid credential type: ${type}`);
   }
 
@@ -93,7 +94,7 @@ export const saveCredentialToVault = async (
   value,
   ref = "",
 ) => {
-  if (!CREDENTIAL_TYPES.includes(type)) {
+  if (!isValidType(type)) {
     throw new Error(`Invalid credential type: ${type}`);
   }
 
@@ -134,8 +135,9 @@ export const saveCredentialToVault = async (
         content: {
           hostname,
           type: credType,
-          ref: ref || (type === "keyfile" ? value.name : ""),
-          credential: type === "keyfile" ? value.contents : value,
+          ref: ref || (type === CREDENTIAL_TYPES.KEYFILE ? value?.name : ""), // safe access
+          credential:
+            type === CREDENTIAL_TYPES.KEYFILE ? value?.contents : value, // safe access
         },
         date: new Date().toISOString(),
       });
@@ -145,8 +147,8 @@ export const saveCredentialToVault = async (
         hostname,
         type: credType,
         // Use provided ref (fall back to the keyfile's filename)
-        ref: ref || (type === "keyfile" ? value.name : ""),
-        credential: type === "keyfile" ? value.contents : value,
+        ref: ref || (type === CREDENTIAL_TYPES.KEYFILE ? value?.name : ""),
+        credential: type === CREDENTIAL_TYPES.KEYFILE ? value?.contents : value, // safe access
       });
     }
 
@@ -164,7 +166,7 @@ export const saveCredentialToVault = async (
  * Does NOT delete from the encrypted vault
  *
  * Behavior:
- *   - If `type` is omitted, entire hostname entry is removed.
+ *   - If `type` omitted, entire hostname entry is removed.
  *   - If `type` provided, only that credential type is cleared (hostname entry, other credential types remain intact)
  *
  * @param {string} hostname              - Target host.
@@ -180,7 +182,7 @@ export const clearStoredCredentials = (hostname, type) => {
     // No type specified (remove hostname entry)
     delete currentCache[hostname];
   } else {
-    if (!CREDENTIAL_TYPES.includes(type)) {
+    if (!isValidType(type)) {
       throw new Error(`Invalid credential type: ${type}`);
     }
 
@@ -237,7 +239,7 @@ export const loadSecretsFromVault = async (vaultDb) => {
     }
   });
 
-  console.log("Loaded secrets from vault:", Object.keys(secretsCache));
+  console.log("Loaded secrets from vault");
 
   // Push new cache into Zustand and mark vault as unlocked.
   cliState.getState().cacheSecrets(secretsCache);
