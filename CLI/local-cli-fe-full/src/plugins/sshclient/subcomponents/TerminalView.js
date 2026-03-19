@@ -1,18 +1,18 @@
-import { useEffect, useRef } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
-import { cliState } from '../state/state';
-import '../styles/TerminalView.css';
+import { useEffect, useRef } from "react";
+import { Terminal } from "xterm";
+import { FitAddon } from "xterm-addon-fit";
+import "xterm/css/xterm.css";
+import { cliState } from "../state/state";
+import "../styles/TerminalView.css";
 
-const TerminalView = ({ id, host, user, credential, action, authType }) => {
+const TerminalView = ({ id, name, ip, user, credential, action, authType }) => {
   const terminalRef = useRef(null);
   const termRef = useRef(null);
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window.env?.REACT_APP_API_URL || 'http://localhost:8000/';
-  var strippedURL = (strippedURL = API_URL.replace('http://', ''));
+  const API_URL = window.env?.REACT_APP_API_URL || "http://localhost:8000/";
+  var strippedURL = (strippedURL = API_URL.replace("http://", ""));
 
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,
@@ -30,10 +30,10 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
 
   // Check terminal connection
   useEffect(() => {
-    console.log('isConnected:', isConnected);
+    console.log("isConnected:", isConnected);
     if (!isConnected) {
       const timer = setTimeout(() => {
-        console.log('Not connected. return to main.');
+        console.log("Not connected. return to main.");
         alert(`Could not connect to ${id}.`);
         removeActiveConnection(id);
       }, 1500);
@@ -44,14 +44,13 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
 
   // Initial terminal websocket connection
   useEffect(() => {
-    if ((!host || !user || !credential || !action, !authType)) return;
+    if ((!ip || !user || !credential || !action, !authType)) return;
     if (termRef.current) return;
 
     const run = async () => {
-      console.log(
-        `Connecting to host ${host} through ${action} with ${authType}`,
-      );
-      console.log('NEW URL!!!!!! ', strippedURL);
+      console.log(name);
+      console.log(`Connecting to ip ${ip} through ${action} with ${authType}`);
+      console.log("NEW URL!!!!!! ", strippedURL);
 
       const term = new Terminal({
         cursorBlink: true,
@@ -88,20 +87,20 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
       }
 
       const writeErr = (msg) => {
-        term.writeln('');
+        term.writeln("");
         term.write(msg);
         term.scrollToBottom();
       };
 
       let conn_method = {};
-      if (authType === 'password') {
+      if (authType === "password") {
         conn_method = {
-          method: 'password',
+          method: "password",
           data: credential,
         };
       } else {
         conn_method = {
-          method: 'key-string',
+          method: "key-string",
           data: credential,
         };
       }
@@ -112,7 +111,8 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         ws.send(
           JSON.stringify({
             action: action,
-            host: host,
+            name: name,
+            ip: ip,
             user: user,
             conn_method: conn_method,
             cols: term.cols,
@@ -141,7 +141,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
 
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ action: 'client_input', input: data }));
+          ws.send(JSON.stringify({ action: "client_input", input: data }));
         }
       });
 
@@ -149,7 +149,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(
             JSON.stringify({
-              action: 'resize',
+              action: "resize",
               cols: cols,
               rows: rows,
             }),
@@ -161,11 +161,11 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         fitTerminal();
       };
 
-      window.addEventListener('resize', handleWindowResize);
+      window.addEventListener("resize", handleWindowResize);
 
       return () => {
         resizeObserver.disconnect();
-        window.removeEventListener('resize', handleWindowResize);
+        window.removeEventListener("resize", handleWindowResize);
         term.dispose();
         ws.close();
         termRef.current = null;
@@ -174,7 +174,7 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     };
 
     run();
-  }, [host, user, credential, action, authType]);
+  }, [ip, user, credential, action, authType]);
 
   return (
     <div
