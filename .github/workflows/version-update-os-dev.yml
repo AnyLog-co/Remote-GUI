@@ -3,8 +3,8 @@ name: Version Update — os-dev
 on:
   push:
     branches:
-      - main
-      - pre-develop
+#      - main
+#      - pre-develop
       - pranav
       - os-dev
 
