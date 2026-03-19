@@ -1,5 +1,42 @@
 // src/services/api.js
-const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+// const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8080";
+
+/** Run blockchain get license on the connected node. Returns parsed license data or null. */
+export async function getLicenseInfo({ connectInfo }) {
+  if (!connectInfo) return null;
+  try {
+    const response = await sendCommand({
+      connectInfo,
+      method: 'GET',
+      command: 'blockchain get license',
+    });
+    if (!response?.data) return null;
+    const data = Array.isArray(response.data) ? response.data : [response.data];
+    const first = data[0];
+    return first?.license ?? first ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Run get version on the connected node. Returns version string or null. */
+export async function getNodeVersion({ connectInfo }) {
+  if (!connectInfo) return null;
+  try {
+    const response = await sendCommand({
+      connectInfo,
+      method: 'GET',
+      command: 'get version',
+    });
+    if (!response?.data) return null;
+    if (typeof response.data === 'string') return response.data;
+    if (typeof response.data === 'object' && response.data?.version) return response.data.version;
+    return JSON.stringify(response.data);
+  } catch (e) {
+    return null;
+  }
+}
 
 /** Fetch app version from backend (GET /version). Returns { version, commit, branch, dirty, ... } or null on failure. */
 export async function getVersion() {
@@ -13,7 +50,7 @@ export async function getVersion() {
 }
 
 // Example: "sendCommand" function that POSTs a command to your server
-export async function sendCommand({ connectInfo, method, command }) {
+export async function sendCommand({ connectInfo, method, command, rawText }) {
   if (!connectInfo || !command || !method) {
     alert('Missing required fields');
     return;
@@ -22,7 +59,7 @@ export async function sendCommand({ connectInfo, method, command }) {
   try {
     // Construct your request body
     const requestBody = {
-      command: { type: method, cmd: command },
+      command: { type: method, cmd: command, raw_text: !!rawText },
       conn: { conn: connectInfo },
     };
 

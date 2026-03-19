@@ -2,7 +2,7 @@
  * UNS Plugin API - all backend calls for the Unified Namespace plugin
  */
 
-const getBaseUrl = () => window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+const getBaseUrl = () => window._env_?.VITE_API_URL || "http://localhost:8080";
 
 async function unsRequest(endpoint, body) {
   const response = await fetch(`${getBaseUrl()}${endpoint}`, {
@@ -29,10 +29,11 @@ export async function checkChildren(conn, itemId) {
   return unsRequest("/uns/check-children", { conn, item_id: itemId });
 }
 
-export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column }) {
+export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column, time_column }) {
   const body = { conn, dbms, table, time_value, time_unit };
   if (where?.trim()) body.where = where.trim();
   if (column?.trim()) body.column = column.trim();
+  if (time_column?.trim()) body.time_column = time_column.trim();
   return unsRequest("/uns/query-table", body);
 }
 

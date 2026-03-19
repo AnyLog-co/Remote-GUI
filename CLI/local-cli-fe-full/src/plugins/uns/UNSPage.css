@@ -608,6 +608,23 @@
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
+.uns-time-column-select {
+  padding: 6px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 13px;
+  background-color: white;
+  cursor: pointer;
+  min-width: 140px;
+  transition: border-color 0.2s;
+}
+
+.uns-time-column-select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
 .uns-time-range-refresh-btn {
   padding: 6px 12px;
   background-color: #007bff;
@@ -636,86 +653,8 @@
   border-top: 1px solid #dee2e6;
 }
 
-.uns-sql-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid #dee2e6;
-  margin-bottom: 15px;
-}
-
-.uns-sql-tab {
-  padding: 10px 20px;
-  background-color: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6c757d;
-  transition: all 0.2s;
-  position: relative;
-  top: 2px;
-}
-
-.uns-sql-tab:hover {
-  color: #007bff;
-  background-color: #f8f9fa;
-}
-
-.uns-sql-tab.active {
-  color: #007bff;
-  border-bottom-color: #007bff;
-  font-weight: 600;
-}
-
 .uns-sql-tab-content {
   width: 100%;
-}
-
-.uns-custom-query-container {
-  margin-bottom: 15px;
-}
-
-.uns-custom-query-input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: 'Courier New', monospace;
-  resize: vertical;
-  min-height: 120px;
-  margin-bottom: 10px;
-  transition: border-color 0.2s;
-}
-
-.uns-custom-query-input:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-}
-
-.uns-custom-query-execute-btn {
-  padding: 8px 16px;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  width: 100%;
-}
-
-.uns-custom-query-execute-btn:hover:not(:disabled) {
-  background-color: #218838;
-}
-
-.uns-custom-query-execute-btn:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .uns-sql-header {
