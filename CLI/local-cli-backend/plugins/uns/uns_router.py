@@ -2,6 +2,7 @@
 # Provides filesystem-like interface for blockchain metadata
 
 import json
+import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -29,7 +30,8 @@ class QueryTableRequest(BaseModel):
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
-    column: Optional[str] = None  # When set, only fetch insert_timestamp and this column
+    column: Optional[str] = None  # When set, only fetch time_column and this column
+    time_column: Optional[str] = "insert_timestamp"  # Time-based column for filtering: insert_timestamp or timestamp
 
 class QueryCustomRequest(BaseModel):
     conn: str
@@ -158,50 +160,101 @@ async def get_children(request: BlockchainQueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get children: {str(e)}")
 
+def _extract_sql_error_message(response) -> str:
+    """Extract a user-friendly error message from various error response formats."""
+    if response is None:
+        return "No response received from database"
+    if isinstance(response, dict):
+        err_text = response.get("err_text") or response.get("error") or response.get("data")
+        if isinstance(err_text, str):
+            return err_text
+        if response.get("type") == "error":
+            data = response.get("data", "")
+            return str(data) if data else "SQL query failed"
+        if response.get("err_code") is not None:
+            return response.get("err_text") or f"SQL error (code {response.get('err_code')})"
+    if isinstance(response, (str, bytes)):
+        s = response.decode("utf-8", errors="ignore") if isinstance(response, bytes) else str(response)
+        if "err_text" in s or "SQL Failure" in s or "Connection broken" in s:
+            m = re.search(r'"err_text"\s*:\s*"([^"]+)"', s)
+            if m:
+                return m.group(1)
+            if "SQL Failure" in s:
+                return "SQL query failed on database node"
+            if "Connection broken" in s or "InvalidChunkLength" in s:
+                return "Connection error: database node returned an invalid response"
+        return s[:300] if len(s) > 300 else s
+    return str(response)[:300]
+
+
 @api_router.post("/query-table")
 async def query_table(request: QueryTableRequest):
     """Query table data for the last N hours"""
     try:
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
-        
-        # Build SQL query: when column in policy, only fetch insert_timestamp + that column; else SELECT *
-        time_value = request.time_value or 5.0
+
+        try:
+            time_value = float(request.time_value) if request.time_value is not None else 5.0
+        except (TypeError, ValueError):
+            time_value = 5.0
+
         time_unit = request.time_unit or "minute"
-        
+
         # Convert to int if it's a whole number, otherwise keep as float
-        time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
+        try:
+            time_value_str = str(int(time_value)) if time_value == int(time_value) else str(time_value)
+        except (TypeError, ValueError):
+            time_value_str = "5"
         
+        time_col = (request.time_column or "insert_timestamp").strip()
+        if time_col not in ("insert_timestamp", "timestamp"):
+            time_col = "insert_timestamp"
+
         if request.column and request.column.strip():
             col = _quote_identifier(request.column.strip())
-            select_clause = f"insert_timestamp, {col}"
+            select_clause = f"{time_col}, {col}"
         else:
             select_clause = "*"
-        
-        # Base time filter
-        sql_query = f'SELECT {select_clause} FROM {request.table} WHERE period({time_unit}, {time_value_str}, NOW(), insert_timestamp)'
-        if request.where and request.where.strip():
-            sql_query += f" AND ({request.where.strip()})"
-        # Use the exact format that works in the client dashboard
+
+        table_quoted = _quote_identifier(request.table.strip()) if request.table else request.table
+
+        # Base time filter using selected time column
+        sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE period({time_unit}, {time_value_str}, NOW(), {time_col})'
+        where_clause = (request.where or "").strip()
+        if where_clause:
+            sql_query += f" AND {where_clause}"
         command = f'run client () sql {request.dbms} format = table "{sql_query}"'
         
         print(f"UNS: Executing SQL command: {command}")
         print(f"UNS: Connection: {request.conn}")
         print(f"UNS: DBMS: {request.dbms}, Table: {request.table}, Time: {time_value} {time_unit}")
-        print(f"UNS: Full command string: {repr(command)}")
-        
-        # Use GET method like the client dashboard does
-        response = make_request(request.conn, "GET", command)   
-        print("response", response)
-        # print(f"UNS: Raw response type: {type(response)}")
-        # print(f"UNS: Raw response length: {len(str(response)) if response else 0}")
-        # print(f"UNS: Raw response preview (first 1000 chars): {str(response)[:1000] if response else 'None'}")
-        
-        parsed = parse_response(response)
-        print("parsed", parsed)
-        # print(f"UNS: Parsed response type: {type(parsed)}")
-        # print(f"UNS: Parsed response keys: {parsed.keys() if isinstance(parsed, dict) else 'N/A'}")
-        
+
+        # Execute query - catch connection/SQL errors
+        try:
+            response = make_request(request.conn, "GET", command)
+        except Exception as req_err:
+            err_msg = str(req_err)
+            print(f"UNS: make_request failed: {err_msg}")
+            friendly = _extract_sql_error_message(err_msg)
+            return {"success": False, "error": friendly if len(friendly) > 10 else err_msg, "data": None}
+
+        # Check for error response before parsing (e.g. err_code, type=error)
+        if isinstance(response, dict) and (
+            response.get("type") == "error" or response.get("err_code") is not None
+        ):
+            err_msg = _extract_sql_error_message(response)
+            print(f"UNS: SQL/connection error in response: {err_msg}")
+            return {"success": False, "error": err_msg, "data": None}
+
+        # Parse response - catch parse errors
+        try:
+            parsed = parse_response(response)
+        except Exception as parse_err:
+            err_msg = str(parse_err)
+            print(f"UNS: parse_response failed: {err_msg}")
+            return {"success": False, "error": _extract_sql_error_message(response) or f"Failed to parse response: {err_msg}", "data": None}
+
         # Extract data from response
         if isinstance(parsed, dict) and "data" in parsed:
             data = parsed["data"]
@@ -241,14 +294,13 @@ async def query_table(request: QueryTableRequest):
             print(f"UNS: First row sample: {data[0]}")
             print(f"UNS: Last row sample: {data[-1]}")
         
-        # Filter out internal columns (row_id, tsd_name, tsd_id, timestamp) from each row
-        # timestamp is excluded as insert_timestamp is used for the chart
+        # Filter out only internal columns (row_id, tsd_name, tsd_id).
+        # Keep both time columns - frontend will choose which to display and put it first.
         filtered_data = []
-        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id', 'timestamp'}
+        columns_to_exclude = {'row_id', 'tsd_name', 'tsd_id'}
         
         for row in data:
             if isinstance(row, dict):
-                # Filter out the internal columns
                 filtered_row = {k: v for k, v in row.items() if k not in columns_to_exclude}
                 filtered_data.append(filtered_row)
             elif isinstance(row, list):
@@ -383,9 +435,11 @@ async def column_details(request: ColumnDetailsRequest):
         tv = request.time_value or 5.0
         tu = request.time_unit or "minute"
         tv_str = str(int(tv)) if tv == int(tv) else str(tv)
-        where = f" AND ({request.where.strip()})" if request.where and request.where.strip() else ""
-        where_group = f" WHERE {request.where.strip()}" if request.where and request.where.strip() else ""
+        where_clause = (request.where or "").strip()
+        where = f" AND ({where_clause})" if where_clause else ""
+        where_group = f" WHERE {where_clause}" if where_clause else ""
         period = f"period({tu}, {tv_str}, NOW(), insert_timestamp)"
+        table_quoted = _quote_identifier(request.table.strip()) if request.table else request.table
 
         def run_sql(sql):
             s = f'run client () sql {request.dbms} format = json "{sql}"'
@@ -394,11 +448,11 @@ async def column_details(request: ColumnDetailsRequest):
 
         if request.column_type == "numerical":
             rows = _extract_query_rows(run_sql(
-                f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {request.table} WHERE {period}{where}"))
+                f"SELECT min({col}) as min, max({col}) as max, avg({col}) as avg FROM {table_quoted} WHERE {period}{where}"))
             row = rows[0] if rows and isinstance(rows[0], dict) else {}
             # Also fetch latest value for numerical summary
 
-            latest_rows_str = f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"
+            latest_rows_str = f"SELECT insert_timestamp, {col} FROM {table_quoted}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"
             latest_rows = _extract_query_rows(run_sql(latest_rows_str))
             latest_row = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
             latest_value = latest_row.get(request.column) or (list(latest_row.values())[0] if latest_row else None)
@@ -408,12 +462,12 @@ async def column_details(request: ColumnDetailsRequest):
 
         # string: latest value + last occurrence per value
         latest_rows = _extract_query_rows(run_sql(
-            f"SELECT insert_timestamp, {col} FROM {request.table}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"))
+            f"SELECT insert_timestamp, {col} FROM {table_quoted}{where_group} ORDER BY insert_timestamp DESC LIMIT 1"))
         row0 = latest_rows[0] if latest_rows and isinstance(latest_rows[0], dict) else {}
         latest_value = row0.get(request.column) or (list(row0.values())[0] if row0 else None)
 
         group_rows = _extract_query_rows(run_sql(
-            f"SELECT {col}, max(timestamp) FROM {request.table}{where_group} GROUP BY {col}"))
+            f"SELECT {col}, max(timestamp) FROM {table_quoted}{where_group} GROUP BY {col}"))
         last_occurrence = []
         for r in (group_rows or []):
             if not isinstance(r, dict):

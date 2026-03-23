@@ -11,8 +11,8 @@ const TerminalView = ({ id, name, ip, user, credential, action, authType }) => {
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window.env?.REACT_APP_API_URL || "http://localhost:8000/";
-  var strippedURL = (strippedURL = API_URL.replace("http://", ""));
+  const API_URL = window.env?.VITE_API_URL || 'http://localhost:8080/';
+  var strippedURL = (strippedURL = API_URL.replace('http://', ''));
 
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,

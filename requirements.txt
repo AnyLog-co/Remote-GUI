@@ -16,6 +16,7 @@ requests~=2.32
 httpx~=0.28
 aiohttp~=3.11
 websockets~=14.2
+paramiko~=4.0.0
 
 # --------------------
 # Database

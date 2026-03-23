@@ -13,3 +13,8 @@
 **/__pycache__/
 **/*.pyc
 outputs/
+
+# Exclude node_modules — both the dir AND its contents
+# (without the /** the !CLI/** rule above wins for files inside it)
+CLI/local-cli-fe-full/node_modules
+CLI/local-cli-fe-full/node_modules/**

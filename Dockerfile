@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # =====================
 # Frontend build stage
 # =====================
@@ -9,22 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential python3 git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install deps
-COPY CLI/local-cli-fe-full/package*.json ./
+# Copy package.json and install deps
+COPY CLI/local-cli-fe-full/package.json ./
 RUN npm install --legacy-peer-deps --no-audit --progress=false
 
-# Copy frontend source
+# Copy frontend source (node_modules must be excluded in .dockerignore)
 COPY CLI/local-cli-fe-full ./
 
-# Build-time API URL
-ARG REACT_APP_API_URL=http://127.0.0.1:8000
-ENV REACT_APP_API_URL=${REACT_APP_API_URL}
+# Build-time API URL (passed in by docker-compose, defaults to backend port)
+ARG VITE_API_URL=http://127.0.0.1:8080
+ENV VITE_API_URL=${VITE_API_URL}
 
-# Prevent OOM
-ENV NODE_OPTIONS=--max_old_space_size=4096
-
-# Install frontend deps needed for build (mongoose) and build
-RUN npm install mongoose && npm run build
+# Build frontend
+RUN npm run build
 
 # =====================
 # Backend build stage
@@ -35,7 +34,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system deps for virtualenv + build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3-venv build-essential git curl xsel npm \
+    python3-venv build-essential git curl xsel \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -69,8 +68,16 @@ WORKDIR /app
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# User-defined at deployment via -e or --build-arg
 ENV CLI_IP=0.0.0.0
-ENV CLI_PORT=8000
+ARG EXPOSE_PORT=8080
+ENV CLI_PORT=${EXPOSE_PORT}
+
+# Install minimal runtime deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xsel \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy venv from backend-build
 COPY --from=backend-build /opt/venv /opt/venv
@@ -83,14 +90,9 @@ COPY --from=backend-build /app/start.sh start.sh
 # Copy frontend build
 COPY --from=frontend-build /app/build /app/CLI/local-cli-fe-full/build
 
-# Install runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    npm xsel \
-    && npm install -g serve \
-    && sed -i 's/\r$//' start.sh \
-    && chmod +x start.sh \
-    && rm -rf /var/lib/apt/lists/*
+# Ensure start.sh is executable
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
-EXPOSE 8000 3001
+EXPOSE ${EXPOSE_PORT}
 
 ENTRYPOINT ["/app/start.sh"]
