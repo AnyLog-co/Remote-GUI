@@ -8,10 +8,14 @@ import Modal from '@mui/material/Modal';
 import { Box } from '@mui/material';
 import VaultView from './subcomponents/VaultViews';
 
+// Main SSHClient frontend page. Found by loader.js
+
+// Store modal mappings to show on top of whatever current view. Key: String, Value: Component
 const MODAL_MAPPINGS = {
   CUSTOM_CONNECTION: AddConnectionView,
   VAULT: VaultView,
 };
+
 // Plugin metadata - used by the plugin loader
 export const pluginMetadata = {
   name: 'SSH Client',
@@ -30,12 +34,15 @@ export default function CliPage() {
   });
   const [connections, setConnections] = useState([]);
 
+  // Retrieve active connection, active modal, and modal-setter from SSHClient global state
   const activeConnection = cliState((state) => state.activeConnection);
   const modalView = cliState((state) => state.modalView);
   const setModalView = cliState((state) => state.setModalView);
 
+  // Retrieve active modal component(if any)
   const ActiveModalComponent = MODAL_MAPPINGS[modalView];
 
+  // Prefill active connections on-mount
   useEffect(() => {
     SetNumberOfActiveConnections(Object.values(activeConnection).length);
   }, [activeConnection]);
@@ -114,6 +121,7 @@ export default function CliPage() {
         )}
       </div>
       {modalView !== null && ActiveModalComponent !== null && (
+        // If modal set in global state, show
         <div
           style={{
             maxWidth: '100%',

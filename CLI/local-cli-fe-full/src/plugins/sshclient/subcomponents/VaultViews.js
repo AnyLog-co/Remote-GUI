@@ -1,3 +1,6 @@
+// Handles vault changes such as password / ssh key
+// Allows for creation and removal of the above
+
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Vault } from '../storage/vault';

@@ -1,3 +1,5 @@
+// Mini-form components
+
 import '../styles/ConnectionFormView.css';
 
 export const FormField = ({
