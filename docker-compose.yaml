@@ -8,6 +8,9 @@ services:
     environment:
       # VITE_API_URL: http://127.0.0.1:8000
       VITE_API_URL: http://192.168.1.206:8000
+      # Optional request timeout tuning (seconds)
+      # ANYLOG_CONNECT_TIMEOUT: 5
+      # ANYLOG_READ_TIMEOUT: 30
       #GRAFANA_URL: http://23.239.12.151:3100/dashboards
     ports:
       - "3000:3000"
