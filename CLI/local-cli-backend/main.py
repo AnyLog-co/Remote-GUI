@@ -243,6 +243,11 @@ def get_status():
 # File-based authentication endpoints are now handled by file_auth_router
 
 
+def should_force_raw_text(command_text: str) -> bool:
+    """Force raw text for commands that are known to be non-tabular."""
+    return "get msg client" in command_text.lower()
+
+
 
 # NODE API ENDPOINTS
 
@@ -252,7 +257,9 @@ def send_command(conn: Connection, command: Command):
     if not is_feature_enabled("client"):
         raise HTTPException(status_code=403, detail="Feature 'client' is disabled")
     try:
-        raw_response = make_request(conn.conn, command.type, command.cmd.strip())
+        normalized_cmd = command.cmd.strip()
+        force_raw_text = should_force_raw_text(normalized_cmd)
+        raw_response = make_request(conn.conn, command.type, normalized_cmd)
         print("raw_response", raw_response)
 
         # Check if the response is already an error response
@@ -261,7 +268,7 @@ def send_command(conn: Connection, command: Command):
             print(f"Full error response: {raw_response}")
             return raw_response
 
-        if command.raw_text:
+        if command.raw_text or force_raw_text:
             return {"type": "raw", "data": str(raw_response) if raw_response is not None else ""}
 
         structured_data = parse_response(raw_response)
