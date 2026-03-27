@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - pre-develop
-      - os-dev
+#      - os-dev
 
 jobs:
   update-version:

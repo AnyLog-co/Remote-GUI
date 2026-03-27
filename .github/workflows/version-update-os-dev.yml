@@ -3,8 +3,8 @@ name: Version Update — os-dev
 on:
   push:
     branches:
-      - dummy-branch
-#      - os-dev
+#      - dummy-branch
+      - os-dev
 
 permissions:
   contents: write
