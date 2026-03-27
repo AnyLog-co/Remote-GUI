@@ -186,6 +186,15 @@ def _extract_sql_error_message(response) -> str:
         return s[:300] if len(s) > 300 else s
     return str(response)[:300]
 
+@api_router.post("/query-metadata")
+async def query_metadata(request:QueryTableRequest):
+    try:
+        if not request.dbms or not request.table:
+            raise HTTPException(status_code=400, detail="dbms and table are required")
+
+        try:
+
+
 
 @api_router.post("/query-table")
 async def query_table(request: QueryTableRequest):

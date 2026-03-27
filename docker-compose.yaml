@@ -1,21 +1,21 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:video-stream
+    image: anylogco/remote-gui:pranav-1606b9-amd64
     container_name: remote-gui
     restart: always
     stdin_open: true
     tty: true
     environment:
-      # VITE_API_URL: http://127.0.0.1:8000
-      VITE_API_URL: http://192.168.1.206:8000
+       VITE_API_URL: http://127.0.0.1:8000
+#      VITE_API_URL: http://192.168.1.206:8000
       # Optional request timeout tuning (seconds)
       # ANYLOG_CONNECT_TIMEOUT: 5
       # ANYLOG_READ_TIMEOUT: 30
       #GRAFANA_URL: http://23.239.12.151:3100/dashboards
     ports:
       - "3000:3000"
-      - "3001:3001"
-      - "8000:8000"
+      - "31800:31800"
+      - "8080:8080"
     volumes:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/
