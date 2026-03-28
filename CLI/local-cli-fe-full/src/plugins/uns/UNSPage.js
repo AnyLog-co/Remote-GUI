@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
-import { getRoot, getChildren, checkChildren, queryTable, checkTable } from './uns_api';
+import { getRoot, getChildren, checkChildren, queryMetadata, queryTable, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
   const [loading, setLoading] = useState(false);
