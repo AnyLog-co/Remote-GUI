@@ -30,8 +30,8 @@ export async function checkChildren(conn, itemId) {
 }
 
 export async function queryMetadata(conn, { dbms, table, time_value, time_unit, where, column, time_column }) {
-    const body = { const, dbms, table, time_value, time_unit, where, column, time_column };
-    return unsRequest"/uns/query-metadata", body)
+    const body = { conn, dbms, table, time_value, time_unit, where, column, time_column };
+    return unsRequest("/uns/query-metadata", body);
 }
 
 export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column, time_column }) {

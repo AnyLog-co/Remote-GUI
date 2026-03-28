@@ -606,6 +606,42 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
+  const fetchMetadata = async (dbms, table, whereClause, column) => {
+      if (!node || !dbms || !table) return;
+
+      setMetadataLoading(true);
+      setMetadataError(null);
+
+      try {
+        const result = await queryMetadata(node, {
+          dbms,
+          table,
+          time_value: timeRangeValue,
+          time_unit: timeRangeUnit,
+          where: whereClause,
+          column,
+          time_column: timeColumn,
+        });
+
+        console.log('UNS: Metadata query result:', {
+          success: result.success,
+          dataType: typeof result.data,
+          raw: result,
+        });
+
+        if (result.success) {
+          setMetadata(result.data);
+        } else {
+          setMetadataError(result.error || 'Failed to fetch metadata');
+        }
+      } catch (err) {
+        console.error('Error fetching metadata:', err);
+        setMetadataError(err.message || 'Failed to fetch metadata');
+      } finally {
+        setMetadataLoading(false);
+      }
+  };
+
   const fetchSqlData = async (dbms, table, whereClause, column) => {
     if (!node || !dbms || !table) return;
 
@@ -997,6 +1033,7 @@ const UNSPage = ({ node }) => {
           }}
           onTimeRangeValueChange={setTimeRangeValue}
           onTimeRangeUnitChange={setTimeRangeUnit}
+          onFetchTimeRange={fetchMetadata}
           onFetchTimeRange={fetchSqlData}
           getItemName={getItemName}
           getItemType={getItemType}

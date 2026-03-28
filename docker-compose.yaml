@@ -1,12 +1,12 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:pranav-1606b9-amd64
+    image: anylogco/remote-gui:pranav-6f5555-amd64
     container_name: remote-gui
     restart: always
     stdin_open: true
     tty: true
     environment:
-       VITE_API_URL: http://127.0.0.1:8000
+       VITE_API_URL: http://127.0.0.1:8080
 #      VITE_API_URL: http://192.168.1.206:8000
       # Optional request timeout tuning (seconds)
       # ANYLOG_CONNECT_TIMEOUT: 5
