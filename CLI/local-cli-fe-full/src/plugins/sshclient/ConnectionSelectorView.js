@@ -42,6 +42,8 @@ const ConnectionSelectorView = () => {
   const [authMethod, setAuthMethod] = useState('password');
   const [authPassword, setAuthPassword] = useState('');
   const [keyFile, setKeyFile] = useState(null);
+  const [user, setUser] = useState('root');
+  const [portNumber, setPortNumber] = useState(22);
 
   // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
@@ -110,6 +112,14 @@ const ConnectionSelectorView = () => {
    *   4. Generates a unique connection ID and registers the active session.
    */
   const handleAuthSubmit = async () => {
+    if (!user) {
+      alert('Please enter a user');
+      return;
+    }
+    if (!portNumber) {
+      alert('Please enter a port number');
+      return;
+    }
     if (authMethod === 'password' && !authPassword) {
       alert('Please enter a password');
       return;
@@ -170,7 +180,8 @@ const ConnectionSelectorView = () => {
 
     setActiveConnection(uuid, {
       ...selectedConnection,
-      user: 'root',
+      user: user,
+      port: portNumber,
       credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
@@ -217,19 +228,17 @@ const ConnectionSelectorView = () => {
   */
   useEffect(() => {
     setConnectionsList([]);
+
     const fetchNodes = async () => {
       try {
         const rawNodes = await fetchAllNodes();
         console.log('rawNodes: ', rawNodes);
+
         if (rawNodes === false) {
-          console.log('nada');
           return;
         }
+
         const nodeData = normalizeNodes(rawNodes);
-        // if () {
-        //   console.log('NOPE');
-        //   return;
-        // }
         setConnectionsList(
           Object.values(nodeData)
             .flat()
@@ -244,7 +253,7 @@ const ConnectionSelectorView = () => {
   }, [setConnectionsList]);
 
   useEffect(() => {
-    console.log(connectionsList);
+    console.log('CL: ', connectionsList);
   }, [connectionsList]);
 
   const getSortedConnections = (connections) => {
@@ -728,9 +737,9 @@ const ConnectionSelectorView = () => {
       );
     };
 
-    return normalizedList.map((conn) => (
+    return normalizedList.map((conn, i) => (
       <div
-        key={conn?.id ?? `${conn.ip}-${conn.hostname}`}
+        key={conn?.id ?? `${conn.ip}-${conn.hostname}-${i}`}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -1076,6 +1085,83 @@ const ConnectionSelectorView = () => {
               </button>
             </div>
 
+            {/* Allows user to enter the User and Port number */}
+            <div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  User
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    placeholder="Enter User"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Port Number
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="number"
+                    value={portNumber}
+                    onChange={(e) => setPortNumber(e.target.value)}
+                    placeholder="Enter Port Number"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
             {/*
              * Password input panel.
              * The trash icon clears the stored credential for this hostname
