@@ -31,7 +31,7 @@ async def listen_to_ssh(ws: WebSocket, channel: paramiko.Channel):
         pass
 
 
-def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
+def connect_client(ip, user, port, password=None, pkey=None) -> paramiko.SSHClient:
     """
     Inputs hostname, user, password, or possible p-key and returns a Paramiko-initialized Client
     """
@@ -42,7 +42,7 @@ def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
         client.connect(
             hostname=ip,
             username=user,
-            port=22,
+            port=port,
             password=password,
             pkey=pkey,
             timeout=10,
@@ -58,7 +58,7 @@ def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
         return None
 
 
-def open_ssh_chan(ip, name, user, conn_method):
+def open_ssh_chan(ip, name, user, port, conn_method):
     """
     Requires a hostname, user, and conn_method object
     conn_method in form of a dictionary:
@@ -72,6 +72,7 @@ def open_ssh_chan(ip, name, user, conn_method):
     pref_method = conn_method.get("method")
     method_data = conn_method.get("data")
     print("Method: ", pref_method)
+    print("Port: ", port)
 
     if pref_method not in ALLOWED_CONNECTION_METHODS:
         print("Connection Method Error: Not key or password.\n")
@@ -81,7 +82,7 @@ def open_ssh_chan(ip, name, user, conn_method):
         # Password
         case "password":
             print("Connecting via password...")
-            client = connect_client(ip, user, password=method_data)
+            client = connect_client(ip, user, port, password=method_data)
 
         case "key-string":
             # Handle key file data as string
@@ -98,7 +99,7 @@ def open_ssh_chan(ip, name, user, conn_method):
                 key_stream.seek(0)
                 key = paramiko.RSAKey.from_private_key(key_stream)
 
-            client = connect_client(ip, user, pkey=key)
+            client = connect_client(ip, user, port, pkey=key)
 
         case "keyfile":
             # Handle raw keyfile data buffer
@@ -139,6 +140,7 @@ async def ws_handler(ws: WebSocket):
                     message["ip"],
                     node_name,
                     message["user"],
+                    message["port"],
                     conn_method_info,
                 )
 
