@@ -952,6 +952,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('all')}
                 >
                   All Connections
+                  <span
+                    style={{ color: 'grey' }}
+                  >{` (${connectionsList.length})`}</span>
                 </button>
                 <button
                   style={{
@@ -966,6 +969,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
+                  <span
+                    style={{ color: 'grey' }}
+                  >{` (${Object.entries(activeTerminals).length})`}</span>
                 </button>
               </div>
               <div
