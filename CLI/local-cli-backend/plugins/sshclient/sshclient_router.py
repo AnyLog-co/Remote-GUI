@@ -71,8 +71,11 @@ def open_ssh_chan(ip, name, user, port, conn_method):
     """
     pref_method = conn_method.get("method")
     method_data = conn_method.get("data")
+
+
     print("Method: ", pref_method)
     print("Port: ", port)
+
 
     if pref_method not in ALLOWED_CONNECTION_METHODS:
         print("Connection Method Error: Not key or password.\n")
@@ -143,6 +146,7 @@ async def ws_handler(ws: WebSocket):
                     message["port"],
                     conn_method_info,
                 )
+
 
                 if not client:
                     print("Unauthorized User.")

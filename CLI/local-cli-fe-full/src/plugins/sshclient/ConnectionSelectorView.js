@@ -44,6 +44,7 @@ const ConnectionSelectorView = () => {
   const [keyFile, setKeyFile] = useState(null);
   const [user, setUser] = useState('root');
   const [portNumber, setPortNumber] = useState(22);
+  const [containerName, setContainerName] = useState('');
 
   // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
@@ -83,6 +84,7 @@ const ConnectionSelectorView = () => {
     setKeyFile(null);
     setAuthMethod('password');
     setSaveToVault(false);
+    setContainerName(conn.name);
 
     // Attempt to prefill from previously stored credentials.
     const storedPassword = retrieveStoredCredential(conn.hostname, 'password');
@@ -118,6 +120,10 @@ const ConnectionSelectorView = () => {
     }
     if (!portNumber) {
       alert('Please enter a port number');
+      return;
+    }
+    if (!containerName) {
+      alert('Please enter a container id / name');
       return;
     }
     if (authMethod === 'password' && !authPassword) {
@@ -182,6 +188,7 @@ const ConnectionSelectorView = () => {
       ...selectedConnection,
       user: user,
       port: portNumber,
+      name: containerName,
       credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
@@ -1167,6 +1174,46 @@ const ConnectionSelectorView = () => {
                   />
                 </div>
               </div>
+              {selectedAction !== 'direct_ssh' && (
+                <div style={{ marginBottom: '24px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      color: '#1a365d',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                    }}
+                  >
+                    {console.log(selectedAction)}
+                    Container ID / Name
+                  </label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={containerName}
+                      onChange={(e) => setContainerName(e.target.value)}
+                      placeholder="Enter Port Number"
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '14px',
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') handleAuthSubmit();
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             {/*
              * Password input panel.
