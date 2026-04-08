@@ -33,10 +33,15 @@ const ConnectionSelectorView = () => {
     activeConnection,
     credLocked,
     setFocusedTerminalId,
+    terminalLoading,
+    setTerminalLoading,
+    terminalError,
+    setTerminalError,
+    showAuthModal,
+    setShowAuthModal,
   } = cliState();
 
   // --- Auth modal state ---
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [authMethod, setAuthMethod] = useState('password');
@@ -135,6 +140,8 @@ const ConnectionSelectorView = () => {
       return;
     }
 
+    setTerminalError(null);
+
     if (saveToVault) {
       console.log('Attempting to save to vault:', {
         hostname: selectedConnection.hostname,
@@ -194,7 +201,6 @@ const ConnectionSelectorView = () => {
       authType: authMethod,
       isConnected: false,
     });
-    setShowAuthModal(false);
   };
 
   useEffect(() => {
@@ -285,6 +291,10 @@ const ConnectionSelectorView = () => {
     const sorted = getSortedConnections(connectionsList);
     setSortedConns(sorted);
   }, [connectionsList, starredConns]);
+
+  useEffect(() => {
+    console.log(terminalLoading);
+  }, [terminalLoading]);
 
   const handleConnStarring = (conn) => {
     setStarredConns((prev) =>
@@ -1185,7 +1195,6 @@ const ConnectionSelectorView = () => {
                       fontWeight: '500',
                     }}
                   >
-                    {console.log(selectedAction)}
                     Container ID / Name
                   </label>
                   <div
@@ -1418,6 +1427,21 @@ const ConnectionSelectorView = () => {
               </p>
             </div>
 
+            {terminalError && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  color: 'red',
+                  margin: 5,
+                  fontWeight: 'bold',
+                }}
+              >
+                Error: {terminalError}
+              </div>
+            )}
+
             <div
               style={{
                 display: 'flex',
@@ -1436,25 +1460,46 @@ const ConnectionSelectorView = () => {
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setShowAuthModal(false)}
+                onClick={() => {
+                  setTerminalLoading(false);
+                  setTerminalError(null);
+                  setShowAuthModal(false);
+                }}
               >
                 Cancel
               </button>
-              <button
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                }}
-                onClick={handleAuthSubmit}
-              >
-                Connect
-              </button>
+              {!terminalLoading ? (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                  onClick={handleAuthSubmit}
+                >
+                  Connect
+                </button>
+              ) : (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Loading...
+                </button>
+              )}
             </div>
           </div>
         </div>

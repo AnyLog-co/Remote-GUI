@@ -15,6 +15,13 @@ ALLOWED_CONNECTION_METHODS = ["password", "key-string", "keyfile"]
 # Global mapping of all active sessions.
 sessions = {}
 
+def container_exists(ssh_client, container_name: str) -> bool:
+    """Returns True if the container exists on the remote host."""
+    _, stdout, _ = ssh_client.exec_command(
+        f"docker inspect --format='{{{{.State.Status}}}}' {container_name} 2>/dev/null"
+    )
+    output = stdout.read().decode().strip()
+    return bool(output) 
 
 async def listen_to_ssh(ws: WebSocket, channel: paramiko.Channel):
     """
@@ -149,8 +156,8 @@ async def ws_handler(ws: WebSocket):
 
 
                 if not client:
-                    print("Unauthorized User.")
-                    await ws.close(code=1008, reason="Unauthorized User")
+                    print("Invalid Credentials.")
+                    await ws.close(code=1008, reason="Invalid Credentials")
                     return None
 
                 if action == "direct_ssh":
@@ -164,15 +171,21 @@ async def ws_handler(ws: WebSocket):
                     channel.get_pty(term="xterm", width=cols, height=rows)
 
                     if action == "docker_attach":
+                        if not container_exists(client, node_name):
+                            await ws.close(code=1008, reason=f"Container '{node_name}' not found")
+                            return
+
                         # Create shell and launch docker attach to node on-start
                         channel.exec_command(f"docker attach {node_name}")
-
                         # Relay shell ready status
                         await ws.send_text(
                             f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
                         )
 
                     if action == "docker_exec":
+                        if not container_exists(client, node_name):
+                            await ws.close(code=1008, reason=f"Container '{node_name}' not found")
+                            return
                         # Create shell and launch docker exec to node on-start
                         channel.exec_command(f"docker exec -it {node_name} sh")
 
