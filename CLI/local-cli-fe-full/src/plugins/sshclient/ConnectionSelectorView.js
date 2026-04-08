@@ -713,13 +713,14 @@ const ConnectionSelectorView = () => {
   @param {Array|Object} selectedList
   */
   const displayChosenList = (selectedList) => {
+    console.log(selectedList);
     const normalizedList = Array.isArray(selectedList)
       ? selectedList
-      : Object.entries(selectedList).map(([key, value]) => ({
+      : Object.entries(selectedList || {}).map(([key, value]) => ({
           id: key,
           ...value,
         }));
-
+    console.log('array?', Array.isArray(selectedList));
     if (normalizedList.length < 1)
       return (
         <div
@@ -986,9 +987,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
-                  <span
-                    style={{ color: 'grey' }}
-                  >{` (${Object.entries(activeTerminals).length})`}</span>
+                  <span style={{ color: 'grey' }}>
+                    {` (${Object.entries(activeTerminals || {}).length})`}
+                  </span>
                 </button>
               </div>
               <div

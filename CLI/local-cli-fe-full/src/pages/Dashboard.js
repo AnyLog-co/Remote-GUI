@@ -17,10 +17,10 @@ import About from './About';
 // Import plugin loader
 import { getPluginPages } from '../plugins/loader';
 // Import feature config
-import { 
-  initializeFeatureConfig, 
-  isFeatureEnabled, 
-  isPluginEnabled 
+import {
+  initializeFeatureConfig,
+  isFeatureEnabled,
+  isPluginEnabled,
 } from '../services/featureConfig';
 
 import PolicyGeneratorPage from './Security';
@@ -28,31 +28,28 @@ import PolicyGeneratorPage from './Security';
 import '../styles/Dashboard.css'; // dashboard-specific styles
 import { getBookmarks } from '../services/file_auth';
 
-
-
-
 const Dashboard = () => {
   // Load plugin pages
   const pluginPages = getPluginPages();
-  
+
   // Feature configuration state
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
   const [configLoaded, setConfigLoaded] = useState(false);
-  
+
   // Load initial state from localStorage
   const [nodes, setNodes] = useState(() => {
     const savedNodes = localStorage.getItem('dashboard-nodes');
     return savedNodes ? JSON.parse(savedNodes) : [];
   });
-  
+
   const [selectedNode, setSelectedNode] = useState(() => {
     const savedSelectedNode = localStorage.getItem('dashboard-selected-node');
     return savedSelectedNode || null;
   });
 
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
-  
+
   // Feature configuration mapping
   const featureRoutes = [
     { path: 'client', component: Client, featureKey: 'client' },
@@ -61,17 +58,25 @@ const Dashboard = () => {
     { path: 'adddata', component: AddData, featureKey: 'adddata' },
     { path: 'viewfiles', component: ViewFiles, featureKey: 'viewfiles' },
     { path: 'sqlquery', component: SqlQueryGenerator, featureKey: 'sqlquery' },
-    { path: 'blockchain', component: BlockchainManager, featureKey: 'blockchain' },
+    {
+      path: 'blockchain',
+      component: BlockchainManager,
+      featureKey: 'blockchain',
+    },
     { path: 'presets', component: Presets, featureKey: 'presets' },
     { path: 'bookmarks', component: Bookmarks, featureKey: 'bookmarks' },
-    { path: 'security', component: PolicyGeneratorPage, featureKey: 'security' },
+    {
+      path: 'security',
+      component: PolicyGeneratorPage,
+      featureKey: 'security',
+    },
   ];
-  
+
   // Load feature configuration on mount
   useEffect(() => {
     const loadConfig = async () => {
       await initializeFeatureConfig();
-      
+
       // Check which features are enabled
       const enabled = new Set();
       for (const feature of featureRoutes) {
@@ -80,7 +85,7 @@ const Dashboard = () => {
         }
       }
       setEnabledFeatures(enabled);
-      
+
       // Check which plugins are enabled
       const enabledPluginSet = new Set();
       for (const [pluginName] of Object.entries(pluginPages)) {
@@ -91,15 +96,21 @@ const Dashboard = () => {
       setEnabledPlugins(enabledPluginSet);
       setConfigLoaded(true);
     };
-    
+
     loadConfig();
   }, []);
 
   // Debug logging
-  console.log("Dashboard - selectedNode:", selectedNode);
-  console.log("Dashboard - nodes:", nodes);
-  console.log("Dashboard - localStorage nodes:", localStorage.getItem('dashboard-nodes'));
-  console.log("Dashboard - localStorage selectedNode:", localStorage.getItem('dashboard-selected-node'));
+  console.log('Dashboard - selectedNode:', selectedNode);
+  console.log('Dashboard - nodes:', nodes);
+  console.log(
+    'Dashboard - localStorage nodes:',
+    localStorage.getItem('dashboard-nodes'),
+  );
+  console.log(
+    'Dashboard - localStorage selectedNode:',
+    localStorage.getItem('dashboard-selected-node'),
+  );
 
   // Save nodes to localStorage whenever they change
   useEffect(() => {
@@ -110,24 +121,26 @@ const Dashboard = () => {
   useEffect(() => {
     if (selectedNode) {
       localStorage.setItem('dashboard-selected-node', selectedNode);
-      console.log("Saved selectedNode to localStorage:", selectedNode);
+      console.log('Saved selectedNode to localStorage:', selectedNode);
     } else {
       localStorage.removeItem('dashboard-selected-node');
-      console.log("Removed selectedNode from localStorage");
+      console.log('Removed selectedNode from localStorage');
     }
   }, [selectedNode]);
 
   // Ensure selectedNode is in nodes list if it exists
   useEffect(() => {
     if (selectedNode && !nodes.includes(selectedNode)) {
-      console.log("Selected node not in nodes list, adding it:", selectedNode);
-      setNodes(prevNodes => [...prevNodes, selectedNode]);
+      console.log('Selected node not in nodes list, adding it:', selectedNode);
+      setNodes((prevNodes) => [...prevNodes, selectedNode]);
     }
   }, [selectedNode, nodes]);
 
   // Show restoration message if data was loaded from localStorage
   useEffect(() => {
-    const hasStoredData = localStorage.getItem('dashboard-nodes') || localStorage.getItem('dashboard-selected-node');
+    const hasStoredData =
+      localStorage.getItem('dashboard-nodes') ||
+      localStorage.getItem('dashboard-selected-node');
     if (hasStoredData) {
       setRestoredFromStorage(true);
       // Auto-hide the message after 3 seconds
@@ -145,11 +158,11 @@ const Dashboard = () => {
         if (!selectedNode) {
           const res = await getBookmarks();
           const list = Array.isArray(res.data) ? res.data : [];
-          const def = list.find(b => b.is_default);
+          const def = list.find((b) => b.is_default);
           if (def && def.node) {
             setSelectedNode(def.node);
             if (!nodes.includes(def.node)) {
-              setNodes(prev => [...prev, def.node]);
+              setNodes((prev) => [...prev, def.node]);
             }
           }
         }
@@ -167,7 +180,7 @@ const Dashboard = () => {
     localStorage.removeItem('dashboard-selected-node');
     setNodes([]);
     setSelectedNode(null);
-    console.log("Cleared all stored dashboard data");
+    console.log('Cleared all stored dashboard data');
   };
 
   // Adds a new node (if valid and not already in the list)
@@ -178,8 +191,6 @@ const Dashboard = () => {
       // setSelectedNode(newNode);
     }
   };
-
-
 
   return (
     <div className="dashboard-container">
@@ -197,78 +208,102 @@ const Dashboard = () => {
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}
             {featureRoutes
-              .filter(route => enabledFeatures.has(route.featureKey))
-              .map(route => {
+              .filter((route) => enabledFeatures.has(route.featureKey))
+              .map((route) => {
                 if (route.path === 'bookmarks') {
                   return (
-                    <Route 
+                    <Route
                       key={route.path}
-                      path={route.path} 
+                      path={route.path}
                       element={
-                        <route.component 
-                          node={selectedNode} 
+                        <route.component
+                          node={selectedNode}
                           onSelectNode={(node) => {
-                            console.log("Selecting node from bookmarks:", node);
+                            console.log('Selecting node from bookmarks:', node);
                             // Add node to nodes list if not already present
                             if (node && !nodes.includes(node)) {
-                              console.log("Adding new node to list:", node);
-                              setNodes(prevNodes => [...prevNodes, node]);
+                              console.log('Adding new node to list:', node);
+                              setNodes((prevNodes) => [...prevNodes, node]);
                             }
                             // Set as selected node
                             setSelectedNode(node);
-                            console.log("Selected node set to:", node);
-                          }} 
+                            console.log('Selected node set to:', node);
+                          }}
                         />
-                      } 
+                      }
                     />
                   );
                 }
                 return (
-                  <Route 
+                  <Route
                     key={route.path}
-                    path={route.path} 
-                    element={<route.component node={selectedNode} />} 
+                    path={route.path}
+                    element={<route.component node={selectedNode} />}
                   />
                 );
               })}
-            
+
             {/* User Profile - Always available */}
-            <Route path="userprofile" element={<UserProfile node={selectedNode} />} />
+            <Route
+              path="userprofile"
+              element={<UserProfile node={selectedNode} />}
+            />
 
             {/* About - Always available, key forces reload when node changes */}
-            <Route path="about" element={<About key={selectedNode ? (typeof selectedNode === 'string' ? selectedNode : JSON.stringify(selectedNode)) : 'no-node'} node={selectedNode} />} />
-            
-            {/* Plugin Routes - Auto-loaded and filtered by feature config */}
-            {configLoaded && Object.entries(pluginPages)
-              .filter(([pluginName]) => enabledPlugins.has(pluginName))
-              .map(([key, plugin]) => (
-                <Route 
-                  key={key}
-                  path={plugin.path} 
-                  element={
-                    <React.Suspense fallback={<div>Loading {plugin.name}...</div>}>
-                      <plugin.component node={selectedNode} />
-                    </React.Suspense>
-                  } 
-                />
-              ))}
-            
-            {/* Default view - Use first enabled feature or Client */}
-            <Route 
-              path="*" 
+            <Route
+              path="about"
               element={
-                (() => {
-                  if (enabledFeatures.has('client')) {
-                    return <Client node={selectedNode} />;
+                <About
+                  key={
+                    selectedNode
+                      ? typeof selectedNode === 'string'
+                        ? selectedNode
+                        : JSON.stringify(selectedNode)
+                      : 'no-node'
                   }
-                  const firstEnabled = featureRoutes.find(r => enabledFeatures.has(r.featureKey));
-                  if (firstEnabled) {
-                    const Component = firstEnabled.component;
-                    return <Component node={selectedNode} />;
-                  }
-                  return <div>No features enabled. Please check feature configuration.</div>;
-                })()
-              } 
+                  node={selectedNode}
+                />
+              }
+            />
+
+            {/* Plugin Routes - Auto-loaded and filtered by feature config */}
+            {configLoaded &&
+              Object.entries(pluginPages)
+                .filter(([pluginName]) => enabledPlugins.has(pluginName))
+                .map(([key, plugin]) => (
+                  <Route
+                    key={key}
+                    path={plugin.path}
+                    element={
+                      <React.Suspense
+                        fallback={<div>Loading {plugin.name}...</div>}
+                      >
+                        <plugin.component node={selectedNode} />
+                      </React.Suspense>
+                    }
+                  />
+                ))}
+
+            {/* Default view - Use first enabled feature or Client */}
+            <Route
+              path="*"
+              element={(() => {
+                if (enabledFeatures.has('client')) {
+                  return <Client node={selectedNode} />;
+                }
+                const firstEnabled = featureRoutes.find((r) =>
+                  enabledFeatures.has(r.featureKey),
+                );
+                if (firstEnabled) {
+                  const Component = firstEnabled.component;
+                  return <Component node={selectedNode} />;
+                }
+                return (
+                  <div>
+                    No features enabled. Please check feature configuration.
+                  </div>
+                );
+              })()}
             />
           </Routes>
         </div>
