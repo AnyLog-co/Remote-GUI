@@ -165,13 +165,19 @@ else:
 load_plugins(app)
 
 def _get_remote_gui_version() -> str:
-    """Read Remote-GUI version from setup.cfg at project root."""
+    """Read Remote-GUI version from setup.cfg [metadata] remoteguiversion (fallback: version)."""
     try:
         project_root = os.path.dirname(os.path.dirname(BASE_DIR))
         setup_cfg_path = os.path.join(project_root, 'setup.cfg')
         if os.path.exists(setup_cfg_path):
             config = configparser.ConfigParser()
             config.read(setup_cfg_path)
+            if not config.has_section('metadata'):
+                return '—'
+            if config.has_option('metadata', 'remoteguiversion'):
+                v = config.get('metadata', 'remoteguiversion').strip()
+                if v:
+                    return v
             return config.get('metadata', 'version', fallback='—')
     except Exception:
         pass
@@ -181,7 +187,8 @@ def _get_remote_gui_version() -> str:
 @app.get("/version")
 def get_version_endpoint():
     """Return Remote-GUI version from setup.cfg for the About page."""
-    return {"version": _get_remote_gui_version(), "remote_gui_version": _get_remote_gui_version()}
+    rg = _get_remote_gui_version()
+    return {"version": rg, "remote_gui_version": rg}
 
 
 # Feature configuration endpoint for frontend
