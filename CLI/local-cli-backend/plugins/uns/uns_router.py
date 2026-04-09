@@ -513,6 +513,29 @@ async def check_table(request: CheckTableRequest):
             "error": error_msg
         }
 
+@api_router.post("/data-nodes")
+async def data_nodes(request: CheckTableRequest):
+    """Get data nodes for a specific dbms/table, returning the full node details."""
+    try:
+        if not request.dbms or not request.table:
+            raise HTTPException(status_code=400, detail="dbms and table are required")
+
+        nodes = get_data_nodes_for_table(request.conn, request.dbms, request.table)
+
+        return {
+            "success": True,
+            "data": nodes,
+            "error": None
+        }
+    except Exception as e:
+        error_msg = str(e)
+        print(f"UNS: Data nodes error: {error_msg}")
+        return {
+            "success": False,
+            "data": [],
+            "error": error_msg
+        }
+
 @api_router.post("/check-children")
 async def check_children(request: CheckChildrenRequest):
     """Check if an item has children by attempting to fetch them"""

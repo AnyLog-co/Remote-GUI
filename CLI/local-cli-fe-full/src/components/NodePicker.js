@@ -5,9 +5,11 @@ import { bookmarkNode } from '../services/file_auth';
 import '../styles/NodePicker.css'; // Optional: create a CSS file for node picker styling
 import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
+import { validateNodeConnection } from '../utils/connectionAddress';
 
 const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAdded }) => {
   const [newNode, setNewNode] = useState('');
+  const [connectionError, setConnectionError] = useState(null);
   const [error, setError] = useState(null);
   const [local, setLocal] = useState(false);
   const [bookmarkMsg, setBookmarkMsg] = useState(null);
@@ -24,13 +26,16 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
   }, [bookmarkMsg]);
 
   const handleAdd = () => {
-    // Basic validation: check that new node is not empty, and ideally matches "ip:port" format
-    if (newNode.trim()) {
-      onAddNode(newNode.trim());
-      onSelectNode(newNode.trim());
-      setNewNode('');
-      setShowAddNode(false);
+    const check = validateNodeConnection(newNode);
+    if (!check.ok) {
+      setConnectionError(check.message);
+      return;
     }
+    setConnectionError(null);
+    onAddNode(check.value);
+    onSelectNode(check.value);
+    setNewNode('');
+    setShowAddNode(false);
   };
 
   const handleAddConnectedNodes = async (e) => {
@@ -111,17 +116,25 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
       <div className="node-picker-container">
         <div className="connection-box">
           <input
-            className="node-picker-input"
+            className={`node-picker-input${connectionError ? ' invalid' : ''}`}
             type="text"
-            placeholder="Enter Node Connection (IP:Port)"
+            placeholder="IP:Port only (e.g. 192.168.1.1:32349) — no http://"
             value={newNode}
-            onChange={(e) => setNewNode(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+            onChange={(e) => {
+              setNewNode(e.target.value);
+              if (connectionError) setConnectionError(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           />
           <button className="node-picker-btn primary" onClick={handleAdd}>
             Connect
           </button>
         </div>
+        {connectionError && (
+          <div className="node-picker-connection-error" role="alert">
+            {connectionError}
+          </div>
+        )}
         {bookmarkMsg && (
           <div className="bookmark-msg">
             {bookmarkMsg}
@@ -161,12 +174,15 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
       {showAddNode && (
         <div className="add-node-section">
           <input
-            className="node-picker-input"
+            className={`node-picker-input${connectionError ? ' invalid' : ''}`}
             type="text"
-            placeholder="Enter New Node Connection (IP:Port)"
+            placeholder="IP:Port only (e.g. 192.168.1.1:32349) — no http://"
             value={newNode}
-            onChange={(e) => setNewNode(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
+            onChange={(e) => {
+              setNewNode(e.target.value);
+              if (connectionError) setConnectionError(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           />
           <button className="node-picker-btn primary" onClick={handleAdd}>
             Add & Connect
@@ -174,9 +190,16 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
           <button className="node-picker-btn cancel" onClick={() => {
             setShowAddNode(false);
             setNewNode('');
+            setConnectionError(null);
           }}>
             Cancel
           </button>
+        </div>
+      )}
+
+      {showAddNode && connectionError && (
+        <div className="node-picker-connection-error" role="alert">
+          {connectionError}
         </div>
       )}
 

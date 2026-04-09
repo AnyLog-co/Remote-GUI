@@ -49,6 +49,10 @@ export async function checkTable(conn, { dbms, table }) {
   return unsRequest("/uns/check-table", { conn, dbms, table });
 }
 
+export async function getDataNodes(conn, { dbms, table }) {
+  return unsRequest("/uns/data-nodes", { conn, dbms, table });
+}
+
 export async function getColumnDetails(conn, { dbms, table, column, where, time_value, time_unit, column_type }) {
   const body = { conn, dbms, table, column, time_value, time_unit, column_type };
   if (where?.trim()) body.where = where.trim();

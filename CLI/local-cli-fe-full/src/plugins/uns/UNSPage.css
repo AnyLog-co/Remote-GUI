@@ -959,6 +959,73 @@
   color: #007bff;
 }
 
+/* Data Nodes section */
+.uns-data-nodes-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #dee2e6;
+}
+
+.uns-data-nodes-section > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #495057;
+  font-size: 14px;
+}
+
+.uns-data-nodes-loading {
+  padding: 15px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.uns-data-nodes-error {
+  padding: 12px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.uns-data-nodes-empty {
+  padding: 15px;
+  text-align: center;
+  color: #999;
+  font-style: italic;
+}
+
+.uns-data-nodes-table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.uns-data-nodes-table-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.uns-data-nodes-table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.uns-data-nodes-table-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.uns-data-nodes-table-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 /* Column details below chart */
 .uns-column-details {
   margin-top: 16px;

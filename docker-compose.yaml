@@ -8,6 +8,8 @@ services:
     environment:
       # VITE_API_URL: http://127.0.0.1:8000
       VITE_API_URL: http://192.168.1.206:8000
+      # Default AnyLog node connection (ip:port) — bookmarked and set as default on boot
+      # REST_CONN: 23.239.12.151:32349
       # Optional request timeout tuning (seconds)
       # ANYLOG_CONNECT_TIMEOUT: 5
       # ANYLOG_READ_TIMEOUT: 30

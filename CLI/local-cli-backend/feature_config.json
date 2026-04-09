@@ -67,7 +67,7 @@
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
     },
     "sshclient": {
-      "enabled": true,
+      "enabled": false,
       "description": "SSH Client Plugin"
     },
     "uns": {

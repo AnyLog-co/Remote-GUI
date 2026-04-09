@@ -19,6 +19,7 @@ from parsers import parse_response
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
+from file_auth import file_bookmark_node, file_set_default_bookmark
 # Import plugin loader
 from plugins.loader import load_plugins, get_plugin_order
 # Import feature config loader
@@ -163,6 +164,18 @@ else:
 
 # Load plugins (will respect feature config internally)
 load_plugins(app)
+
+# Bootstrap default connection from REST_CONN env var
+REST_CONN = os.getenv("REST_CONN")
+if REST_CONN:
+    REST_CONN = REST_CONN.strip()
+    print(f"🔗 REST_CONN detected: {REST_CONN}")
+    result = file_bookmark_node(REST_CONN)
+    print(f"   Bookmark ensure result: {result}")
+    result = file_set_default_bookmark(REST_CONN)
+    print(f"   Set default result: {result}")
+else:
+    print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] remoteguiversion (fallback: version)."""
