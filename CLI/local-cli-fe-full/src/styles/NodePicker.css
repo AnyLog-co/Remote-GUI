@@ -49,6 +49,22 @@
     border-color: #007bff;
     box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
+
+  .node-picker-input.invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+  }
+
+  .node-picker-connection-error {
+    font-size: 12px;
+    line-height: 1.35;
+    max-width: 420px;
+    color: #721c24;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 8px 10px;
+    border-radius: 4px;
+  }
   
   .node-picker-btn {
     padding: 8px 16px;
