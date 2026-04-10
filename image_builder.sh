@@ -71,8 +71,8 @@ ARCH=${PLATFORM#*/}   # strips "linux/" → e.g. "amd64" or "arm64"
 
 # Default tag to <version>-<short-commit> from setup.cfg if not specified
 if [[ -z ${TAG} ]] ; then
-  TAG_VERSION=$(grep ^version setup.cfg | awk -F " = " '{print $2}' | awk -F " " '{print $1}' | xargs)
-  TAG_COMMIT=$(grep ^version setup.cfg | grep -oE '[a-f0-9]{6,}' | tail -1)
+  TAG_VERSION=$(grep ^remoteguiversion setup.cfg | awk -F " = " '{print $2}' | awk -F " " '{print $1}' | xargs)
+  TAG_COMMIT=$(grep ^remoteguiversion setup.cfg | grep -oE '[a-f0-9]{6,}' | tail -1)
   TAG=${TAG_VERSION}-${TAG_COMMIT}
 fi
 

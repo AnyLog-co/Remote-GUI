@@ -6,6 +6,9 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 sys.path.append(BASE_DIR)
+SETUP_CFG_FILE = os.path.join(__file__.split("CLI")[0], "setup.cfg")
+if not os.path.isfile(SETUP_CFG_FILE):
+    raise Exception(f"File not found - {SETUP_CFG_FILE}")
 
 from security.security_router import security_router
 
@@ -179,12 +182,13 @@ else:
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] remoteguiversion (fallback: version)."""
+
     try:
-        project_root = os.path.dirname(os.path.dirname(BASE_DIR))
-        setup_cfg_path = os.path.join(project_root, 'setup.cfg')
-        if os.path.exists(setup_cfg_path):
+        # project_root = os.path.dirname(os.path.dirname(BASE_DIR))
+        # setup_cfg_path = os.path.join(project_root, 'setup.cfg')
+        if os.path.exists(SETUP_CFG_FILE):
             config = configparser.ConfigParser()
-            config.read(setup_cfg_path)
+            config.read(SETUP_CFG_FILE)
             if not config.has_section('metadata'):
                 return '—'
             if config.has_option('metadata', 'remoteguiversion'):

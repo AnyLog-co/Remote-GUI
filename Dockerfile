@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package.json and install deps
 COPY CLI/local-cli-fe-full/package.json ./
+
 RUN npm install --legacy-peer-deps --no-audit --progress=false
 
 # Copy frontend source (node_modules must be excluded in .dockerignore)
@@ -21,6 +22,7 @@ COPY CLI/local-cli-fe-full ./
 # Build-time API URL (passed in by docker-compose, defaults to backend port)
 ARG VITE_API_URL=http://127.0.0.1:8080
 ENV VITE_API_URL=${VITE_API_URL}
+
 
 # Build frontend
 RUN npm run build
@@ -44,6 +46,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Copy Python dependencies and install in virtualenv
 COPY requirements.txt .
+
 RUN pip install --upgrade pip wheel \
     && pip install --no-cache-dir -r requirements.txt
 
@@ -80,6 +83,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy venv from backend-build
+COPY setup.cfg /app/setup.cfg
 COPY --from=backend-build /opt/venv /opt/venv
 
 # Copy backend source + templates + start.sh
