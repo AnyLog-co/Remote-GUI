@@ -1,6 +1,6 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:pranav-6f5555-amd64
+    image: anylogco/remote-gui:pranav-a55bd8-amd64
     container_name: remote-gui
     restart: always
     stdin_open: true

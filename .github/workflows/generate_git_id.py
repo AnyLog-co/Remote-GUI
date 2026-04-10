@@ -33,11 +33,11 @@ def update_version():
     lines = []
     with open(CONFIG_FILE, "r") as f:
         for line in f:
-            if line.strip().startswith("version"):
+            if line.strip().startswith("remoteguiversion"):
                 # Extract base version (e.g. "1.4.2603"), strip any existing {} suffix
                 raw = line.split("=", 1)[1].strip()
                 base_version = raw.split("(")[0].strip()
-                line = f"version = {base_version} {git_suffix}\n"
+                line = f"remoteguiversion = {base_version} {git_suffix}\n"
             lines.append(line)
 
     with open(CONFIG_FILE, "w") as f:
