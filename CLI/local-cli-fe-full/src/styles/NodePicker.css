@@ -102,16 +102,6 @@
     background-color: #c82333;
   }
 
-  .node-picker-btn.remove {
-    background-color: transparent;
-    color: #dc3545;
-    border: 1px solid #dc3545;
-  }
-
-  .node-picker-btn.remove:hover {
-    background-color: #dc3545;
-    color: #fff;
-  }
   
   .bookmark-msg {
     font-size: 12px;

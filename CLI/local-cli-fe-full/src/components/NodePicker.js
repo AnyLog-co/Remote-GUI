@@ -139,6 +139,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
     const value = e.target.value;
     if (value === 'add-node') {
       setShowAddNode(true);
+    } else if (value === 'remove-node') {
+      if (onRemoveNode) onRemoveNode(selectedNode);
     } else {
       onSelectNode(value);
       setShowAddNode(false);
@@ -199,20 +201,12 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
             </option>
           ))}
           <option value="add-node">+ Add New Node</option>
+          {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
         </select>
         
         <button className="node-picker-btn secondary" onClick={handleBookmark}>
           Bookmark
         </button>
-        {onRemoveNode && nodes.length > 0 && (
-          <button
-            className="node-picker-btn remove"
-            onClick={() => onRemoveNode(selectedNode)}
-            title={`Remove ${selectedNode}`}
-          >
-            Remove
-          </button>
-        )}
       </div>
 
       {checking && (
