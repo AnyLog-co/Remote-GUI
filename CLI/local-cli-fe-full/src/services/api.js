@@ -49,6 +49,54 @@ export async function getVersion() {
   }
 }
 
+const REACHABILITY_TIMEOUT_MS = 10_000;
+
+/**
+ * Verify a node is reachable by running "get status" with a 10-second timeout.
+ * Accepts an optional AbortSignal so the caller can cancel early.
+ * Resolves to { ok: true } when the node responds, or { ok: false, message } otherwise.
+ */
+export async function checkNodeReachable(connectInfo, { signal } = {}) {
+  const controller = new AbortController();
+  if (signal) signal.addEventListener('abort', () => controller.abort());
+  const timeout = setTimeout(() => controller.abort(), REACHABILITY_TIMEOUT_MS);
+
+  try {
+    const requestBody = {
+      command: { type: 'GET', cmd: 'get status', raw_text: false },
+      conn: { conn: connectInfo },
+    };
+
+    const response = await fetch(`${API_URL}/send-command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { ok: false, message: `Node ${connectInfo} is not reachable (HTTP ${response.status}).` };
+    }
+
+    const result = await response.json();
+    if (result?.type === 'error') {
+      return { ok: false, message: result.data || 'Node returned an error response.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') {
+      if (signal?.aborted) {
+        return { ok: false, message: 'Connection check cancelled.' };
+      }
+      return { ok: false, message: `Node ${connectInfo} did not respond within 10 seconds.` };
+    }
+    return { ok: false, message: `Node ${connectInfo} is not reachable.` };
+  }
+}
+
 // Example: "sendCommand" function that POSTs a command to your server
 export async function sendCommand({ connectInfo, method, command, rawText }) {
   if (!connectInfo || !command || !method) {
