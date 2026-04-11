@@ -179,6 +179,14 @@ const Dashboard = () => {
     }
   };
 
+  const handleRemoveNode = (nodeToRemove) => {
+    setNodes((prev) => prev.filter((n) => n !== nodeToRemove));
+    if (selectedNode === nodeToRemove) {
+      const remaining = nodes.filter((n) => n !== nodeToRemove);
+      setSelectedNode(remaining.length > 0 ? remaining[0] : null);
+    }
+  };
+
 
 
   return (
@@ -187,6 +195,7 @@ const Dashboard = () => {
         nodes={nodes}
         selectedNode={selectedNode}
         onAddNode={handleAddNode}
+        onRemoveNode={handleRemoveNode}
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}

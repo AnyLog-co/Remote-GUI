@@ -7,7 +7,7 @@ import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
 import { validateNodeConnection } from '../utils/connectionAddress';
 
-const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAdded }) => {
+const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode, onBookmarkAdded }) => {
   const [newNode, setNewNode] = useState('');
   const [connectionError, setConnectionError] = useState(null);
   const [connectWarning, setConnectWarning] = useState(null);
@@ -204,6 +204,15 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onSelectNode, onBookmarkAd
         <button className="node-picker-btn secondary" onClick={handleBookmark}>
           Bookmark
         </button>
+        {onRemoveNode && nodes.length > 0 && (
+          <button
+            className="node-picker-btn remove"
+            onClick={() => onRemoveNode(selectedNode)}
+            title={`Remove ${selectedNode}`}
+          >
+            Remove
+          </button>
+        )}
       </div>
 
       {checking && (
