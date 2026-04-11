@@ -30,7 +30,7 @@ RUN npm run build
 # =====================
 # Backend build stage
 # =====================
-FROM python:3.11-slim AS backend-build
+FROM python:3.13.12-slim AS backend-build
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -68,7 +68,7 @@ RUN chmod +x start.sh
 # =====================
 # Final runtime image
 # =====================
-FROM python:3.11-slim AS final
+FROM python:3.13.12-slim AS final
 WORKDIR /app
 
 ENV VIRTUAL_ENV=/opt/venv

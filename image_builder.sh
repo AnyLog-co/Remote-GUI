@@ -86,6 +86,7 @@ DOCKER_CMD="docker buildx build \
     --platform ${PLATFORM} \
     --sbom=true \
     --provenance=mode=max \
+    --pull \
     -f Dockerfile . \
     -t ${IMAGE_NAME}"
 
