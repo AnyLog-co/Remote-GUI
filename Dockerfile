@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv build-essential git curl xsel \
     && rm -rf /var/lib/apt/lists/*
 
+
+
 # Create virtual environment
 RUN python3 -m venv /opt/venv
 ENV VIRTUAL_ENV=/opt/venv
@@ -78,9 +80,10 @@ ARG EXPOSE_PORT=8080
 ENV CLI_PORT=${EXPOSE_PORT}
 
 # Install minimal runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xsel \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends xsel && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r anylog && useradd -r -g anylog -d /app anylog
+
 
 # Copy venv from backend-build
 COPY setup.cfg /app/setup.cfg
@@ -98,5 +101,11 @@ COPY --from=frontend-build /app/build /app/CLI/local-cli-fe-full/build
 RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 EXPOSE ${EXPOSE_PORT}
+
+# add THIS
+RUN chown -R anylog:anylog /app
+
+# switch user
+USER anylog
 
 ENTRYPOINT ["/app/start.sh"]
