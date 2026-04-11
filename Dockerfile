@@ -49,7 +49,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Copy Python dependencies and install in virtualenv
 COPY requirements.txt .
 
-RUN pip install --upgrade pip wheel \
+RUN pip install --upgrade "pip>=26.0" "wheel>=0.45.1" "setuptools>=78.1.1" \
     && pip install --no-cache-dir -r requirements.txt
 
 # Clone AnyLog-API and install into virtualenv
@@ -81,6 +81,7 @@ ENV CLI_PORT=${EXPOSE_PORT}
 
 # Install minimal runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends xsel && \
+    apt-get install -y --only-upgrade openssl && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r anylog && useradd -r -g anylog -d /app anylog
 
