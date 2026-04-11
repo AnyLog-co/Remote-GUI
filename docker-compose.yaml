@@ -4,6 +4,7 @@ services:
     container_name: remote-gui
     restart: always
     stdin_open: true
+    hostname: remote-gui
     tty: true
     environment:
       VITE_API_URL: http://127.0.0.1:8080
