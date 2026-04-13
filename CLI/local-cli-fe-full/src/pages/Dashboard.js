@@ -187,6 +187,13 @@ const Dashboard = () => {
     }
   };
 
+  const handleEditNode = (oldNode, newNode) => {
+    setNodes((prev) => prev.map((n) => (n === oldNode ? newNode : n)));
+    if (selectedNode === oldNode) {
+      setSelectedNode(newNode);
+    }
+  };
+
 
 
   return (
@@ -196,6 +203,7 @@ const Dashboard = () => {
         selectedNode={selectedNode}
         onAddNode={handleAddNode}
         onRemoveNode={handleRemoveNode}
+        onEditNode={handleEditNode}
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
