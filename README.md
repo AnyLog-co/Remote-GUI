@@ -45,6 +45,21 @@ docker run -it -p 8000:8000 -p 3001:3001 --name gui-1 --rm anylogco/remote-gui
 docker compose -f ./docker-compose.yaml up -d
 ```
 
+**Optional AnyLog command timeouts (recommended):**
+
+- `ANYLOG_CONNECT_TIMEOUT` (seconds, default `5`)
+- `ANYLOG_READ_TIMEOUT` (seconds, default `30`)
+- `ANYLOG_REQUEST_TIMEOUT` (single override for both; if set, it takes precedence)
+
+Example:
+
+```bash
+docker run -it -p 8000:8000 -p 3001:3001 \
+  -e ANYLOG_CONNECT_TIMEOUT=3 \
+  -e ANYLOG_READ_TIMEOUT=20 \
+  --name gui-1 --rm anylogco/remote-gui
+```
+
 ---
 
 ## Prerequisites
@@ -236,12 +251,12 @@ You can connect to a node in two ways:
 
 2. Run (local):
    ```bash
-   docker run -it --rm -p 8000:8000 -p 3001:3001      -e REACT_APP_API_URL=http://127.0.0.1:8000      --name gui oshadmon/gui:test
+   docker run -it --rm -p 8000:8000 -p 3001:3001      -e VITE_API_URL=http://127.0.0.1:8000      --name gui oshadmon/gui:test
    ```
 
 3. Run (production):
    ```bash
-   docker run -d      --name gui      -p 8000:8000      -p 3001:3001      -e REACT_APP_API_URL=http://${EXTERNAL_IP}:8000      -e FRONTEND_URL=http://${EXTERNAL_IP}:3001      oshadmon/gui:test
+   docker run -d      --name gui      -p 8000:8000      -p 3001:3001      -e VITE_API_URL=http://${EXTERNAL_IP}:8000      -e FRONTEND_URL=http://${EXTERNAL_IP}:3001      oshadmon/gui:test
    ```
 
 ---

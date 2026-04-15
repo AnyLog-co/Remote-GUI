@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
-import { getRoot, getChildren, checkChildren, queryTable, queryCustom, checkTable } from './uns_api';
+import { getRoot, getChildren, checkChildren, queryMetadata, queryTable, checkTable } from './uns_api';
 
 const UNSPage = ({ node }) => {
   const [loading, setLoading] = useState(false);
@@ -19,11 +19,10 @@ const UNSPage = ({ node }) => {
   const [rootQuery, setRootQuery] = useState('blockchain get root policies'); // Configurable root query
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
+  const [timeColumn, setTimeColumn] = useState('insert_timestamp'); // Time column: insert_timestamp or timestamp
   const [sqlData, setSqlData] = useState(null); // SQL query results
   const [sqlLoading, setSqlLoading] = useState(false); // SQL query loading state
   const [sqlError, setSqlError] = useState(null); // SQL query error
-  const [sqlTab, setSqlTab] = useState('timeRange'); // 'timeRange' or 'advanced'
-  const [customSqlQuery, setCustomSqlQuery] = useState(''); // Custom SQL query text
   const [chartYKey, setChartYKey] = useState(null); // Selected value column for line chart
   const [itemsWithData, setItemsWithData] = useState(new Map()); // Cache: item key (dbms:table) -> has_data (boolean)
   const [checkingData, setCheckingData] = useState(new Set()); // Track items currently being checked
@@ -607,6 +606,42 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
+  const fetchMetadata = async (dbms, table, whereClause, column) => {
+      if (!node || !dbms || !table) return;
+
+      setMetadataLoading(true);
+      setMetadataError(null);
+
+      try {
+        const result = await queryMetadata(node, {
+          dbms,
+          table,
+          time_value: timeRangeValue,
+          time_unit: timeRangeUnit,
+          where: whereClause,
+          column,
+          time_column: timeColumn,
+        });
+
+        console.log('UNS: Metadata query result:', {
+          success: result.success,
+          dataType: typeof result.data,
+          raw: result,
+        });
+
+        if (result.success) {
+          setMetadata(result.data);
+        } else {
+          setMetadataError(result.error || 'Failed to fetch metadata');
+        }
+      } catch (err) {
+        console.error('Error fetching metadata:', err);
+        setMetadataError(err.message || 'Failed to fetch metadata');
+      } finally {
+        setMetadataLoading(false);
+      }
+  };
+
   const fetchSqlData = async (dbms, table, whereClause, column) => {
     if (!node || !dbms || !table) return;
 
@@ -621,6 +656,7 @@ const UNSPage = ({ node }) => {
         time_unit: timeRangeUnit,
         where: whereClause,
         column,
+        time_column: timeColumn,
       });
       
       console.log('UNS: SQL query result:', {
@@ -633,75 +669,11 @@ const UNSPage = ({ node }) => {
         console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
         setSqlData(result.data);
       } else {
-        // Check if it's a "no data" error or a real error
-        const errorMsg = result.error || '';
-        const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                             errorMsg.toLowerCase().includes('connection broken') ||
-                             errorMsg.toLowerCase().includes('invalidchunklength') ||
-                             errorMsg.toLowerCase().includes('invalid literal') ||
-                             errorMsg.toLowerCase().includes('err_code') ||
-                             !errorMsg; // Empty error usually means no data
-        
-        if (isNoDataError) {
-          setSqlError('There is no table/data at this location');
-        } else {
-          setSqlError(result.error || 'Failed to fetch table data');
-        }
+        setSqlError(result.error || 'Failed to fetch table data');
       }
     } catch (err) {
       console.error('Error fetching SQL data:', err);
-      // Check if it's a "no data" error
-      const errorMsg = err.message || '';
-      const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-                           errorMsg.toLowerCase().includes('connection broken') ||
-                           errorMsg.toLowerCase().includes('invalidchunklength') ||
-                           errorMsg.toLowerCase().includes('invalid literal') ||
-                           errorMsg.toLowerCase().includes('err_code');
-      
-      if (isNoDataError) {
-        setSqlError('There is no table/data at this location');
-      } else {
-        setSqlError(err.message || 'Failed to fetch table data');
-      }
-    } finally {
-      setSqlLoading(false);
-    }
-  };
-
-  const fetchCustomSqlData = async (dbms, sqlQuery) => {
-    if (!node || !dbms || !sqlQuery.trim()) return;
-
-    setSqlLoading(true);
-    setSqlError(null);
-
-    try {
-      const result = await queryCustom(node, { dbms, sql_query: sqlQuery });
-
-      const safeData = Array.isArray(result?.data) ? result.data : [];
-
-      if (result?.success) {
-        setSqlData(safeData);
-      } else {
-        setSqlData([]);
-        const errorMsg = result?.error || '';
-        const isNoDataError = !errorMsg ||
-          errorMsg.toLowerCase().includes('failed to load table metadata') ||
-          errorMsg.toLowerCase().includes('connection broken') ||
-          errorMsg.toLowerCase().includes('invalidchunklength') ||
-          errorMsg.toLowerCase().includes('invalid literal') ||
-          errorMsg.toLowerCase().includes('err_code');
-        setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
-      }
-    } catch (err) {
-      console.error('Error executing custom SQL query:', err);
-      setSqlData([]);
-      const errorMsg = err?.message || '';
-      const isNoDataError = errorMsg.toLowerCase().includes('failed to load table metadata') ||
-        errorMsg.toLowerCase().includes('connection broken') ||
-        errorMsg.toLowerCase().includes('invalidchunklength') ||
-        errorMsg.toLowerCase().includes('invalid literal') ||
-        errorMsg.toLowerCase().includes('err_code');
-      setSqlError(isNoDataError ? 'There is no table/data at this location' : (errorMsg || 'Failed to execute custom SQL query'));
+      setSqlError(err.message || 'Failed to fetch table data');
     } finally {
       setSqlLoading(false);
     }
@@ -775,17 +747,14 @@ const UNSPage = ({ node }) => {
       setSelectedItem(null);
       setSqlData(null);
       setSqlError(null);
-      setCustomSqlQuery('');
-      setSqlTab('timeRange');
     } else {
       // Otherwise, open/update the side panel with this item
       setSelectedItem(item);
       setIsSidePanelOpen(true);
       setSqlData(null);
       setSqlError(null);
-      setCustomSqlQuery(''); // Clear custom query when opening new item
-      setSqlTab('timeRange'); // Reset to time range tab
       setChartYKey(null); // Reset so chart defaults to policy column for new item
+      setTimeColumn('insert_timestamp'); // Reset time column when opening new item
       
       // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
@@ -1052,24 +1021,20 @@ const UNSPage = ({ node }) => {
           sqlData={sqlData}
           sqlLoading={sqlLoading}
           sqlError={sqlError}
-          sqlTab={sqlTab}
           timeRangeValue={timeRangeValue}
           timeRangeUnit={timeRangeUnit}
-          customSqlQuery={customSqlQuery}
+          timeColumn={timeColumn}
+          onTimeColumnChange={setTimeColumn}
           onClose={() => {
             setIsSidePanelOpen(false);
             setSelectedItem(null);
             setSqlData(null);
             setSqlError(null);
-            setCustomSqlQuery('');
-            setSqlTab('timeRange');
           }}
           onTimeRangeValueChange={setTimeRangeValue}
           onTimeRangeUnitChange={setTimeRangeUnit}
+          onFetchTimeRange={fetchMetadata}
           onFetchTimeRange={fetchSqlData}
-          onTabChange={setSqlTab}
-          onCustomQueryChange={setCustomSqlQuery}
-          onExecuteCustomQuery={fetchCustomSqlData}
           getItemName={getItemName}
           getItemType={getItemType}
           getItemId={getItemId}

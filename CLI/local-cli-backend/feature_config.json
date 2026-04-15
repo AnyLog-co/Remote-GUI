@@ -71,7 +71,7 @@
       "description": "File Uploader Plugin"
     },
     "sshclient": {
-      "enabled": true,
+      "enabled": false,
       "description": "SSH Client Plugin"
     },
     "uns": {

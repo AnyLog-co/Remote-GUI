@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
 import UNSColumnDetails from './UNSColumnDetails';
 import { exportToCSV, exportToPDF } from './unsExportUtils';
+import { getDataNodes } from './uns_api';
 
 const UNSSidePanel = ({
   isOpen,
@@ -12,17 +13,14 @@ const UNSSidePanel = ({
   sqlData,
   sqlLoading,
   sqlError,
-  sqlTab,
   timeRangeValue,
   timeRangeUnit,
-  customSqlQuery,
+  timeColumn,
   onClose,
   onTimeRangeValueChange,
   onTimeRangeUnitChange,
+  onTimeColumnChange,
   onFetchTimeRange,
-  onTabChange,
-  onCustomQueryChange,
-  onExecuteCustomQuery,
   getItemName,
   getItemType,
   getItemId,
@@ -37,7 +35,58 @@ const UNSSidePanel = ({
   const showTableSection = hasTableMeta && hasDataAtLocation;
   const chartRef = useRef(null);
 
+  const [dataNodes, setDataNodes] = useState(null);
+  const [dataNodesLoading, setDataNodesLoading] = useState(false);
+  const [dataNodesError, setDataNodesError] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen || !showTableSection || !conn || !itemData?.dbms || !itemData?.table) {
+      setDataNodes(null);
+      setDataNodesError(null);
+      return;
+    }
+    let cancelled = false;
+    setDataNodesLoading(true);
+    setDataNodesError(null);
+    getDataNodes(conn, { dbms: itemData.dbms, table: itemData.table })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && Array.isArray(res.data)) {
+          setDataNodes(res.data);
+        } else {
+          setDataNodesError(res.error || 'Failed to fetch data nodes');
+          setDataNodes([]);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDataNodesError(err.message || 'Failed to fetch data nodes');
+        setDataNodes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDataNodesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, showTableSection, conn, itemData?.dbms, itemData?.table]);
+
   const sanitizeForFilename = (s) => (s != null ? String(s).replace(/[/\\:*?"<>|]/g, '-').trim() : '');
+
+  /** Get table columns in order: selected time column first (if present), then others. Only show one time column. */
+  const getOrderedTableColumns = (firstRow) => {
+    if (!firstRow || typeof firstRow !== 'object') return [];
+    const keys = Object.keys(firstRow);
+    const keyMatches = (k, target) => k === target || (k && target && String(k).toLowerCase() === String(target).toLowerCase());
+    const timeCols = ['insert_timestamp', 'timestamp'];
+    const selectedTimeKey = keys.find((k) => keyMatches(k, timeColumn));
+    const otherTimeKey = keys.find((k) => keyMatches(k, timeColumn === 'insert_timestamp' ? 'timestamp' : 'insert_timestamp'));
+    const rest = keys.filter((k) => !timeCols.some((tc) => keyMatches(k, tc)));
+    const displayTimeKey = selectedTimeKey || otherTimeKey;
+    const others = rest;
+    if (displayTimeKey) {
+      return [displayTimeKey, ...others];
+    }
+    return keys;
+  };
 
   const getExportFilename = () => {
     const parts = [
@@ -144,6 +193,16 @@ const UNSSidePanel = ({
                         <option value="day">Days</option>
                         <option value="week">Weeks</option>
                       </select>
+                      <select
+                        id="time-column"
+                        value={timeColumn}
+                        onChange={(e) => onTimeColumnChange(e.target.value)}
+                        className="uns-time-column-select"
+                        title="Time column used for filtering"
+                      >
+                        <option value="insert_timestamp">insert_timestamp</option>
+                        <option value="timestamp">timestamp</option>
+                      </select>
                       <button
                         onClick={() => {
                           if (showTableSection) {
@@ -163,23 +222,7 @@ const UNSSidePanel = ({
 
             {showTableSection && (
               <div className="uns-side-panel-sql">
-                <div className="uns-sql-tabs">
-                  <button
-                    className={`uns-sql-tab ${sqlTab === 'timeRange' ? 'active' : ''}`}
-                    onClick={() => onTabChange('timeRange')}
-                  >
-                    Time Range Query
-                  </button>
-                  <button
-                    className={`uns-sql-tab ${sqlTab === 'advanced' ? 'active' : ''}`}
-                    onClick={() => onTabChange('advanced')}
-                  >
-                    Advanced Query
-                  </button>
-                </div>
-
-                {sqlTab === 'timeRange' && (
-                  <div className="uns-sql-tab-content">
+                <div className="uns-sql-tab-content">
                     <div className="uns-sql-header">
                       <strong>
                         Table Data (Last {timeRangeValue} {timeRangeUnit}
@@ -226,25 +269,32 @@ const UNSSidePanel = ({
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
+                                  {sqlData[0] && getOrderedTableColumns(sqlData[0]).map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
-                                {sqlData.map((row, index) => (
-                                  <tr key={index}>
-                                    {row && typeof row === 'object'
-                                      ? Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' && value !== null
-                                              ? JSON.stringify(value)
-                                              : String(value ?? '')}
-                                          </td>
-                                        ))
-                                      : <td>{String(row ?? '')}</td>}
-                                  </tr>
-                                ))}
+                                {sqlData.map((row, index) => {
+                                  const orderedKeys = sqlData[0] && typeof sqlData[0] === 'object'
+                                    ? getOrderedTableColumns(sqlData[0])
+                                    : (row && typeof row === 'object' ? Object.keys(row) : []);
+                                  return (
+                                    <tr key={index}>
+                                      {row && typeof row === 'object'
+                                        ? orderedKeys.map((key) => (
+                                            <td key={key}>
+                                              {key in row
+                                                ? (typeof row[key] === 'object' && row[key] !== null
+                                                    ? JSON.stringify(row[key])
+                                                    : String(row[key] ?? ''))
+                                                : ''}
+                                            </td>
+                                          ))
+                                        : <td>{String(row ?? '')}</td>}
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           )}
@@ -255,6 +305,7 @@ const UNSSidePanel = ({
                           chartYKey={chartYKey}
                           onChartYKeyChange={onChartYKeyChange}
                           preferredColumn={itemData?.column}
+                          timeColumnKey={timeColumn}
                         />
                         {itemData?.column && (
                           <UNSColumnDetails
@@ -270,119 +321,50 @@ const UNSSidePanel = ({
                         )}
                       </>
                     )}
+                  </div>
+              </div>
+            )}
+
+            {showTableSection && (
+              <div className="uns-data-nodes-section">
+                <strong>Data Nodes:</strong>
+                {dataNodesLoading && (
+                  <div className="uns-data-nodes-loading">Loading data nodes...</div>
+                )}
+                {dataNodesError && (
+                  <div className="uns-data-nodes-error">
+                    <strong>Error:</strong> {dataNodesError}
                   </div>
                 )}
-
-                {sqlTab === 'advanced' && (
-                  <div className="uns-sql-tab-content">
-                    <div className="uns-sql-header">
-                      <strong>Custom SQL Query:</strong>
-                      {sqlData && sqlData.length > 0 && (
-                        <>
-                          <span className="uns-sql-row-count">
-                            ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
-                          </span>
-                          <div className="uns-sql-export-btns">
-                            <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
-                              Export CSV
-                            </button>
-                            <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
-                              Export PDF
-                            </button>
-                          </div>
-                        </>
-                      )}
+                {!dataNodesLoading && !dataNodesError && Array.isArray(dataNodes) && (
+                  dataNodes.length === 0 ? (
+                    <div className="uns-data-nodes-empty">No data nodes found.</div>
+                  ) : (
+                    <div className="uns-data-nodes-table-container">
+                      <table className="uns-sql-table">
+                        <thead>
+                          <tr>
+                            {Object.keys(dataNodes[0]).map((key) => (
+                              <th key={key}>{key}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dataNodes.map((node, idx) => (
+                            <tr key={idx}>
+                              {Object.keys(dataNodes[0]).map((key) => (
+                                <td key={key}>
+                                  {typeof node[key] === 'object' && node[key] !== null
+                                    ? JSON.stringify(node[key])
+                                    : String(node[key] ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="uns-custom-query-container">
-                      <textarea
-                        value={customSqlQuery}
-                        onChange={(e) => onCustomQueryChange(e.target.value)}
-                        placeholder={`Enter your SQL query here...\nExample: SELECT * FROM ${
-                          itemData?.table || 'table_name'
-                        }${itemData?.where ? ` WHERE ${itemData.where}` : " WHERE column = 'value'"}`}
-                        className="uns-custom-query-input"
-                        rows={6}
-                      />
-                      <button
-                        onClick={() => {
-                          if (itemData?.dbms && customSqlQuery.trim()) {
-                            onExecuteCustomQuery(itemData.dbms, customSqlQuery);
-                          }
-                        }}
-                        disabled={sqlLoading || !itemData?.dbms || !customSqlQuery.trim()}
-                        className="uns-custom-query-execute-btn"
-                      >
-                        {sqlLoading ? 'Executing...' : '▶ Execute Query'}
-                      </button>
-                    </div>
-                    {sqlLoading && (
-                      <div className="uns-sql-loading">Executing query...</div>
-                    )}
-                    {sqlError && (
-                      <div className={sqlError.includes('no table/data') ? 'uns-sql-empty' : 'uns-sql-error'}>
-                        {sqlError.includes('no table/data') ? (
-                          sqlError
-                        ) : (
-                          <>
-                            <strong>Error:</strong> {sqlError}
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
-                      <>
-                        <div className="uns-sql-table-container">
-                          {sqlData.length === 0 ? (
-                            <div className="uns-sql-empty">No data returned from query.</div>
-                          ) : (
-                            <table className="uns-sql-table">
-                              <thead>
-                                <tr>
-                                  {sqlData[0] && typeof sqlData[0] === 'object' && Object.keys(sqlData[0]).map((key) => (
-                                    <th key={key}>{key}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {sqlData.map((row, index) => (
-                                  <tr key={index}>
-                                    {row && typeof row === 'object'
-                                      ? Object.values(row).map((value, cellIndex) => (
-                                          <td key={cellIndex}>
-                                            {typeof value === 'object' && value !== null
-                                              ? JSON.stringify(value)
-                                              : String(value ?? '')}
-                                          </td>
-                                        ))
-                                      : <td>{String(row ?? '')}</td>}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                        </div>
-                        <UNSLineChart
-                          ref={chartRef}
-                          sqlData={sqlData}
-                          chartYKey={chartYKey}
-                          onChartYKeyChange={onChartYKeyChange}
-                          preferredColumn={itemData?.column}
-                        />
-                        {itemData?.column && (
-                          <UNSColumnDetails
-                            conn={conn}
-                            dbms={itemData.dbms}
-                            table={itemData.table}
-                            column={itemData.column}
-                            where={itemData.where}
-                            timeValue={timeRangeValue}
-                            timeUnit={timeRangeUnit}
-                            sqlData={sqlData}
-                          />
-                        )}
-                      </>
-                    )}
-                  </div>
+                  )
                 )}
               </div>
             )}
