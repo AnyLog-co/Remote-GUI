@@ -7,7 +7,7 @@ import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
 import { validateNodeConnection } from '../utils/connectionAddress';
 
-const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode, onBookmarkAdded }) => {
+const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode, onBookmarkAdded }) => {
   const [newNode, setNewNode] = useState('');
   const [connectionError, setConnectionError] = useState(null);
   const [connectWarning, setConnectWarning] = useState(null);
@@ -16,6 +16,9 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
   const [bookmarkMsg, setBookmarkMsg] = useState(null);
   const [showAddNode, setShowAddNode] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -135,15 +138,44 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
     }
   };
 
+  const handleEditSave = () => {
+    const check = validateNodeConnection(editValue);
+    if (!check.ok) {
+      setEditError(check.message);
+      return;
+    }
+    if (check.value !== editingNode && nodes.includes(check.value)) {
+      setEditError('That node is already in the list.');
+      return;
+    }
+    onEditNode(editingNode, check.value);
+    setEditingNode(null);
+    setEditValue('');
+    setEditError(null);
+  };
+
+  const handleEditCancel = () => {
+    setEditingNode(null);
+    setEditValue('');
+    setEditError(null);
+  };
+
   const handleDropdownChange = (e) => {
     const value = e.target.value;
     if (value === 'add-node') {
       setShowAddNode(true);
+      setEditingNode(null);
     } else if (value === 'remove-node') {
       if (onRemoveNode) onRemoveNode(selectedNode);
+    } else if (value === 'edit-node') {
+      setEditingNode(selectedNode);
+      setEditValue(selectedNode);
+      setEditError(null);
+      setShowAddNode(false);
     } else {
       onSelectNode(value);
       setShowAddNode(false);
+      setEditingNode(null);
     }
   };
 
@@ -201,6 +233,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
             </option>
           ))}
           <option value="add-node">+ Add New Node</option>
+          {onEditNode && <option value="edit-node">~ Edit Current Node</option>}
           {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
         </select>
         
@@ -218,6 +251,33 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onSelectNode
         <div className="node-picker-warning">
           {connectWarning}
           <button className="node-picker-warning-dismiss" onClick={dismissWarning}>✕</button>
+        </div>
+      )}
+
+      {editingNode && (
+        <div className="add-node-section">
+          <input
+            className={`node-picker-input${editError ? ' invalid' : ''}`}
+            type="text"
+            placeholder="IP:Port only (e.g. 192.168.1.1:32349) — no http://"
+            value={editValue}
+            onChange={(e) => {
+              setEditValue(e.target.value);
+              if (editError) setEditError(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleEditSave()}
+          />
+          <button className="node-picker-btn primary" onClick={handleEditSave}>
+            Save
+          </button>
+          <button className="node-picker-btn cancel" onClick={handleEditCancel}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {editingNode && editError && (
+        <div className="node-picker-connection-error" role="alert">
+          {editError}
         </div>
       )}
 
