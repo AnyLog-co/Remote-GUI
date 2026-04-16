@@ -11,9 +11,13 @@ from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 from parsers import parse_response
 from classes import *
@@ -40,15 +44,41 @@ import helpers
 
 app = FastAPI()
 
-FRONTEND_URL = os.getenv('FRONTEND_URL', '*')
-# Allow CORS (React frontend -> FastAPI backend)
+FRONTEND_URL = os.getenv('FRONTEND_URL', '')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*')
+
+cors_origins = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()] if FRONTEND_URL else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "*"],  # Change this to your React app's URL for security
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+if ALLOWED_HOSTS != '*':
+    hosts = [h.strip() for h in ALLOWED_HOSTS.split(",") if h.strip()]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
+
+SCANNER_PATHS = {
+    "/json/", "/login", "/SDK/webLanguage", "/.env", "/wp-login.php",
+    "/wp-admin", "/administrator", "/phpmyadmin", "/actuator", "/solr/",
+    "/console", "/manager/html", "/cgi-bin/", "/.git", "/debug",
+    "/telescope/requests", "/vendor/", "/api/v1/", "/config.json",
+    "/remote/fgt_lang", "/boaform/", "/owa/auth/logon.aspx",
+}
+
+
+@app.middleware("http")
+async def block_scanners_middleware(request: Request, call_next):
+    """Reject common bot/scanner probe paths before they hit the app."""
+    path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+    for probe in SCANNER_PATHS:
+        if path == probe.rstrip("/") or path.startswith(probe):
+            logger.warning("Blocked scanner probe: %s from %s", request.url.path, request.client.host)
+            return Response(status_code=404)
+    return await call_next(request)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
