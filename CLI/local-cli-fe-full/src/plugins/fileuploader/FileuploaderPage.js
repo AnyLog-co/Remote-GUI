@@ -103,6 +103,9 @@ function FileuploaderPage({ node }) {
   const handleRename = (id, oldName, newName) => {
     const index = files.findIndex((element) => element.id === id);
 
+    // remove spaces
+    newName = newName.replaceAll(' ', '');
+
     // check for file extension matching, append correct file extension if it doesn't match
     const oldFileExtension = oldName.split('.').pop();
     const newFileExtension = newName.split('.').pop();

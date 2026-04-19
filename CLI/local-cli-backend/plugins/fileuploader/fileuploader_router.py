@@ -1,16 +1,12 @@
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List, Tuple
-import shutil
-import uuid
+from typing import Dict, List
 import pathlib
 from requests_toolbelt import MultipartEncoder
 from .documentvalidator import validate_file
 import helpers
 import requests
 from pathlib import Path
-from pydantic import BaseModel
-import re
 from .pathparser import PathParser
 
 # Create the API router
@@ -34,11 +30,7 @@ async def fileuploader_info():
         ]
     }
 
-def get_directories(dir_response: str, dir_parent: str) -> List[str]:
-    if "Directory does not exist" in dir_response:
-        return []
-    return [line.replace("\r", "").replace(dir_parent, "")[1:] for line in dir_response.split("\n")]
-
+# executes server info retrieval command
 def get_server_info(conn: str) -> Dict[str, str]:
     helper_response_raw = helpers.make_request(conn=conn, method="GET", command="get rest server info")
     if not isinstance(helper_response_raw, str):
@@ -50,6 +42,7 @@ def get_server_info(conn: str) -> Dict[str, str]:
     server_info = {pair[0]: pair[1] for pair in info_pairs if len(pair) >= 2}
     return server_info
 
+# gets the connection (also checks if it is http or https)
 conn_map: Dict[str, str] = {}
 def get_raw_connection(conn: str) -> str:
     try:
@@ -65,6 +58,13 @@ def get_raw_connection(conn: str) -> str:
     except KeyError:
         return f"http://{conn}"
 
+# takes in string response of directories (including parents) and turns it into a list of just the directories
+def _get_directories(dir_response: str, dir_parent: str) -> List[str]:
+    if "Directory does not exist" in dir_response:
+        return []
+    return [line.replace("\r", "").replace(dir_parent, "")[1:] for line in dir_response.split("\n")]
+
+# executes a directory creation command
 def _create_dir(conn: str, dir: str = "/app/AnyLog-Network/data/upload_dir") -> requests.Response | None:
     headers = {
         "command": f"system mkdir -p {dir}",
@@ -79,26 +79,7 @@ def _create_dir(conn: str, dir: str = "/app/AnyLog-Network/data/upload_dir") -> 
         return None
     return response
 
-def create_upload_dir(conn: str) -> bool:
-    # Check if directory already exists in the node
-    command = "get directories /app/AnyLog-Network/data/"
-    helper_response = helpers.make_request(conn=conn, method="GET", command=command)
-    if not isinstance(helper_response, dict): 
-        directories = get_directories(helper_response)
-    else:
-        directories = None
-
-    if directories is not None and "upload_dir" in directories:
-        return True
-
-    # If directory doesn't exit, create it
-    print("Couldn't find upload_dir, attempting to create it...")
-    request_response = _create_dir(conn)
-    if request_response is not None and request_response.status_code == 200:
-        return True
-    else:
-        return False
-
+# checks if directory exists before creating it (returns True if successful)
 def create_dir(conn: str, dir: str) -> bool:
     path = PathParser(dir)
     if path.hasExt():
@@ -109,7 +90,7 @@ def create_dir(conn: str, dir: str) -> bool:
     command = f"get directories {parent}"
     helper_response = helpers.make_request(conn=conn, method="GET", command=command)
     if not isinstance(helper_response, dict): 
-        directories = get_directories(helper_response, str(parent))
+        directories = _get_directories(helper_response, str(parent))
     else:
         directories = None
 
@@ -124,6 +105,7 @@ def create_dir(conn: str, dir: str) -> bool:
     else:
         return False
 
+# makes get request and returns a list of the file names
 def exec_get_files(conn: str, dir: PathParser) -> List[str]:
     command = f"get files {dir}"
     helper_response = helpers.make_request(conn=conn, method="GET", command=command)
@@ -134,6 +116,7 @@ def exec_get_files(conn: str, dir: PathParser) -> List[str]:
     files = _get_files(helper_response, dir)
     return files
 
+# takes in string response of file names (including their paths) and turns it into a list of just the file names
 def _get_files(helper_response: str, dir: PathParser) -> List[str]:
     if "No files with path provided:" in helper_response:
         return []
@@ -142,8 +125,6 @@ def _get_files(helper_response: str, dir: PathParser) -> List[str]:
 # numbering system for duplicate file names: append a "-n" to the end, where n is the smallest valid number
 def get_numbered_filename(file: UploadFile, files: List[str]) -> str:
     path = Path(file.filename)
-
-    print(files)
 
     i = 1
     while f"{path.stem}-{i}{path.suffix}" in files:
@@ -154,46 +135,35 @@ def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> st
 
     try:
 
-        # write to temp file so that we can access its file path
-        with open(file.filename, 'wb') as f:
-            shutil.copyfileobj(file.file, f)
-
-        with open(file.filename, 'rb') as f:
-
-            fileField = MultipartEncoder(
-                fields={
-                    'file': (file.filename, f, "text/plain")
-                }
-            )
-
-            command = f"file to {dir}/{filename}"
-
-            headers = {
-                'User-Agent': 'AnyLog/1.23',
-                'Content-Type': fileField.content_type,
-                'command': command,
-                'Accept': '*/*'
+        # mimics file uploading via curl
+        fileField = MultipartEncoder(
+            fields={
+                'file': (file.filename, file.file, file.content_type)
             }
+        )
 
-            r = requests.post(get_raw_connection(conn), headers=headers, data=fileField)
-            if (r.status_code != 200):
-                # r.text prints whole response, including body as a dictionary string
-                r_text = r.text.split('\r\n\r\n')[-1]
-                r_text = r_text.strip("{}")
+        command = f"file to {dir}/{filename}"
 
-                # # removes quotes in each key-value pair and makes string dictionary into dictionary
-                r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
-                print(f"REPORTED PUSH FAILURE ({r.status_code}, {r_dict.get("err_code")})")
-                raise Exception(r_dict.get("err_text"))
-            return filename
+        headers = {
+            'User-Agent': 'AnyLog/1.23',
+            'Content-Type': file.content_type,
+            'command': command,
+            'Accept': '*/*'
+        }
+
+        r = requests.post(get_raw_connection(conn), headers=headers, data=fileField)
+        if (r.status_code != 200):
+            # r.text prints whole response, including body as a dictionary string
+            r_text = r.text.split('\r\n\r\n')[-1]
+            r_text = r_text.strip("{}")
+
+            # # removes quotes in each key-value pair and makes string dictionary into dictionary
+            r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
+            print(f"REPORTED PUSH FAILURE ({r.status_code}, {r_dict.get("err_code")})")
+            raise Exception(r_dict.get("err_text"))
+        return filename
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
-    finally:
-
-        # delete temp file if it exists
-        if Path(file.filename).exists():
-            pathlib.Path(file.filename).unlink()
-        file.file.close()
 
 @api_router.post("/get-directories")
 async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
@@ -203,11 +173,9 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
     directory_path = request.directory_path
 
     # file validation (does not use AfterValidator since we want our loader to have an empty directory sent back)
-    if re.search("^/app/.*$", directory_path) is None:
-        return []
-    elif re.search("^/app(/([^/]+))*/?$", directory_path) is None:
-        return []
-    elif ".." in directory_path:
+    try:
+        PathParser(directory_path)
+    except ValueError:
         return []
     
     # ex: /app/AnyLog-Network/data/test -> /app/AnyLog-Network/data
@@ -223,6 +191,7 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
                 return []
             directories = [line.replace("\r", "") for line in helper_response.split("\n")]
 
+            # directory list may have a '' in the front, so remove it
             if directories[0] == '':
                 directories.pop(0)
             
@@ -268,9 +237,10 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
             stored_name = ""
 
             # first, check if file name exists
+            # can optimize api calls by keeping a local copy of this list
             file_list = exec_get_files(conn, dir_path)
             file_already_exists = file.filename in file_list
-            if file_already_exists:
+            if file_already_exists and option != 'replace':
 
                 # if on skip option, abort the upload for this file and give warning (instead of error)
                 if option == 'skip':
@@ -284,11 +254,18 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
                 
                 # if on keep option, get a numbered file name
                 if option == 'keep':
-                    stored_name = get_numbered_filename(file, file_list) if file_already_exists else file.filename
-                    print(stored_name)
-                    stored_name = push_file(conn, file, stored_name, dir_path)
-                elif option == 'replace':
-                    stored_name = push_file(conn, file, file.filename, dir_path)
+                    name = get_numbered_filename(file, file_list) if file_already_exists else file.filename
+                    stored_name = push_file(conn, file, name, dir_path)
+
+                # if an option was somehow not selected, skip uploading this file and give a warning
+                else:
+                    results.append({
+                        "filename": file.filename,
+                        "success": False,
+                        "skipped": True,
+                        "warning": "No option selected for handling files with the same name"
+                    })
+                    continue
             else:
                 # otherwise, push file as normal
                 stored_name = push_file(conn, file, file.filename, dir_path)

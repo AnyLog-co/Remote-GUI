@@ -14,7 +14,7 @@ function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
   const [inputValue, setInputValue] = useState("");
   const selectRef = useRef();
 
-  // keeps track of current options to re-arrange if needed
+  // keeps track of current options to rearrange if needed
   const options = useRef([]);
   const prevDirectoryCount = useRef(0);
 
@@ -23,15 +23,16 @@ function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
     value: defaultDirectory
   }
 
-  // load current directory for navigation (only filter if a / wasn't put in)
+  // load current directory for navigation (only rearrange current list if a / wasn't put in)
   const loadDirectories = async (input) => {
 
     const directory = input.trim();
 
-    // re-arrange elements if there is no need to re-fetch
+    // rearrange elements if there is no need to re-fetch
     // condition is based on checking if user is leaving or entering directory (discrepancy in number of /'s)
     const directoryCount = (directory.match(/\//g) || []).length;
 
+    // rearrangement: put matching directories to the front of the list and avoid making api call
     if (directoryCount === prevDirectoryCount.current) {
       // create a deep copy of the array
       const list = [];

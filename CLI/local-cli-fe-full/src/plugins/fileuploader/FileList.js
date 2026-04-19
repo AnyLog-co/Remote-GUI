@@ -9,18 +9,38 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
   const [activeValue, setActiveValue] = useState("");
 
   const getFileExtensionEmoji = (fileName) => {
-    const fileExtension = fileName.split('.').pop();
+    const fileExtension = fileName.split('.').pop().toLowerCase();
     
     // https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types
     const imageExtension = ['apng', 'png', 'avif', 'gif', 'jpg', 'jpeg', 'jfif',
-      'pjpeg', 'pjp', 'svg', 'webp', 'bmp', 'ico', 'cur', 'tif', 'tiff'
+      'pjpeg', 'pjp', 'svg', 'webp', 'bmp', 'ico', 'cur', 'tif', 'tiff',
     ];
 
     // https://www.geeksforgeeks.org/techtips/text-file-formats/
     const textExtension = ['asc', 'doc', 'docx', 'rtf', 'msg', 'pdf', 'txt', 'wpd', 'wps'];
 
+    // https://en.wikipedia.org/wiki/Audio_file_format
+    const soundExtension = [
+      '3gp', 'aa', 'aac', 'aax', 'act', 'aiff', 'alac', 'amr', 'ape', 'au',
+      'awb', 'cda', 'dss', 'dvf', 'flac', 'gsm', 'iklax', 'ivs', 'm4a', 'm4b',
+      'm4p', 'mmf', 'mogg', 'movpkg', 'mp1', 'mp2', 'mp3', 'mpc', 'msv', 'nmf',
+      'oga', 'ogg', 'opus', 'ra', 'raw', 'rf64', 'rm', 'sln', 'tta', 'voc',
+      'vox', 'wav', 'webm', 'wma', 'wv', '8svx',
+    ];
+
+    // https://en.wikipedia.org/wiki/Video_file_format
+    const videoExtension = [
+      '3g2', '3gp', 'amv', 'asf', 'avi', 'drc', 'f4a', 'f4b', 'f4p', 'f4v',
+      'flv', 'gifv', 'm2ts', 'm2v', 'm4p', 'm4v', 'mkv', 'mng', 'mov', 'mp2',
+      'mp4', 'mpe', 'mpeg', 'mpg', 'mpv', 'mts', 'mxf', 'nsv', 'ogg', 'ogv',
+      'qt', 'rm', 'rmvb', 'roq', 'svi', 'ts', 'viv', 'vob', 'webm', 'wmv',
+      'yuv',
+    ];
+
     if (imageExtension.includes(fileExtension)) return '🖼️';
     else if (textExtension.includes(fileExtension)) return '📄';
+    else if (soundExtension.includes(fileExtension)) return '🔊';
+    else if (videoExtension.includes(fileExtension)) return '🎬';
     else {
       return '';
     }

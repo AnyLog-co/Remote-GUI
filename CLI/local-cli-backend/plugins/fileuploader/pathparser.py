@@ -27,6 +27,11 @@ def _parse(path: str, dest: List[str]) -> None:
         dest.clear()
         raise ValueError("File path must start with /app/")
 
+    # we want this file upload system to disallow '..' to stay in /app
+    if '..' in parsed_elements:
+        dest.clear()
+        raise ValueError("File path cannot contain '..'")
+
     found_ext = False
     for element in parsed_elements:
         if found_ext:
