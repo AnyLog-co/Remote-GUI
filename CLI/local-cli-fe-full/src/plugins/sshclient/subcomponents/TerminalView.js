@@ -22,6 +22,7 @@ const TerminalView = ({
   const { setIsConnected, removeActiveConnection } = cliState();
   const API_URL = window.env?.REACT_APP_API_URL || 'http://localhost:8000/';
   var strippedURL = (strippedURL = API_URL.replace('http://', ''));
+  const [isReady, setIsReady] = useState(false);
 
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,
@@ -145,6 +146,7 @@ const TerminalView = ({
           setTerminalLoading(false);
           setShowAuthModal(false);
           hasReceivedFirstMessage = true;
+          setIsReady(true);
         }
 
         term.write(e.data);
@@ -208,6 +210,7 @@ const TerminalView = ({
       id="terminal-overall-div"
       ref={terminalRef}
       className="terminal-overall-div"
+      style={{ visibility: isReady ? 'visible' : 'hidden' }}
     />
   );
 };
