@@ -59,7 +59,7 @@ def _parse(path: str, dest: List[str]) -> None:
     if len(path) <= 0:
         return None
     if path[0] == '.':
-        path = path[1:]
+        raise ValueError("Path may not start with .")
     if len(path) <= 0:
         return None
     if path[0] == '/' or path[0] == '\\':
