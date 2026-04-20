@@ -48,6 +48,8 @@ def _parse(path: str, dest: List[str]) -> None:
             found_ext = True
         dest.append(element)
 
+class PathAppendException(ValueError):
+    pass
 
 class PathParser:
     def __init__(self, path: str) -> None:
@@ -60,14 +62,27 @@ class PathParser:
         return "."
 
     def stem(self) -> str | None:
+        '''
+        Returns the full name of the last file or directory in the path if it
+        exists. Returns None if it does not exist.
+        '''
         if len(self.elements)  > 0:
             return self.elements[-1]
         return None
 
     def append(self, new_element: str) -> None:
+        '''
+        Adds a new element at the end of the path. If the path ends in a file,
+        raises a PathAppendException.
+        '''
+        if self.hasExt():
+            raise PathAppendException("Cannot append element to path with an extension.")
         self.elements.append(new_element)
 
     def parent(self) -> "PathParser":
+        '''
+        Returns the path of the path's parent element.
+        '''
         res = PathParser("")
         if (len(self.elements) > 1):
             res.elements = self.elements[:-1]
@@ -76,10 +91,18 @@ class PathParser:
         return res
     
     def hasExt(self) -> bool:
+        '''
+        Returns True if the path ends with a file extension. Returns False
+        otherwise.
+        '''
         if len(self.elements) > 0:
             return '.' in self.elements[-1]
         return False
     
     def getExt(self) -> str | None:
+        '''
+        Returns the file extension of the path if it exists. Returns None if it
+        does not exist.
+        '''
         if self.hasExt():
             return 
