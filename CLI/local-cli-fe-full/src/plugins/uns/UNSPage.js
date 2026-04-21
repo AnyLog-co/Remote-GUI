@@ -606,11 +606,13 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchSqlData = async (dbms, table, whereClause, column) => {
+  const fetchSqlData = async (dbms, table, whereClause, column, { silent = false } = {}) => {
     if (!node || !dbms || !table) return;
 
-    setSqlLoading(true);
-    setSqlError(null);
+    if (!silent) {
+      setSqlLoading(true);
+      setSqlError(null);
+    }
 
     try {
       const result = await queryTable(node, {
@@ -632,14 +634,19 @@ const UNSPage = ({ node }) => {
       if (result.success) {
         console.log(`UNS: Setting ${result.data ? result.data.length : 0} rows in state`);
         setSqlData(result.data);
+        if (silent) setSqlError(null);
       } else {
         setSqlError(result.error || 'Failed to fetch table data');
       }
     } catch (err) {
       console.error('Error fetching SQL data:', err);
-      setSqlError(err.message || 'Failed to fetch table data');
+      if (!silent) {
+        setSqlError(err.message || 'Failed to fetch table data');
+      }
     } finally {
-      setSqlLoading(false);
+      if (!silent) {
+        setSqlLoading(false);
+      }
     }
   };
 
@@ -939,6 +946,7 @@ const UNSPage = ({ node }) => {
 
       {error && (
         <div className="uns-error">
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           ❌ Error: {error}
         </div>
       )}

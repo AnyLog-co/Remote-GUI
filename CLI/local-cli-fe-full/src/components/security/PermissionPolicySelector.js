@@ -66,6 +66,7 @@ function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabl
   if (error) {
     return (
       <div className="permission-policy-selector error">
+        <span className="error-dismiss" onClick={() => setError(null)}>×</span>
         <p>Error: {error}</p>
         <button onClick={fetchPermissions} disabled={loading}>Retry</button>
       </div>

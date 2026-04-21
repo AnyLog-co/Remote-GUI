@@ -156,6 +156,7 @@ const GrafanaPage = ({ node }) => {
           flexShrink: 0,
           fontWeight: '500'
         }}>
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           <strong>Error:</strong> {error}
         </div>
       )}
@@ -170,6 +171,7 @@ const GrafanaPage = ({ node }) => {
           color: '#856404',
           flexShrink: 0
         }}>
+          <span className="error-dismiss" onClick={() => setIframeError(false)}>×</span>
           <strong>⚠️ Iframe Embedding Blocked:</strong>
           <p style={{ margin: '10px 0 0 0', fontSize: '14px' }}>
             Grafana is preventing this page from being embedded in an iframe for security reasons. 

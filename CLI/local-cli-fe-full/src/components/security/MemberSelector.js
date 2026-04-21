@@ -82,6 +82,7 @@ function MemberSelector({ node, currentUserPubkey, selectedMembers = [], onChang
         </label>
         <div className="error-message">
           <span className="error-text">{error}</span>
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           <button onClick={fetchMembers} className="retry-button">Retry</button>
         </div>
       </div>

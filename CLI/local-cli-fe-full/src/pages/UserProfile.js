@@ -76,7 +76,7 @@ const UserProfile = ({ onBookmarkRefresh }) => {
         console.log("Error: ", error);
         return (
             <div className="userprofile-container">
-                <div className="userprofile-container error">{error}</div>
+                <div className="userprofile-container error"><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</div>
             </div>
         );
     }
@@ -130,7 +130,7 @@ const UserProfile = ({ onBookmarkRefresh }) => {
                 {loadingBookmarks ? (
                     <div>Loading bookmarks…</div>
                 ) : bookmarksError ? (
-                    <div className="error">{bookmarksError}</div>
+                    <div className="error"><span className="error-dismiss" onClick={() => setBookmarksError(null)}>×</span>{bookmarksError}</div>
                 ) : bookmarks.length === 0 ? (
                     <div>No bookmarks yet.</div>
                 ) : (

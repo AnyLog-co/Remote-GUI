@@ -624,6 +624,7 @@ const Client = ({ node }) => {
 
       {error && (
         <div className="error-message">
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           <strong>Error:</strong> {error}
         </div>
       )}
@@ -807,7 +808,7 @@ const Client = ({ node }) => {
               </div>
               
               {bookmarkError && (
-                <div className="error-message">{bookmarkError}</div>
+                <div className="error-message"><span className="error-dismiss" onClick={() => setBookmarkError('')}>×</span>{bookmarkError}</div>
               )}
             </div>
             

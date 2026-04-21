@@ -444,7 +444,7 @@ const VideostreamviewerPage = () => {
             ))}
           </select>
         </div>
-        {error && <div className="video-stream-error">{error}</div>}
+        {error && <div className="video-stream-error"><span className="error-dismiss" onClick={() => setError('')}>×</span>{error}</div>}
       </section>
 
       {streams.length === 0 ? (

@@ -394,6 +394,7 @@ const BlockchainManager = ({ node }) => {
 
       {error && (
         <div className="error-message">
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           <strong>Error:</strong> {error}
         </div>
       )}

@@ -39,6 +39,40 @@ const UNSSidePanel = ({
   const [dataNodesLoading, setDataNodesLoading] = useState(false);
   const [dataNodesError, setDataNodesError] = useState(null);
 
+  const [liveMode, setLiveMode] = useState(false);
+  const [refreshRate, setRefreshRate] = useState(20);
+  const liveIntervalRef = useRef(null);
+
+  useEffect(() => {
+    if (liveIntervalRef.current) {
+      clearInterval(liveIntervalRef.current);
+      liveIntervalRef.current = null;
+    }
+
+    if (!liveMode || !isOpen || !showTableSection || !itemData?.dbms || !itemData?.table) {
+      return;
+    }
+
+    const validRate = Math.max(5, refreshRate);
+
+    liveIntervalRef.current = setInterval(() => {
+      onFetchTimeRange(itemData.dbms, itemData.table, itemData.where, itemData.column, { silent: true });
+    }, validRate * 1000);
+
+    return () => {
+      if (liveIntervalRef.current) {
+        clearInterval(liveIntervalRef.current);
+        liveIntervalRef.current = null;
+      }
+    };
+  }, [liveMode, refreshRate, isOpen, showTableSection, itemData?.dbms, itemData?.table, itemData?.where, itemData?.column, onFetchTimeRange]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setLiveMode(false);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen || !showTableSection || !conn || !itemData?.dbms || !itemData?.table) {
       setDataNodes(null);
@@ -216,6 +250,30 @@ const UNSSidePanel = ({
                       </button>
                     </div>
                   </div>
+                  <div className="uns-live-controls">
+                    <button
+                      onClick={() => setLiveMode((prev) => !prev)}
+                      className={`uns-live-toggle ${liveMode ? 'active' : ''}`}
+                      title={liveMode ? 'Stop live refresh' : 'Start live refresh'}
+                    >
+                      {liveMode && <span className="uns-live-dot" />}
+                      {liveMode ? 'Live' : 'Go Live'}
+                    </button>
+                    <label className="uns-refresh-rate-label" htmlFor="refresh-rate">
+                      every
+                    </label>
+                    <input
+                      id="refresh-rate"
+                      type="number"
+                      min="5"
+                      step="1"
+                      value={refreshRate}
+                      onChange={(e) => setRefreshRate(Math.max(5, parseInt(e.target.value, 10) || 20))}
+                      className="uns-refresh-rate-input"
+                      disabled={liveMode}
+                    />
+                    <span className="uns-refresh-rate-unit">sec</span>
+                  </div>
                 </>
               )}
             </div>
@@ -226,8 +284,13 @@ const UNSSidePanel = ({
                     <div className="uns-sql-header">
                       <strong>
                         Table Data (Last {timeRangeValue} {timeRangeUnit}
-                        {timeRangeValue !== 1 ? 's' : ''}):
+                        {timeRangeValue !== 1 ? 's' : ''}){liveMode ? '' : ':'}
                       </strong>
+                      {liveMode && (
+                        <span className="uns-live-badge">
+                          <span className="uns-live-dot" /> LIVE — {refreshRate}s
+                        </span>
+                      )}
                       {sqlData && sqlData.length > 0 && (
                         <>
                           <span className="uns-sql-row-count">
@@ -253,6 +316,7 @@ const UNSSidePanel = ({
                           sqlError
                         ) : (
                           <>
+                            <span className="error-dismiss" onClick={onClose}>×</span>
                             <strong>Error:</strong> {sqlError}
                           </>
                         )}
@@ -333,6 +397,7 @@ const UNSSidePanel = ({
                 )}
                 {dataNodesError && (
                   <div className="uns-data-nodes-error">
+                    <span className="error-dismiss" onClick={() => setDataNodesError(null)}>×</span>
                     <strong>Error:</strong> {dataNodesError}
                   </div>
                 )}

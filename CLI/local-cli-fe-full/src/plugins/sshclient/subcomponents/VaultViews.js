@@ -80,7 +80,7 @@ const VaultView = ({ onClose }) => {
             onKeyDown={(e) => e.key === 'Enter' && onUnlock()}
           />
 
-          {error && <p className="vault-error-text">{error}</p>}
+          {error && <p className="vault-error-text"><span className="error-dismiss" onClick={() => setError('')}>×</span>{error}</p>}
 
           <button onClick={onUnlock} className="vault-unlock-btn">
             Unlock Vault
