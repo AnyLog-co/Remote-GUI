@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List
-import pathlib
 from requests_toolbelt import MultipartEncoder
 from .documentvalidator import validate_file
 import helpers
@@ -65,7 +64,7 @@ def _get_directories(dir_response: str, dir_parent: str) -> List[str]:
     return [line.replace("\r", "").replace(dir_parent, "")[1:] for line in dir_response.split("\n")]
 
 # executes a directory creation command
-def _create_dir(conn: str, dir: str = "/app/AnyLog-Network/data/upload_dir") -> requests.Response | None:
+def exec_create_dir(conn: str, dir: str = "/app/AnyLog-Network/data/upload_dir") -> requests.Response | None:
     headers = {
         "command": f"system mkdir -p {dir}",
         "User-Agent": "AnyLog/1.23",
@@ -99,7 +98,7 @@ def create_dir(conn: str, dir: str) -> bool:
 
     # If directory doesn't exist, create it
     print(f"Couldn't find directory {path}, attempting to create it...")
-    request_response = _create_dir(conn, str(path))
+    request_response = exec_create_dir(conn, str(path))
     if request_response is not None and request_response.status_code == 200:
         return True
     else:
@@ -173,15 +172,14 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
     directory_path = request.directory_path
 
     # file validation (does not use AfterValidator since we want our loader to have an empty directory sent back)
+    parsed_path = directory_path
     try:
-        PathParser(directory_path)
+        parsed_path = PathParser(directory_path)
     except ValueError:
         return []
     
     # ex: /app/AnyLog-Network/data/test -> /app/AnyLog-Network/data
-    parent_path = directory_path
-    if directory_path[len(directory_path) - 1] != '/':
-        parent_path = Path(directory_path).parent
+    parent_path = PathParser(directory_path).parent()
 
     try:
         command = f"get directories {parent_path}"
@@ -198,7 +196,7 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
             # put matching directories at the front (iterate backwards to prevent index shifting)
             matches = []
             for i in range(len(directories) - 1, -1, -1):
-                if directory_path.lower() in directories[i].lower():
+                if str(parsed_path).lower() in directories[i].lower():
                     matches.append(directories.pop(i))
             
             # reverse list of matching directories to preserve its order in the original list

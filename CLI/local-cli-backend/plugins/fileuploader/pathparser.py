@@ -64,8 +64,8 @@ def _parse(path: str, dest: List[str]) -> None:
         return None
     if path[0] == '/' or path[0] == '\\':
         path = path[1:]
-    if len(path) <= 0:
-        return None
+    if len(path) <= 3:
+        raise ValueError("File path must start with /app/")
     
     parsed_elements = _get_parsed_elements(path)
     if parsed_elements is None:

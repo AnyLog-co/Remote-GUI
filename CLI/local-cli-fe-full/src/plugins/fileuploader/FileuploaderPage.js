@@ -4,7 +4,7 @@ import FileList from './FileList';
 import FileDropzone from './FileDropzone';
 import SelectDirectory from './SelectDirectory';
 
-const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = window._env_?.VITE_API_URL || "http://localhost:8000";
 
 function FileuploaderPage({ node }) {
 

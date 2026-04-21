@@ -3,7 +3,7 @@ import '../../styles/FileuploaderPage.css';
 import AsyncCreatableSelect from 'react-select/async-creatable';
 import { components } from 'react-select';
 
-const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = window._env_?.VITE_API_URL || "http://localhost:8000";
 
 // solution: https://github.com/JedWatson/react-select/discussions/4302
 const Input = (props) => <components.Input {...props} isHidden={false} />;
