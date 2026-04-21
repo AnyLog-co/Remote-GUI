@@ -20,7 +20,7 @@ const TerminalView = ({
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window.env?.REACT_APP_API_URL || 'http://localhost:8000/';
+  const API_URL = window._env_?.VITE_API_URL || 'http://localhost:8080';
   var strippedURL = (strippedURL = API_URL.replace('http://', ''));
   const [isReady, setIsReady] = useState(false);
 
@@ -121,7 +121,7 @@ const TerminalView = ({
           data: credential,
         };
       }
-      const ws = new WebSocket(`ws://${strippedURL}sshclient/ws`);
+      const ws = new WebSocket(`ws://${strippedURL}/sshclient/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
