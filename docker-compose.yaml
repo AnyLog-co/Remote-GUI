@@ -6,12 +6,11 @@ services:
     stdin_open: true
     tty: true
     environment:
-      VITE_API_URL: http://localhost:8080\
+      VITE_API_URL: http://127.0.0.1:8080
     ports:
       - "3000:3000"
-      - "3001:3001"
-      - "8080:8080"
       - "31800:31800"
+      - "8080:8080"
     volumes:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/
