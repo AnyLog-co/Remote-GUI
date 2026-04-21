@@ -5,6 +5,7 @@ import '../styles/BlockchainManager.css';
 const BlockchainManager = ({ node }) => {
   const [selectedGetOption, setSelectedGetOption] = useState('');
   const [nameInput, setNameInput] = useState('');
+  const [idInput, setIdInput] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,17 +25,19 @@ const BlockchainManager = ({ node }) => {
   // Update query when inputs change
   useEffect(() => {
     if (selectedGetOption) {
-      if (nameInput.trim()) {
-        const newQuery = `blockchain get ${selectedGetOption} where name=${nameInput}`;
-        setQuery(newQuery);
+      const conditions = [];
+      if (nameInput.trim()) conditions.push(`name=${nameInput}`);
+      if (idInput.trim()) conditions.push(`id=${idInput}`);
+
+      if (conditions.length > 0) {
+        setQuery(`blockchain get ${selectedGetOption} where ${conditions.join(' and ')}`);
       } else {
-        const newQuery = `blockchain get ${selectedGetOption}`;
-        setQuery(newQuery);
+        setQuery(`blockchain get ${selectedGetOption}`);
       }
     } else {
       setQuery('');
     }
-  }, [selectedGetOption, nameInput]);
+  }, [selectedGetOption, nameInput, idInput]);
 
   // Filter results based on search input
   useEffect(() => {
@@ -362,6 +365,18 @@ const BlockchainManager = ({ node }) => {
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="Enter name (e.g., demo1-operator2) - leave empty for all"
+              className="form-input"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="id-input">ID (optional):</label>
+            <input
+              id="id-input"
+              type="text"
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+              placeholder="Enter policy ID - leave empty for all"
               className="form-input"
             />
           </div>
