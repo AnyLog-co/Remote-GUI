@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { fetchAvailablePermissions } from '../../services/security_api';
+import { fetchAvailablePermissions as defaultFetchAvailablePermissions } from '../../services/security_api';
 import '../../styles/security/PermissionPolicySelector.css';
 
-function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabled = false, refreshTrigger = 0 }) {
+function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabled = false, refreshTrigger = 0, fetchAvailablePermissionsFn }) {
+  const fetchAvailablePermissions = fetchAvailablePermissionsFn || defaultFetchAvailablePermissions;
   const [availablePermissions, setAvailablePermissions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

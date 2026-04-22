@@ -169,10 +169,23 @@ def make_policy(conn:str, policy: Dict):
 
 
     # Configure the policy with its data
-    for key, value in policy.data.items():
-        command = f'set policy new_policy [{policy.name}][{key}] = {value}'
-        print(f"Setting Policy Config: {command}")
-        make_request(conn, "POST", command)
+    def _set_fields(path_prefix, data):
+        for key, value in data.items():
+            path = f'{path_prefix}[{key}]'
+            if isinstance(value, dict):
+                make_request(conn, "POST", f'set policy new_policy {path} = {{}}')
+                _set_fields(path, value)
+            elif isinstance(value, list):
+                for item in value:
+                    cmd = f'set policy new_policy {path} = {item}'
+                    print(f"Setting Policy Config: {cmd}")
+                    make_request(conn, "POST", cmd)
+            else:
+                cmd = f'set policy new_policy {path} = {value}'
+                print(f"Setting Policy Config: {cmd}")
+                make_request(conn, "POST", cmd)
+
+    _set_fields(f'[{policy.name}]', policy.data)
 
 
     # # Construct the policy command

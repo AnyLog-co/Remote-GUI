@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { fetchAvailableSigningMembers } from '../../services/security_api';
+import { fetchAvailableSigningMembers as defaultFetchAvailableSigningMembers } from '../../services/security_api';
 import '../../styles/security/MemberSelector.css';
 
-function MemberSelector({ node, currentUserPubkey, selectedMembers = [], onChange, disabled = false, refreshTrigger = 0 }) {
+function MemberSelector({ node, currentUserPubkey, selectedMembers = [], onChange, disabled = false, refreshTrigger = 0, fetchAvailableSigningMembersFn }) {
+  const fetchAvailableSigningMembers = fetchAvailableSigningMembersFn || defaultFetchAvailableSigningMembers;
   const [availableMembers, setAvailableMembers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
