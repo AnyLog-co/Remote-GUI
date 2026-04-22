@@ -145,7 +145,7 @@ def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> st
 
         headers = {
             'User-Agent': 'AnyLog/1.23',
-            'Content-Type': file.content_type,
+            'Content-Type': 'application/octet-stream',
             'command': command,
             'Accept': '*/*'
         }

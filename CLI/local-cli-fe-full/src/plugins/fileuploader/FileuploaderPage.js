@@ -50,11 +50,18 @@ function FileuploaderPage({ node }) {
       setCanDeleteUploaded(false);
     }
 
-    // build duplicates object
+    // build duplicates object and check if there are any successful files
     const names = {};
     const duplicates = {};
     let hasDuplicates = false;
+    let hasSuccess = false;
     for (const file of files) {
+
+      if (file.result?.success)
+        hasSuccess = true;
+
+      // names keeps track of current namespace
+      // duplicates keeps track of which names have duplicates
       const name = file.file.name;
       if (name in names) {
         duplicates[name] = 1;
@@ -63,6 +70,11 @@ function FileuploaderPage({ node }) {
       else
         names[name] = 1;
     }
+    if (hasSuccess)
+      setCanDeleteUploaded(true);
+    else
+      setCanDeleteUploaded(false);
+
     if (hasDuplicates)
       setHasConflicts(true);
     else
