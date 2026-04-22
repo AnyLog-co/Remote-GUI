@@ -216,7 +216,7 @@ const SqlQueryGenerator = ({ node }) => {
     // Add query options (format and timezone)
     anylogQuery += ` format = ${format}`;
     if (timezone !== 'utc') {
-      anylogQuery += ` timezone = ${timezone}`;
+      anylogQuery += ` and timezone = ${timezone}`;
     }
     
     // Add include tables if specified
@@ -1798,6 +1798,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Execution Results */}
         {executionError && (
           <div className="execution-error">
+            <span className="error-dismiss" onClick={() => setExecutionError(null)}>×</span>
             <h3>Execution Error</h3>
             <div className="error-content">
               <strong>Error:</strong> {executionError}
@@ -1885,6 +1886,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Error Display */}
         {error && (
           <div className="error-message">
+            <span className="error-dismiss" onClick={() => setError(null)}>×</span>
             <strong>Error:</strong> {error}
           </div>
         )}

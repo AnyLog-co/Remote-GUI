@@ -6,17 +6,18 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 sys.path.append(BASE_DIR)
-SETUP_CFG_FILE = os.path.join(__file__.split("CLI")[0], "setup.cfg")
-if not os.path.isfile(SETUP_CFG_FILE):
-    raise Exception(f"File not found - {SETUP_CFG_FILE}")
 
 from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 from parsers import parse_response
 from classes import *
@@ -43,15 +44,41 @@ import helpers
 
 app = FastAPI()
 
-FRONTEND_URL = os.getenv('FRONTEND_URL', '*')
-# Allow CORS (React frontend -> FastAPI backend)
+FRONTEND_URL = os.getenv('FRONTEND_URL', '')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*')
+
+cors_origins = [o.strip() for o in FRONTEND_URL.split(",") if o.strip()] if FRONTEND_URL else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "*"],  # Change this to your React app's URL for security
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+if ALLOWED_HOSTS != '*':
+    hosts = [h.strip() for h in ALLOWED_HOSTS.split(",") if h.strip()]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
+
+SCANNER_PATHS = {
+    "/json/", "/login", "/SDK/webLanguage", "/.env", "/wp-login.php",
+    "/wp-admin", "/administrator", "/phpmyadmin", "/actuator", "/solr/",
+    "/console", "/manager/html", "/cgi-bin/", "/.git", "/debug",
+    "/telescope/requests", "/vendor/", "/api/v1/", "/config.json",
+    "/remote/fgt_lang", "/boaform/", "/owa/auth/logon.aspx",
+}
+
+
+@app.middleware("http")
+async def block_scanners_middleware(request: Request, call_next):
+    """Reject common bot/scanner probe paths before they hit the app."""
+    path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+    for probe in SCANNER_PATHS:
+        if path == probe.rstrip("/") or path.startswith(probe):
+            logger.warning("Blocked scanner probe: %s from %s", request.url.path, request.client.host)
+            return Response(status_code=404)
+    return await call_next(request)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -181,18 +208,17 @@ else:
     print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
 
 def _get_remote_gui_version() -> str:
-    """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
-
+    """Read Remote-GUI version from setup.cfg [metadata] remoteguiversion (fallback: version)."""
     try:
-        # project_root = os.path.dirname(os.path.dirname(BASE_DIR))
-        # setup_cfg_path = os.path.join(project_root, 'setup.cfg')
-        if os.path.exists(SETUP_CFG_FILE):
+        project_root = os.path.dirname(os.path.dirname(BASE_DIR))
+        setup_cfg_path = os.path.join(project_root, 'setup.cfg')
+        if os.path.exists(setup_cfg_path):
             config = configparser.ConfigParser()
-            config.read(SETUP_CFG_FILE)
+            config.read(setup_cfg_path)
             if not config.has_section('metadata'):
                 return '—'
-            if config.has_option('metadata', 'version'):
-                v = config.get('metadata', 'version').strip()
+            if config.has_option('metadata', 'remoteguiversion'):
+                v = config.get('metadata', 'remoteguiversion').strip()
                 if v:
                     return v
             return config.get('metadata', 'version', fallback='—')

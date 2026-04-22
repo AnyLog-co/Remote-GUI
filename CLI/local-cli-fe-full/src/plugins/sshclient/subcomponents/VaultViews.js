@@ -1,6 +1,3 @@
-// Handles vault changes such as password / ssh key
-// Allows for creation and removal of the above
-
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Vault } from '../storage/vault';
@@ -83,7 +80,7 @@ const VaultView = ({ onClose }) => {
             onKeyDown={(e) => e.key === 'Enter' && onUnlock()}
           />
 
-          {error && <p className="vault-error-text">{error}</p>}
+          {error && <p className="vault-error-text"><span className="error-dismiss" onClick={() => setError('')}>×</span>{error}</p>}
 
           <button onClick={onUnlock} className="vault-unlock-btn">
             Unlock Vault

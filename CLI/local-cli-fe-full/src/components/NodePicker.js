@@ -201,6 +201,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
         </div>
         {connectionError && (
           <div className="node-picker-connection-error" role="alert">
+            <span className="error-dismiss" onClick={() => setConnectionError(null)}>×</span>
             {connectionError}
           </div>
         )}
@@ -211,6 +212,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
         )}
         {error && (
           <div className="error">
+            <span className="error-dismiss" onClick={() => setError(null)}>×</span>
             {error}
           </div>
         )}
@@ -277,6 +279,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       )}
       {editingNode && editError && (
         <div className="node-picker-connection-error" role="alert">
+          <span className="error-dismiss" onClick={() => setEditError(null)}>×</span>
           {editError}
         </div>
       )}
@@ -309,6 +312,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
 
       {showAddNode && connectionError && (
         <div className="node-picker-connection-error" role="alert">
+          <span className="error-dismiss" onClick={() => setConnectionError(null)}>×</span>
           {connectionError}
         </div>
       )}
@@ -320,6 +324,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       )}
       {error && (
         <div className="error">
+          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
           {error}
         </div>
       )}

@@ -1,30 +1,28 @@
-import { sendCommand } from '../../../services/api';
+import { sendCommand } from "../../../services/api";
 
-export const fetchAllNodes = async () => {
-  const node = localStorage.getItem('dashboard-selected-node');
-
+export const fetchAllNodes = async ({ proxyNode = "23.239.12.151:32349" } = {} ) => {
   const commands = {
-    operator: 'blockchain get operator',
-    master: 'blockchain get master',
-    query: 'blockchain get query',
+    operator: "blockchain get operator",
+    master: "blockchain get master",
+    query: "blockchain get query",
   };
 
   try {
     const entries = await Promise.all(
       Object.entries(commands).map(async ([key, command]) => {
         const result = await sendCommand({
-          connectInfo: node,
-          method: 'GET',
+          connectInfo: proxyNode,
+          method: "GET",
           command,
         });
 
         return [key, result];
-      }),
+      })
     );
 
     return Object.fromEntries(entries);
   } catch (error) {
-    console.error('Error fetching data:', error);
+    console.error("Error fetching data:", error);
     throw error;
   }
 };
