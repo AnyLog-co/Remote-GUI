@@ -30,7 +30,7 @@ jobs:
           git checkout origin/os-dev -- setup.cfg
 
       - name: Run version update script
-        run: python .github/workflows/generate_git_id.py
+        run: python .github/scripts/generate_git_id.py
 
       - name: Commit updated setup.cfg
         run: |
