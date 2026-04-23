@@ -155,7 +155,8 @@ def get_commits_since(branch, since_hash=None, since_date=None):
     """
     git_args = ["log", branch, "--no-merges"]
     if since_hash:
-        git_args = ["log", f"{since_hash}..{branch}", "--no-merges"]
+        # git_args = ["log", f"{since_hash}..{branch}", "--no-merges"]
+        git_args = ["log", f"{since_hash}..HEAD", "--no-merges"]
     elif since_date:
         git_args += [f"--after={since_date}"]
 
