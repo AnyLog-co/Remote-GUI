@@ -63,8 +63,8 @@ function PolicycreatorPage({ node }) {
       return;
     }
 
-    const missingFields = formTemplate.fields
-      .filter(f => f.required && f.type !== "generated")
+    const missingFields = (formTemplate.fields || [])
+      .filter(f => f && f.name && f.required && f.type !== "generated")
       .filter(f => {
         const val = formData[f.name];
         return val === undefined || val === null || val === '';
