@@ -362,7 +362,11 @@ const SqlQueryGenerator = ({ node }) => {
           }
           return `period(${period.timeScale}, ${period.amount}, ${startValue}, ${period.column})`;
         });
-        whereParts.push(...periodStrings);
+        if (validConditions.length > 0) {
+          whereParts.push('and ' + periodStrings.join(' and '));
+        } else {
+          whereParts.push(periodStrings.join(' and '));
+        }
       }
       
       if (whereParts.length > 0) {
