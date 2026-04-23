@@ -100,7 +100,8 @@ async def feature_check_middleware(request: Request, call_next):
         path.startswith("/openapi.json") or
         path == "/" or
         path == "/version" or
-        path == "/feature-config"):
+        path == "/feature-config" or
+        path == "/env-config"):
         response = await call_next(request)
         return response
     
@@ -232,6 +233,39 @@ def get_version_endpoint():
     """Return Remote-GUI version from setup.cfg for the About page."""
     rg = _get_remote_gui_version()
     return {"version": rg, "remote_gui_version": rg}
+
+
+@app.get("/env-config")
+def get_env_config_endpoint():
+    """Return non-secret environment variables used by the application."""
+    # (name, description, default_value_or_None)
+    ENV_VARS = [
+        ("VITE_API_URL", "Frontend API URL", "http://localhost:8080"),
+        ("FRONTEND_URL", "Allowed CORS origin(s)", "* (all origins)"),
+        ("ALLOWED_HOSTS", "Allowed hosts", "*"),
+        ("REST_CONN", "Default AnyLog node connection", None),
+        ("REMOTE_GUI_FE", "Frontend port", "31800"),
+        ("REMOTE_GUI_BE", "Backend port", "8080"),
+        ("GRAFANA_URL", "Grafana dashboard URL", "http://23.239.12.151:3100/dashboards/f/ddu0qc65783r4a/smart-city"),
+        ("ANYLOG_MCP_SSE_URL", "AnyLog MCP SSE endpoint", "http://50.116.13.109:32349/mcp/sse"),
+        ("OLLAMA_MODEL", "Ollama LLM model", "qwen2.5:7b-instruct"),
+        ("LLM_ENDPOINT", "LLM API endpoint", None),
+        ("ANYLOG_REQUEST_TIMEOUT", "AnyLog request timeout (seconds)", None),
+        ("ANYLOG_CONNECT_TIMEOUT", "AnyLog connect timeout (seconds)", "5.0"),
+        ("ANYLOG_READ_TIMEOUT", "AnyLog read timeout (seconds)", "30.0"),
+        ("DATA_DIR", "User management data directory", "./usr-mgm"),
+    ]
+    env_list = []
+    for var_name, description, default in ENV_VARS:
+        value = os.getenv(var_name)
+        env_list.append({
+            "name": var_name,
+            "value": value if value is not None else None,
+            "default": default,
+            "description": description,
+            "is_set": value is not None,
+        })
+    return {"environment": env_list}
 
 
 # Feature configuration endpoint for frontend
