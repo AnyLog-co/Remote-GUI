@@ -12,7 +12,6 @@
         "namespace": "MyEnterprise",
         "uns_level": "enterprise",
         "description": "Enterprise-level UNS node",
-        "ledger": "global"
       }
     },
     "site_node": {
@@ -23,7 +22,6 @@
         "namespace": "MyEnterprise/MainSite",
         "uns_level": "site",
         "description": "Site-level UNS node",
-        "ledger": "global"
       }
     },
     "data_leaf": {
@@ -37,7 +35,6 @@
         "dbms": "myenterprise",
         "table": "sensor_readings",
         "where": "type='Raw'",
-        "ledger": "global"
       }
     }
   },
@@ -136,14 +133,6 @@
       "type": "text",
       "label": "Location",
       "description": "GPS coordinates (latitude, longitude)",
-      "required": false
-    },
-    {
-      "name": "ledger",
-      "type": "select",
-      "label": "Ledger",
-      "options": ["global", "local"],
-      "description": "Blockchain ledger scope for this policy",
       "required": false
     },
     {
