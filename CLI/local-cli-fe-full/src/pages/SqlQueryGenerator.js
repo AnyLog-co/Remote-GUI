@@ -216,7 +216,7 @@ const SqlQueryGenerator = ({ node }) => {
     // Add query options (format and timezone)
     anylogQuery += ` format = ${format}`;
     if (timezone !== 'utc') {
-      anylogQuery += ` timezone = ${timezone}`;
+      anylogQuery += ` and timezone = ${timezone}`;
     }
     
     // Add include tables if specified
@@ -323,23 +323,19 @@ const SqlQueryGenerator = ({ node }) => {
         period.timeScale && period.amount && period.startValue !== undefined && period.startValue !== '' && period.column
       );
       
-      const whereParts = [];
-      
-      // Add regular WHERE conditions
+      // Build the user's filter conditions
+      let conditionsStr = '';
       if (validConditions.length > 0) {
         const conditionStrings = validConditions.map((condition, index) => {
-          // Handle different value types
           let value = condition.value;
           if (condition.value === 'NOW()') {
             value = 'NOW()';
           } else if (typeof condition.value === 'string' && !condition.value.startsWith('NOW()')) {
-            // Quote string values unless they're functions
             value = `'${condition.value}'`;
           }
           
           const conditionString = `${condition.column} ${condition.operator} ${value}`;
           
-          // Add logical operator for all conditions except the first one
           if (index > 0) {
             const logicalOp = condition.logicalOperator || 'AND';
             return `${logicalOp} ${conditionString}`;
@@ -347,26 +343,31 @@ const SqlQueryGenerator = ({ node }) => {
           
           return conditionString;
         });
-        whereParts.push(...conditionStrings);
+        conditionsStr = conditionStrings.join(' ');
       }
-      
-      // Add period conditions
+
+      // Build period conditions
+      let periodStr = '';
       if (validPeriods.length > 0) {
         const periodStrings = validPeriods.map(period => {
           let startValue = period.startValue;
           if (period.startValue === 'NOW()') {
             startValue = 'NOW()';
           } else if (typeof period.startValue === 'string' && !period.startValue.startsWith('NOW()')) {
-            // Quote string values unless they're functions
             startValue = `'${period.startValue}'`;
           }
           return `period(${period.timeScale}, ${period.amount}, ${startValue}, ${period.column})`;
         });
-        whereParts.push(...periodStrings);
+        periodStr = periodStrings.join(' AND ');
       }
-      
-      if (whereParts.length > 0) {
-        anylogQuery += ` WHERE ${whereParts.join(' ')}`;
+
+      // Combine: wrap conditions in parens when both conditions and period exist
+      if (conditionsStr && periodStr) {
+        anylogQuery += ` WHERE (${conditionsStr}) AND ${periodStr}`;
+      } else if (conditionsStr) {
+        anylogQuery += ` WHERE ${conditionsStr}`;
+      } else if (periodStr) {
+        anylogQuery += ` WHERE ${periodStr}`;
       }
     }
     
@@ -1798,6 +1799,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Execution Results */}
         {executionError && (
           <div className="execution-error">
+            <span className="error-dismiss" onClick={() => setExecutionError(null)}>×</span>
             <h3>Execution Error</h3>
             <div className="error-content">
               <strong>Error:</strong> {executionError}
@@ -1885,6 +1887,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Error Display */}
         {error && (
           <div className="error-message">
+            <span className="error-dismiss" onClick={() => setError(null)}>×</span>
             <strong>Error:</strong> {error}
           </div>
         )}

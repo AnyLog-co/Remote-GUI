@@ -151,3 +151,20 @@ body {
   color: #e74c3c;
   margin: 10px 0;
 }
+
+.error-dismiss {
+  cursor: pointer;
+  float: right;
+  font-size: 1.1rem;
+  font-weight: bold;
+  opacity: 0.6;
+  margin-left: 10px;
+  line-height: 1;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  color: inherit;
+}
+.error-dismiss:hover {
+  opacity: 1;
+}

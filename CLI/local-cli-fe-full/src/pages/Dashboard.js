@@ -200,6 +200,13 @@ const Dashboard = () => {
     }
   };
 
+  const handleEditNode = (oldNode, newNode) => {
+    setNodes((prev) => prev.map((n) => (n === oldNode ? newNode : n)));
+    if (selectedNode === oldNode) {
+      setSelectedNode(newNode);
+    }
+  };
+
 
 
   return (
@@ -209,6 +216,7 @@ const Dashboard = () => {
         selectedNode={selectedNode}
         onAddNode={handleAddNode}
         onRemoveNode={handleRemoveNode}
+        onEditNode={handleEditNode}
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
@@ -315,6 +323,14 @@ const Dashboard = () => {
                   </div>
                 );
               })()}
+                  const firstEnabled = featureRoutes.find(r => enabledFeatures.has(r.featureKey));
+                  if (firstEnabled) {
+                    const Component = firstEnabled.component;
+                    return <Component node={selectedNode} />;
+                  }
+                  return <div>No features enabled. Please check feature configuration. The backend is not running/connected to the frontend, please check whether the environemnt vairables are properly set or if the backend is running.</div>;
+                })()
+              } 
             />
           </Routes>
         </div>

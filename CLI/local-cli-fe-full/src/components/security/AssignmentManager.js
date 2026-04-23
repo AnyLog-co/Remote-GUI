@@ -127,6 +127,7 @@ function AssignmentManager({ node }) {
 
       {message && (
         <div className={`message ${message.includes('Error') ? 'error' : 'success'}`}>
+          <span className="error-dismiss" onClick={() => setMessage('')}>×</span>
           {message}
         </div>
       )}
@@ -194,6 +195,7 @@ function AssignmentManager({ node }) {
 
           {summary.error && (
             <div className="error-message">
+              <span className="error-dismiss" onClick={() => setSummary(prev => ({ ...prev, error: null }))}>×</span>
               Error: {summary.error}
             </div>
           )}
