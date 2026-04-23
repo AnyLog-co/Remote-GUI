@@ -8,7 +8,19 @@ layout: page
 - 2026-04-23 | Created document
 -->
 
-<!-- last-processed: 78053df938d69801e93ae19e0842f794d1f774fb -->
+<!-- last-processed: 68cc6b3 -->
+
+<!-- os-dev: 68cc6b3 (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * CI/CD: version control issue; docker builder logic; adding changelog processing
+  * Dependencies: local version changes
+  * Docker: UNS without LEDGER value; UNS policy builder logic; local version changes
+  * General: version control issue; UNS without LEDGER value; UNS policy builder logic; removed content not needed; remove ledger logic; local version changes
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: editing the error message when backend isnt running; added env vars to the about section
+* **pintomax** (2026-04-23)
+  * General: AB-117: add "and" separator before period function; AB-114: fix for timezone query parameter
 
 The Remote GUI is a browser-based interface for interacting with AnyLog networks — querying data, managing policies, monitoring nodes, and exploring the Unified Namespace. Version 1.0.0 marks the first stable production release of the rewritten GUI.
 
