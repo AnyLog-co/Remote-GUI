@@ -1,8 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { getDatabases, getTables, getColumns, sendCommand } from '../services/api';
 import DataTable from '../components/DataTable';
 import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import '../styles/SqlQueryGenerator.css';
+
+class QueryBuilderErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="sql-query-generator">
+          <h2>AnyLog Query Generator</h2>
+          <div className="error-message">
+            <strong>Something went wrong while rendering the query builder.</strong>
+            <p>{this.state.error?.message}</p>
+            <button onClick={() => this.setState({ hasError: false, error: null })}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // run client () sql opcua_demo format = table "SELECT min(value), max(value), avg(value) FROM t11 WHERE period(hour, 3, now(), timestamp)"
 // implement:
@@ -102,7 +129,13 @@ const SqlQueryGenerator = ({ node }) => {
 
   // Update query when selections change
   useEffect(() => {
-    buildQuery();
+    try {
+      buildQuery();
+    } catch (err) {
+      console.error('buildQuery error:', err);
+      setError('Failed to build query: ' + err.message);
+      setQuery('');
+    }
   }, [selectedColumns, whereConditions, periods, groupBy, groupByColumns, orderBy, orderByColumns, limit, format, timezone, distinct, aggregations, joins, useIncrements, incrementsUnit, incrementsInterval, incrementsDateColumn, columnMode, timeSeriesMode, includeTables, extendFields, useTargetNodes, selectedNodes, operatorFilters]);
 
   const fetchDatabases = async () => {
@@ -140,7 +173,7 @@ const SqlQueryGenerator = ({ node }) => {
         database: selectedDatabase, 
         table: selectedTable 
       });
-      setColumns(result.data || []);
+      setColumns(Array.isArray(result?.data) ? result.data : []);
     } catch (err) {
       setError('Failed to fetch columns: ' + err.message);
     } finally {
@@ -350,13 +383,12 @@ const SqlQueryGenerator = ({ node }) => {
       let periodStr = '';
       if (validPeriods.length > 0) {
         const periodStrings = validPeriods.map(period => {
-          let startValue = period.startValue;
-          if (period.startValue === 'NOW()') {
-            startValue = 'NOW()';
-          } else if (typeof period.startValue === 'string' && !period.startValue.startsWith('NOW()')) {
-            startValue = `'${period.startValue}'`;
+          let startValue = period.startValue || 'NOW()';
+          if (startValue !== 'NOW()' && typeof startValue === 'string' && !startValue.startsWith('NOW()')) {
+            startValue = `'${startValue}'`;
           }
-          return `period(${period.timeScale}, ${period.amount}, ${startValue}, ${period.column})`;
+          const amount = Number.isFinite(period.amount) ? period.amount : 1;
+          return `period(${period.timeScale || 'hour'}, ${amount}, ${startValue}, ${period.column})`;
         });
         periodStr = periodStrings.join(' AND ');
       }
@@ -1896,4 +1928,12 @@ const SqlQueryGenerator = ({ node }) => {
   );
 };
 
-export default SqlQueryGenerator; 
+function SqlQueryGeneratorWithBoundary(props) {
+  return (
+    <QueryBuilderErrorBoundary>
+      <SqlQueryGenerator {...props} />
+    </QueryBuilderErrorBoundary>
+  );
+}
+
+export default SqlQueryGeneratorWithBoundary;
