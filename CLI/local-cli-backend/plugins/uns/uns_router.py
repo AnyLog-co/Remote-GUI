@@ -186,6 +186,41 @@ def _extract_sql_error_message(response) -> str:
         return s[:300] if len(s) > 300 else s
     return str(response)[:300]
 
+@api_router.post("/query-metadata")
+async def query_metadata(request:QueryTableRequest):
+    # table_quoted = _quote_identifier(request.table.strip()) if request.table else request.table
+
+    command = f"get data nodes where dbms={request.dbms} and table={request.table}"
+    try:
+        if not request.dbms or not request.table:
+            raise HTTPException(status_code=400, detail="dbms and table are required")
+
+        print(f"UNS: Executing command: {command}")
+
+        # Execute query - catch connection/SQL errors
+        try:
+            response = make_request(request.conn, "GET", command)
+        except Exception as req_err:
+            err_msg = str(req_err)
+            print(f"UNS: make_request failed: {err_msg}")
+            friendly = _extract_sql_error_message(err_msg)
+            return {"success": False, "error": friendly if len(friendly) > 10 else err_msg, "data": None}
+
+        return {
+            "success": True,
+            "data": response.text,
+            "error": None
+        }
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"UNS: `ge` error: {error_msg}")
+        return {
+            "success": False,
+            "error": error_msg,
+            "data": None
+        }
+
 
 @api_router.post("/query-table")
 async def query_table(request: QueryTableRequest):
@@ -510,6 +545,29 @@ async def check_table(request: CheckTableRequest):
             "success": False,
             "has_data": False,
             "column_count": 0,
+            "error": error_msg
+        }
+
+@api_router.post("/data-nodes")
+async def data_nodes(request: CheckTableRequest):
+    """Get data nodes for a specific dbms/table, returning the full node details."""
+    try:
+        if not request.dbms or not request.table:
+            raise HTTPException(status_code=400, detail="dbms and table are required")
+
+        nodes = get_data_nodes_for_table(request.conn, request.dbms, request.table)
+
+        return {
+            "success": True,
+            "data": nodes,
+            "error": None
+        }
+    except Exception as e:
+        error_msg = str(e)
+        print(f"UNS: Data nodes error: {error_msg}")
+        return {
+            "success": False,
+            "data": [],
             "error": error_msg
         }
 

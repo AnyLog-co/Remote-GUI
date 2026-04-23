@@ -29,6 +29,11 @@ export async function checkChildren(conn, itemId) {
   return unsRequest("/uns/check-children", { conn, item_id: itemId });
 }
 
+export async function queryMetadata(conn, { dbms, table, time_value, time_unit, where, column, time_column }) {
+    const body = { conn, dbms, table, time_value, time_unit, where, column, time_column };
+    return unsRequest("/uns/query-metadata", body);
+}
+
 export async function queryTable(conn, { dbms, table, time_value, time_unit, where, column, time_column }) {
   const body = { conn, dbms, table, time_value, time_unit };
   if (where?.trim()) body.where = where.trim();
@@ -47,6 +52,10 @@ export async function queryCustom(conn, { dbms, sql_query }) {
 
 export async function checkTable(conn, { dbms, table }) {
   return unsRequest("/uns/check-table", { conn, dbms, table });
+}
+
+export async function getDataNodes(conn, { dbms, table }) {
+  return unsRequest("/uns/data-nodes", { conn, dbms, table });
 }
 
 export async function getColumnDetails(conn, { dbms, table, column, where, time_value, time_unit, column_type }) {

@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package.json and install deps
 COPY CLI/local-cli-fe-full/package.json ./
+
 RUN npm install --legacy-peer-deps --no-audit --progress=false
 
 # Copy frontend source (node_modules must be excluded in .dockerignore)
@@ -22,13 +23,14 @@ COPY CLI/local-cli-fe-full ./
 ARG VITE_API_URL=http://127.0.0.1:8080
 ENV VITE_API_URL=${VITE_API_URL}
 
+
 # Build frontend
 RUN npm run build
 
 # =====================
 # Backend build stage
 # =====================
-FROM python:3.11-slim AS backend-build
+FROM python:3.13.12-slim AS backend-build
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -37,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv build-essential git curl xsel \
     && rm -rf /var/lib/apt/lists/*
 
+
+
 # Create virtual environment
 RUN python3 -m venv /opt/venv
 ENV VIRTUAL_ENV=/opt/venv
@@ -44,7 +48,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Copy Python dependencies and install in virtualenv
 COPY requirements.txt .
-RUN pip install --upgrade pip wheel \
+
+RUN pip install --upgrade "pip>=26.0" "wheel>=0.45.1" "setuptools>=78.1.1" \
     && pip install --no-cache-dir -r requirements.txt
 
 # Clone AnyLog-API and install into virtualenv
@@ -63,7 +68,7 @@ RUN chmod +x start.sh
 # =====================
 # Final runtime image
 # =====================
-FROM python:3.11-slim AS final
+FROM python:3.13.12-slim AS final
 WORKDIR /app
 
 ENV VIRTUAL_ENV=/opt/venv
@@ -75,11 +80,14 @@ ARG EXPOSE_PORT=8080
 ENV CLI_PORT=${EXPOSE_PORT}
 
 # Install minimal runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xsel \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends xsel && \
+    apt-get install -y --only-upgrade openssl && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r anylog && useradd -r -g anylog -d /app anylog
+
 
 # Copy venv from backend-build
+COPY setup.cfg /app/setup.cfg
 COPY --from=backend-build /opt/venv /opt/venv
 
 # Copy backend source + templates + start.sh
@@ -94,5 +102,11 @@ COPY --from=frontend-build /app/build /app/CLI/local-cli-fe-full/build
 RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 EXPOSE ${EXPOSE_PORT}
+
+# add THIS
+RUN chown -R anylog:anylog /app
+
+# switch user
+USER anylog
 
 ENTRYPOINT ["/app/start.sh"]

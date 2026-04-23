@@ -45,6 +45,21 @@ docker run -it -p 8000:8000 -p 3001:3001 --name gui-1 --rm anylogco/remote-gui
 docker compose -f ./docker-compose.yaml up -d
 ```
 
+**Optional AnyLog command timeouts (recommended):**
+
+- `ANYLOG_CONNECT_TIMEOUT` (seconds, default `5`)
+- `ANYLOG_READ_TIMEOUT` (seconds, default `30`)
+- `ANYLOG_REQUEST_TIMEOUT` (single override for both; if set, it takes precedence)
+
+Example:
+
+```bash
+docker run -it -p 8000:8000 -p 3001:3001 \
+  -e ANYLOG_CONNECT_TIMEOUT=3 \
+  -e ANYLOG_READ_TIMEOUT=20 \
+  --name gui-1 --rm anylogco/remote-gui
+```
+
 ---
 
 ## Prerequisites

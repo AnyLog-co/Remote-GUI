@@ -18,3 +18,4 @@ If you have contributed to this project, add your name and email below.
 | Name | Email |
 |:---:|:---:|
 | Ori Shadmon | ori@anylog.network |
+| Pranav Purathepparambil | pranav@anylog.co |

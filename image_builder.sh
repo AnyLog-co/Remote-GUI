@@ -47,7 +47,7 @@
 #           Leave commented for interactive use where you want to inspect errors
 #           and continue manually, or when you have explicit error handling (||)
 #           that set -e would interfere with.
-#set -e
+set -e
 
 TAG=""
 PLATFORM=""
@@ -86,6 +86,7 @@ DOCKER_CMD="docker buildx build \
     --platform ${PLATFORM} \
     --sbom=true \
     --provenance=mode=max \
+    --pull \
     -f Dockerfile . \
     -t ${IMAGE_NAME}"
 

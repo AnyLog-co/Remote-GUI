@@ -6,6 +6,7 @@
 !templates/**
 !requirements.txt
 !start.sh
+!setup.cfg
 
 # Explicitly exclude junk inside allowed trees
 

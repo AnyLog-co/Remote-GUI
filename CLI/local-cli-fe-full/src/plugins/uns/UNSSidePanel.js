@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
 import UNSColumnDetails from './UNSColumnDetails';
 import { exportToCSV, exportToPDF } from './unsExportUtils';
+import { getDataNodes } from './uns_api';
 
 const UNSSidePanel = ({
   isOpen,
@@ -33,6 +34,40 @@ const UNSSidePanel = ({
   const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
   const showTableSection = hasTableMeta && hasDataAtLocation;
   const chartRef = useRef(null);
+
+  const [dataNodes, setDataNodes] = useState(null);
+  const [dataNodesLoading, setDataNodesLoading] = useState(false);
+  const [dataNodesError, setDataNodesError] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen || !showTableSection || !conn || !itemData?.dbms || !itemData?.table) {
+      setDataNodes(null);
+      setDataNodesError(null);
+      return;
+    }
+    let cancelled = false;
+    setDataNodesLoading(true);
+    setDataNodesError(null);
+    getDataNodes(conn, { dbms: itemData.dbms, table: itemData.table })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && Array.isArray(res.data)) {
+          setDataNodes(res.data);
+        } else {
+          setDataNodesError(res.error || 'Failed to fetch data nodes');
+          setDataNodes([]);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDataNodesError(err.message || 'Failed to fetch data nodes');
+        setDataNodes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDataNodesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, showTableSection, conn, itemData?.dbms, itemData?.table]);
 
   const sanitizeForFilename = (s) => (s != null ? String(s).replace(/[/\\:*?"<>|]/g, '-').trim() : '');
 
@@ -287,6 +322,50 @@ const UNSSidePanel = ({
                       </>
                     )}
                   </div>
+              </div>
+            )}
+
+            {showTableSection && (
+              <div className="uns-data-nodes-section">
+                <strong>Data Nodes:</strong>
+                {dataNodesLoading && (
+                  <div className="uns-data-nodes-loading">Loading data nodes...</div>
+                )}
+                {dataNodesError && (
+                  <div className="uns-data-nodes-error">
+                    <strong>Error:</strong> {dataNodesError}
+                  </div>
+                )}
+                {!dataNodesLoading && !dataNodesError && Array.isArray(dataNodes) && (
+                  dataNodes.length === 0 ? (
+                    <div className="uns-data-nodes-empty">No data nodes found.</div>
+                  ) : (
+                    <div className="uns-data-nodes-table-container">
+                      <table className="uns-sql-table">
+                        <thead>
+                          <tr>
+                            {Object.keys(dataNodes[0]).map((key) => (
+                              <th key={key}>{key}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dataNodes.map((node, idx) => (
+                            <tr key={idx}>
+                              {Object.keys(dataNodes[0]).map((key) => (
+                                <td key={key}>
+                                  {typeof node[key] === 'object' && node[key] !== null
+                                    ? JSON.stringify(node[key])
+                                    : String(node[key] ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
               </div>
             )}
 

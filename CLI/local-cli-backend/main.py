@@ -6,6 +6,9 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 sys.path.append(BASE_DIR)
+SETUP_CFG_FILE = os.path.join(__file__.split("CLI")[0], "setup.cfg")
+if not os.path.isfile(SETUP_CFG_FILE):
+    raise Exception(f"File not found - {SETUP_CFG_FILE}")
 
 from security.security_router import security_router
 
@@ -19,6 +22,7 @@ from parsers import parse_response
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
+from file_auth import file_bookmark_node, file_set_default_bookmark
 # Import plugin loader
 from plugins.loader import load_plugins, get_plugin_order
 # Import feature config loader
@@ -164,14 +168,33 @@ else:
 # Load plugins (will respect feature config internally)
 load_plugins(app)
 
+# Bootstrap default connection from REST_CONN env var
+REST_CONN = os.getenv("REST_CONN")
+if REST_CONN:
+    REST_CONN = REST_CONN.strip()
+    print(f"🔗 REST_CONN detected: {REST_CONN}")
+    result = file_bookmark_node(REST_CONN)
+    print(f"   Bookmark ensure result: {result}")
+    result = file_set_default_bookmark(REST_CONN)
+    print(f"   Set default result: {result}")
+else:
+    print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
+
 def _get_remote_gui_version() -> str:
-    """Read Remote-GUI version from setup.cfg at project root."""
+    """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
+
     try:
-        project_root = os.path.dirname(os.path.dirname(BASE_DIR))
-        setup_cfg_path = os.path.join(project_root, 'setup.cfg')
-        if os.path.exists(setup_cfg_path):
+        # project_root = os.path.dirname(os.path.dirname(BASE_DIR))
+        # setup_cfg_path = os.path.join(project_root, 'setup.cfg')
+        if os.path.exists(SETUP_CFG_FILE):
             config = configparser.ConfigParser()
-            config.read(setup_cfg_path)
+            config.read(SETUP_CFG_FILE)
+            if not config.has_section('metadata'):
+                return '—'
+            if config.has_option('metadata', 'version'):
+                v = config.get('metadata', 'version').strip()
+                if v:
+                    return v
             return config.get('metadata', 'version', fallback='—')
     except Exception:
         pass
@@ -181,7 +204,8 @@ def _get_remote_gui_version() -> str:
 @app.get("/version")
 def get_version_endpoint():
     """Return Remote-GUI version from setup.cfg for the About page."""
-    return {"version": _get_remote_gui_version(), "remote_gui_version": _get_remote_gui_version()}
+    rg = _get_remote_gui_version()
+    return {"version": rg, "remote_gui_version": rg}
 
 
 # Feature configuration endpoint for frontend
@@ -243,6 +267,11 @@ def get_status():
 # File-based authentication endpoints are now handled by file_auth_router
 
 
+def should_force_raw_text(command_text: str) -> bool:
+    """Force raw text for commands that are known to be non-tabular."""
+    return "get msg client" in command_text.lower()
+
+
 
 # NODE API ENDPOINTS
 
@@ -252,7 +281,9 @@ def send_command(conn: Connection, command: Command):
     if not is_feature_enabled("client"):
         raise HTTPException(status_code=403, detail="Feature 'client' is disabled")
     try:
-        raw_response = make_request(conn.conn, command.type, command.cmd.strip())
+        normalized_cmd = command.cmd.strip()
+        force_raw_text = should_force_raw_text(normalized_cmd)
+        raw_response = make_request(conn.conn, command.type, normalized_cmd)
         print("raw_response", raw_response)
 
         # Check if the response is already an error response
@@ -261,7 +292,7 @@ def send_command(conn: Connection, command: Command):
             print(f"Full error response: {raw_response}")
             return raw_response
 
-        if command.raw_text:
+        if command.raw_text or force_raw_text:
             return {"type": "raw", "data": str(raw_response) if raw_response is not None else ""}
 
         structured_data = parse_response(raw_response)
