@@ -265,10 +265,6 @@ const ConnectionSelectorView = () => {
     fetchNodes();
   }, [setConnectionsList]);
 
-  useEffect(() => {
-    console.log('CL: ', connectionsList);
-  }, [connectionsList]);
-
   const getSortedConnections = (connections) => {
     const sorted = [...connections].sort((a, b) => {
       return a.hostname.localeCompare(b.hostname);

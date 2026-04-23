@@ -65,7 +65,6 @@ const TerminalView = ({
     if (termRef.current) return;
 
     const run = async () => {
-      console.log('name:', name);
       console.log(
         `Connecting to ip ${ip} through ${action} with ${authType} and user: ${user} at port: ${port}`,
       );
