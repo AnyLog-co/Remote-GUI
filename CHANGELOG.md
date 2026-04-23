@@ -8,7 +8,7 @@ layout: page
 - 2026-04-23 | Created document
 -->
 
-<!-- last-processed: 4d9b34a139aa54ad764b0f4653d7d784fb682a71 -->
+<!-- last-processed: 78053df938d69801e93ae19e0842f794d1f774fb -->
 
 The Remote GUI is a browser-based interface for interacting with AnyLog networks — querying data, managing policies, monitoring nodes, and exploring the Unified Namespace. Version 1.0.0 marks the first stable production release of the rewritten GUI.
 
