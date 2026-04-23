@@ -283,7 +283,7 @@ const Dashboard = () => {
                     const Component = firstEnabled.component;
                     return <Component node={selectedNode} />;
                   }
-                  return <div>No features enabled. Please check feature configuration.</div>;
+                  return <div>No features enabled. Please check feature configuration. The backend is not running/connected to the frontend, please check whether the environemnt vairables are properly set or if the backend is running.</div>;
                 })()
               } 
             />
