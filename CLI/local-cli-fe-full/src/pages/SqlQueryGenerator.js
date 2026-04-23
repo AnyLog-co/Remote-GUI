@@ -216,7 +216,7 @@ const SqlQueryGenerator = ({ node }) => {
     // Add query options (format and timezone)
     anylogQuery += ` format = ${format}`;
     if (timezone !== 'utc') {
-      anylogQuery += ` timezone = ${timezone}`;
+      anylogQuery += ` and timezone = ${timezone}`;
     }
     
     // Add include tables if specified
