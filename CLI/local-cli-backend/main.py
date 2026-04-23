@@ -208,7 +208,7 @@ else:
     print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
 
 def _get_remote_gui_version() -> str:
-    """Read Remote-GUI version from setup.cfg [metadata] remoteguiversion (fallback: version)."""
+    """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
     try:
         project_root = os.path.dirname(os.path.dirname(BASE_DIR))
         setup_cfg_path = os.path.join(project_root, 'setup.cfg')
@@ -217,8 +217,8 @@ def _get_remote_gui_version() -> str:
             config.read(setup_cfg_path)
             if not config.has_section('metadata'):
                 return '—'
-            if config.has_option('metadata', 'remoteguiversion'):
-                v = config.get('metadata', 'remoteguiversion').strip()
+            if config.has_option('metadata', 'version'):
+                v = config.get('metadata', 'version').strip()
                 if v:
                     return v
             return config.get('metadata', 'version', fallback='—')
