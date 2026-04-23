@@ -402,9 +402,13 @@ def commit_changelog(changelog_path, branch):
     else:
         run_git(["commit", "-s", "-m", f"chore: update CHANGELOG unreleased [skip ci]"])
 
+    # run_git(["pull", "--rebase", "origin", branch])
+    # run_git(["push"])
+    stash_result = subprocess.run(["git", "stash"], capture_output=True, text=True)
     run_git(["pull", "--rebase", "origin", branch])
+    if "No local changes to save" not in stash_result.stdout:
+        run_git(["stash", "pop"])
     run_git(["push"])
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
