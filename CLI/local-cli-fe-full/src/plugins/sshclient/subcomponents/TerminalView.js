@@ -1,23 +1,40 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { cliState } from '../state/state';
 import '../styles/TerminalView.css';
 
-const TerminalView = ({ id, host, user, credential, action, authType }) => {
+const TerminalView = ({
+  id,
+  name,
+  ip,
+  user,
+  credential,
+  action,
+  authType,
+  port,
+}) => {
   const terminalRef = useRef(null);
   const termRef = useRef(null);
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window.env?.VITE_API_URL || 'http://localhost:8080/';
+  const API_URL = window._env_?.VITE_API_URL || 'http://localhost:8080';
   var strippedURL = (strippedURL = API_URL.replace('http://', ''));
+  const [isReady, setIsReady] = useState(false);
 
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,
   );
+  const {
+    terminalLoading,
+    setTerminalLoading,
+    setTerminalError,
+    setShowAuthModal,
+  } = cliState();
 
+  // Check if the WS connection is already open
   useEffect(() => {
     const wsStatusCheck = setInterval(() => {
       const isOpen = wsRef.current?.readyState === WebSocket.OPEN;
@@ -27,12 +44,13 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     return () => clearInterval(wsStatusCheck);
   }, [id, setIsConnected]);
 
+  // Check terminal connection
   useEffect(() => {
-    console.log('isConnected:', isConnected);
+    console.log('Check terminal connection | isConnected:', isConnected);
     if (!isConnected) {
       const timer = setTimeout(() => {
         console.log('Not connected. return to main.');
-        alert(`Could not connect to ${id}.`);
+        setTerminalLoading(false);
         removeActiveConnection(id);
       }, 1500);
 
@@ -40,15 +58,16 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     }
   }, [isConnected]);
 
+  // Initial terminal websocket connection
   useEffect(() => {
-    if ((!host || !user || !credential || !action, !authType)) return;
+    if (!ip || !user || !credential || !action || !authType || !port || !name)
+      return;
     if (termRef.current) return;
 
     const run = async () => {
       console.log(
-        `Connecting to host ${host} through ${action} with ${authType}`,
+        `Connecting to ip ${ip} through ${action} with ${authType} and user: ${user} at port: ${port}`,
       );
-      console.log('NEW URL!!!!!! ', strippedURL);
 
       const term = new Terminal({
         cursorBlink: true,
@@ -62,7 +81,6 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
       termRef.current = term;
 
       term.open(terminalRef.current);
-
       const fitTerminal = () => {
         if (!terminalRef.current || !fitRef.current) return;
 
@@ -102,15 +120,18 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
           data: credential,
         };
       }
-      const ws = new WebSocket(`ws://${strippedURL}sshclient/ws`);
+      const ws = new WebSocket(`ws://${strippedURL}/sshclient/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        setTerminalLoading(true);
         ws.send(
           JSON.stringify({
             action: action,
-            host: host,
+            name: name,
+            ip: ip,
             user: user,
+            port: port,
             conn_method: conn_method,
             cols: term.cols,
             rows: term.rows,
@@ -118,12 +139,21 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         );
       };
 
+      let hasReceivedFirstMessage = false;
       ws.onmessage = (e) => {
+        if (!hasReceivedFirstMessage) {
+          setTerminalLoading(false);
+          setShowAuthModal(false);
+          hasReceivedFirstMessage = true;
+          setIsReady(true);
+        }
+
         term.write(e.data);
         term.scrollToBottom();
       };
 
       ws.onerror = (e) => {
+        setTerminalLoading(false);
         console.log(e);
         writeErr(`WebSocket error: Disconnected`);
       };
@@ -132,8 +162,9 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
         if (!e.wasClean) {
           console.log(`Unexpected websocket interruption: `, e);
         } else {
-          console.log(`Disconnected. Session ended`);
+          console.log(`Disconnected. Session ended`, e);
         }
+        setTerminalError(e.reason);
       };
 
       term.onData((data) => {
@@ -171,13 +202,14 @@ const TerminalView = ({ id, host, user, credential, action, authType }) => {
     };
 
     run();
-  }, [host, user, credential, action, authType]);
+  }, [ip, user, credential, action, authType]);
 
   return (
     <div
       id="terminal-overall-div"
       ref={terminalRef}
       className="terminal-overall-div"
+      style={{ visibility: isReady ? 'visible' : 'hidden' }}
     />
   );
 };

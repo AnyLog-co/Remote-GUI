@@ -1,3 +1,5 @@
+// Status bar used for each terminal to display ID, time online, hostname
+
 import { useEffect, useState } from 'react';
 import { cliState } from '../state/state';
 import { FaCircle } from 'react-icons/fa6';

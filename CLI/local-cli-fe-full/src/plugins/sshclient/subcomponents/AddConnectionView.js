@@ -20,6 +20,7 @@ const AddConnectionView = () => {
     setNewConnection((prev) => ({ ...prev, [name]: value }));
   };
 
+  // When connection is created, add to connection state
   const handleSubmit = () => {
     if (!newConnection.hostname || !newConnection.ip || !newConnection.user) {
       alert('Please fill in all required fields');

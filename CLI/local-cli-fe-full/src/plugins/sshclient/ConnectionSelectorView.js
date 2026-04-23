@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { FaComputer, FaDocker, FaChevronDown, FaChevronRight } from 'react-icons/fa6';
+import {
+  FaComputer,
+  FaDocker,
+  FaChevronDown,
+  FaChevronRight,
+} from 'react-icons/fa6';
 import { fetchAllNodes, normalizeNodes } from './utils/fetchNodes';
 import { cliState } from './state/state';
 import { CiTrash, CiStar } from 'react-icons/ci';
@@ -13,25 +18,53 @@ import {
   clearStoredCredentials,
 } from './storage/stateStorage';
 
+// Selector view to show user's nodes and connect options
+/**
+Main UI component for managing connections and terminals.
+Displays available nodes (connections)
+Handles authentication (password / SSH key)
+Manages active terminal sessions
+Integrates with session storage and secure vault
+*/
 const ConnectionSelectorView = () => {
   const { connectionsList, setConnectionsList, removeConnection } = cliState();
-  const { setActiveConnection, activeConnection, credLocked, setFocusedTerminalId } = cliState();
+  const {
+    setActiveConnection,
+    activeConnection,
+    credLocked,
+    setFocusedTerminalId,
+    terminalLoading,
+    setTerminalLoading,
+    terminalError,
+    setTerminalError,
+    showAuthModal,
+    setShowAuthModal,
+  } = cliState();
 
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  // --- Auth modal state ---
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [authMethod, setAuthMethod] = useState('password');
   const [authPassword, setAuthPassword] = useState('');
   const [keyFile, setKeyFile] = useState(null);
+  const [user, setUser] = useState('root');
+  const [portNumber, setPortNumber] = useState(22);
+  const [containerName, setContainerName] = useState('');
+
+  // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
   const [activeTerminals, setActiveTerminals] = useState(null);
   const [saveToVault, setSaveToVault] = useState(false);
+
+  // Starred connections are persisted to localStorage so they survive page refreshes.
   const [starredConns, setStarredConns] = useState(() => {
     const stored = localStorage.getItem('starredConnections');
     return stored ? JSON.parse(stored) : [];
   });
   const [sortedConns, setSortedConns] = useState(null);
   const [expandedHostnames, setExpandedHostnames] = useState({});
+
+  // States for active terminals view and editing terminal conn name
   const [visibleTooltip, setVisibleTooltip] = useState(null);
   const [terminalNames, setTerminalNames] = useState({});
   const [editingTerminalId, setEditingTerminalId] = useState(null);
@@ -41,6 +74,14 @@ const ConnectionSelectorView = () => {
     removeConnection(id);
   };
 
+  /**
+   * Prepares and opens the authentication modal for a given connection.
+   * Resets all auth fields, then attempts to prefill credentials from
+   * session storage or vault — keyfile takes priority over password if both exist.
+   *
+   * @param {Object} conn        - The connection object to authenticate against.
+   * @param {string} conn_action - The action to perform: 'direct_ssh' | 'docker_attach' | 'docker_exec'.
+   */
   const handleConnectClick = (conn, conn_action) => {
     setSelectedConnection(conn);
     setSelectedAction(conn_action);
@@ -48,7 +89,9 @@ const ConnectionSelectorView = () => {
     setKeyFile(null);
     setAuthMethod('password');
     setSaveToVault(false);
+    setContainerName(conn.name);
 
+    // Attempt to prefill from previously stored credentials.
     const storedPassword = retrieveStoredCredential(conn.hostname, 'password');
     const storedKey = retrieveStoredCredential(conn.hostname, 'keyfile');
 
@@ -57,6 +100,7 @@ const ConnectionSelectorView = () => {
       setAuthMethod('password');
     }
 
+    // Keyfile overrides password if both are stored.
     if (storedKey) {
       setKeyFile(storedKey);
       console.log(`Autofilling key:`, storedKey);
@@ -66,7 +110,27 @@ const ConnectionSelectorView = () => {
     setShowAuthModal(true);
   };
 
+  /**
+   * Handles auth form submission and terminal session creation.
+   * Flow:
+   *   1. Validates required credential input.
+   *   2. Optionally persists credential to the encrypted vault.
+   *   3. Stores credential in session storage for this connection.
+   *   4. Generates a unique connection ID and registers the active session.
+   */
   const handleAuthSubmit = async () => {
+    if (!user) {
+      alert('Please enter a user');
+      return;
+    }
+    if (!portNumber) {
+      alert('Please enter a port number');
+      return;
+    }
+    if (!containerName) {
+      alert('Please enter a container id / name');
+      return;
+    }
     if (authMethod === 'password' && !authPassword) {
       alert('Please enter a password');
       return;
@@ -75,6 +139,8 @@ const ConnectionSelectorView = () => {
       alert('Please upload a key file');
       return;
     }
+
+    setTerminalError(null);
 
     if (saveToVault) {
       console.log('Attempting to save to vault:', {
@@ -104,6 +170,7 @@ const ConnectionSelectorView = () => {
       }
     }
 
+    // Always store in session so the terminal can access credentials during this session.
     if (authMethod === 'keyfile') {
       storeCredentialInSession(selectedConnection.hostname, 'keyfile', keyFile);
     } else if (authMethod === 'password') {
@@ -114,6 +181,11 @@ const ConnectionSelectorView = () => {
       );
     }
 
+    /**
+    Generate unique connection ID for terminal identification especially for parallel connections to the same node.
+    docker_attach uses stable ID per host
+    other actions use timestamp to allow multiple sessions
+    */
     const uuid =
       selectedAction === 'docker_attach'
         ? `${selectedConnection.ip}-${selectedAction}`
@@ -121,19 +193,27 @@ const ConnectionSelectorView = () => {
 
     setActiveConnection(uuid, {
       ...selectedConnection,
-      user: 'root',
+      user: user,
+      port: portNumber,
+      name: containerName,
       credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
       isConnected: false,
     });
-    setShowAuthModal(false);
   };
 
   useEffect(() => {
     setActiveTerminals(activeConnection);
   }, [activeConnection]);
 
+  /**
+  Handles SSH key file upload and validation.
+  Reads file contents
+  Validates private key format
+  Stores parsed key in component state
+  @param {File} file - Uploaded file
+  */
   const handleFileUpload = async (file) => {
     if (!file) return;
 
@@ -153,10 +233,24 @@ const ConnectionSelectorView = () => {
     }
   };
 
+  /**
+  Fetches and initializes connection list.
+  Retrieves raw node data from backend
+  Normalizes structure
+  Sorts alphabetically by hostname
+  */
   useEffect(() => {
+    setConnectionsList([]);
+
     const fetchNodes = async () => {
       try {
         const rawNodes = await fetchAllNodes();
+        console.log('rawNodes: ', rawNodes);
+
+        if (rawNodes === false) {
+          return;
+        }
+
         const nodeData = normalizeNodes(rawNodes);
         setConnectionsList(
           Object.values(nodeData)
@@ -194,6 +288,10 @@ const ConnectionSelectorView = () => {
     setSortedConns(sorted);
   }, [connectionsList, starredConns]);
 
+  useEffect(() => {
+    console.log(terminalLoading);
+  }, [terminalLoading]);
+
   const handleConnStarring = (conn) => {
     setStarredConns((prev) =>
       prev.some((c) => c.ip === conn.ip)
@@ -209,6 +307,11 @@ const ConnectionSelectorView = () => {
 
   const activeConnectionState = cliState((state) => state.activeConnection);
 
+  /**
+  Renders Docker attach button.
+  Disabled when an attach session is already active.
+  @param {Object} conn
+  */
   const renderDockerAttachBtn = (conn) => {
     const id = `${conn.ip}-docker_attach`;
     const isAttached = activeConnectionState[id]?.action === 'docker_attach';
@@ -241,13 +344,24 @@ const ConnectionSelectorView = () => {
     );
   };
 
+  /**
+   * Extracts and formats the terminal ID from a composite connection ID string.
+   * Connection IDs follow the pattern "{ip}-{timestamp}" or "{ip}-{action}".
+   *
+   * @param {string} id - The full connection ID.
+   * @returns {string|null} A human-readable "T-ID: {part}" label, or null.
+   */
   const getTIdFromConnId = (id) => {
     const part = id?.split('-')[1];
     return part != null ? `T-ID: ${part}` : null;
   };
 
   const getActionLabel = (action) => {
-    const labels = { direct_ssh: 'Shell', docker_exec: 'Exec', docker_attach: 'Attach' };
+    const labels = {
+      direct_ssh: 'Shell',
+      docker_exec: 'Exec',
+      docker_attach: 'Attach',
+    };
     return labels[action] || action || '—';
   };
 
@@ -281,11 +395,21 @@ const ConnectionSelectorView = () => {
     }
   };
 
+  /**
+  Renders grouped active terminals view.
+  Groups by hostname
+  Supports expand/collapse
+  Allows inline renaming
+  Displays terminal metadata
+  @param {Object} activeTerminalsObj
+  */
   const displayActiveTerminalsTree = (activeTerminalsObj) => {
-    const list = Object.entries(activeTerminalsObj || {}).map(([key, value]) => ({
-      id: key,
-      ...value,
-    }));
+    const list = Object.entries(activeTerminalsObj || {}).map(
+      ([key, value]) => ({
+        id: key,
+        ...value,
+      }),
+    );
 
     if (list.length < 1)
       return (
@@ -297,10 +421,13 @@ const ConnectionSelectorView = () => {
             padding: '32px',
           }}
         >
-          <p style={{ fontSize: '16px', color: '#64748b' }}>No active terminals</p>
+          <p style={{ fontSize: '16px', color: '#64748b' }}>
+            No active terminals
+          </p>
         </div>
       );
 
+    // Build a per-hostname counter to generate default names like "hostname-1", "hostname-2".
     const countByHostname = {};
     const nameMap = {};
     list.forEach((conn) => {
@@ -315,10 +442,20 @@ const ConnectionSelectorView = () => {
       if (!byHostname[h]) byHostname[h] = [];
       byHostname[h].push(conn);
     });
-    const hostnames = Object.keys(byHostname).sort((a, b) => a.localeCompare(b));
+    const hostnames = Object.keys(byHostname).sort((a, b) =>
+      a.localeCompare(b),
+    );
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', minWidth: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          width: '100%',
+          minWidth: 0,
+        }}
+      >
         {hostnames.map((hostname) => {
           const isExpanded = expandedHostnames[hostname] !== false;
           const conns = byHostname[hostname];
@@ -336,7 +473,9 @@ const ConnectionSelectorView = () => {
                 role="button"
                 tabIndex={0}
                 onClick={() => toggleHostnameExpanded(hostname)}
-                onKeyDown={(e) => e.key === 'Enter' && toggleHostnameExpanded(hostname)}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && toggleHostnameExpanded(hostname)
+                }
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -354,13 +493,35 @@ const ConnectionSelectorView = () => {
                 ) : (
                   <FaChevronRight size={12} style={{ flexShrink: 0 }} />
                 )}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hostname}</span>
-                <span style={{ marginLeft: 'auto', fontSize: '12px', fontWeight: '500', color: '#64748b' }}>
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {hostname}
+                </span>
+                <span
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    color: '#64748b',
+                  }}
+                >
                   {conns.length} terminal{conns.length !== 1 ? 's' : ''}
                 </span>
               </div>
               {isExpanded && (
-                <div style={{ padding: '6px 8px 8px 24px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div
+                  style={{
+                    padding: '6px 8px 8px 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
                   {conns.map((conn) => {
                     const simpleName = nameMap[conn.id];
                     const tId = getTIdFromConnId(conn.id);
@@ -378,7 +539,14 @@ const ConnectionSelectorView = () => {
                           gap: '8px',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            minWidth: 0,
+                          }}
+                        >
                           {editingTerminalId === conn.id ? (
                             <input
                               autoFocus
@@ -401,7 +569,12 @@ const ConnectionSelectorView = () => {
                           ) : (
                             <span
                               title="Click to rename"
-                              onClick={() => startEditing(conn.id, getTerminalName(conn.id, simpleName))}
+                              onClick={() =>
+                                startEditing(
+                                  conn.id,
+                                  getTerminalName(conn.id, simpleName),
+                                )
+                              }
                               style={{
                                 fontSize: '13px',
                                 color: '#1e3a5f',
@@ -418,7 +591,11 @@ const ConnectionSelectorView = () => {
                           <div style={{ position: 'relative', flexShrink: 0 }}>
                             <button
                               type="button"
-                              onClick={() => setVisibleTooltip(visibleTooltip === conn.id ? null : conn.id)}
+                              onClick={() =>
+                                setVisibleTooltip(
+                                  visibleTooltip === conn.id ? null : conn.id,
+                                )
+                              }
                               style={{
                                 width: '16px',
                                 height: '16px',
@@ -477,6 +654,7 @@ const ConnectionSelectorView = () => {
                           </div>
                         </div>
 
+                        {/* Action badge: Shell / Exec / Attach */}
                         <span
                           style={{
                             fontSize: '12px',
@@ -489,6 +667,11 @@ const ConnectionSelectorView = () => {
                         >
                           {getActionLabel(conn.action)}
                         </span>
+
+                        {/*
+                         * Jump button: sets the globally focused terminal ID, which
+                         * triggers ConnectionView's scroll-into-view effect.
+                         */}
                         <button
                           type="button"
                           onClick={() => setFocusedTerminalId(conn.id)}
@@ -518,14 +701,22 @@ const ConnectionSelectorView = () => {
     );
   };
 
+  /**
+  Renders list of connections or terminals.
+  Displays connection metadata
+  Supports starring
+  Provides connection actions (SSH, Docker)
+  @param {Array|Object} selectedList
+  */
   const displayChosenList = (selectedList) => {
+    console.log(selectedList);
     const normalizedList = Array.isArray(selectedList)
       ? selectedList
-      : Object.entries(selectedList).map(([key, value]) => ({
+      : Object.entries(selectedList || {}).map(([key, value]) => ({
           id: key,
           ...value,
         }));
-
+    console.log('array?', Array.isArray(selectedList));
     if (normalizedList.length < 1)
       return (
         <div
@@ -560,9 +751,9 @@ const ConnectionSelectorView = () => {
       );
     };
 
-    return normalizedList.map((conn) => (
+    return normalizedList.map((conn, i) => (
       <div
-        key={conn?.id ?? `${conn.ip}-${conn.hostname}`}
+        key={conn?.id ?? `${conn.ip}-${conn.hostname}-${i}`}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -621,7 +812,15 @@ const ConnectionSelectorView = () => {
               {conn.hostname}
             </h3>
 
-            <p style={{ color: '#64748b', fontSize: '14px', margin: '2px 0', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            <p
+              style={{
+                color: '#64748b',
+                fontSize: '14px',
+                margin: '2px 0',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+              }}
+            >
               IP: {conn.ip}
             </p>
 
@@ -767,6 +966,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('all')}
                 >
                   All Connections
+                  <span
+                    style={{ color: 'grey' }}
+                  >{` (${connectionsList.length})`}</span>
                 </button>
                 <button
                   style={{
@@ -781,6 +983,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
+                  <span style={{ color: 'grey' }}>
+                    {` (${Object.entries(activeTerminals || {}).length})`}
+                  </span>
                 </button>
               </div>
               <div
@@ -804,7 +1009,12 @@ const ConnectionSelectorView = () => {
         </div>
       </div>
 
-      {/* Authentication */}
+      {/* 
+      Authentication Modal
+        Select auth method(password / SSH key)
+        Input credentials
+        Offer saving credentials to vault
+      */}
       {showAuthModal && (
         <div
           style={{
@@ -852,7 +1062,7 @@ const ConnectionSelectorView = () => {
               Choose authentication method
             </p>
 
-            {/* Auth Methods */}
+            {/* Tab switcher: Password vs SSH Key auth method */}
             <div
               style={{
                 display: 'flex',
@@ -895,6 +1105,127 @@ const ConnectionSelectorView = () => {
               </button>
             </div>
 
+            {/* Allows user to enter the User and Port number */}
+            <div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  User
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    placeholder="Enter User"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Port Number
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="number"
+                    value={portNumber}
+                    onChange={(e) => setPortNumber(e.target.value)}
+                    placeholder="Enter Port Number"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+              {selectedAction !== 'direct_ssh' && (
+                <div style={{ marginBottom: '24px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      color: '#1a365d',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                    }}
+                  >
+                    Container ID / Name
+                  </label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={containerName}
+                      onChange={(e) => setContainerName(e.target.value)}
+                      placeholder="Enter Port Number"
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '14px',
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') handleAuthSubmit();
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            {/*
+             * Password input panel.
+             * The trash icon clears the stored credential for this hostname
+             * from session storage, allowing the user to re-enter it manually.
+             */}
             {authMethod === 'password' && (
               <div style={{ marginBottom: '24px' }}>
                 <label
@@ -947,6 +1278,12 @@ const ConnectionSelectorView = () => {
               </div>
             )}
 
+            {/*
+             * SSH key file panel.
+             * Supports both click-to-upload and drag-and-drop.
+             * The drop zone border and background change color when a valid key is loaded.
+             * "Clear Key" removes the key from session storage and resets local state.
+             */}
             {authMethod === 'keyfile' && (
               <div style={{ marginBottom: '24px' }}>
                 <label
@@ -1041,6 +1378,12 @@ const ConnectionSelectorView = () => {
               </div>
             )}
 
+            {/*
+             * Vault save option.
+             * Disabled and visually dimmed when the vault is locked (credLocked).
+             * When unchecked, credentials are stored in session memory only
+             * and will be lost on page reload.
+             */}
             <div style={{ marginBottom: '24px' }}>
               <label
                 style={{
@@ -1081,6 +1424,21 @@ const ConnectionSelectorView = () => {
               </p>
             </div>
 
+            {terminalError && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  color: 'red',
+                  margin: 5,
+                  fontWeight: 'bold',
+                }}
+              >
+                Error: {terminalError}
+              </div>
+            )}
+
             <div
               style={{
                 display: 'flex',
@@ -1099,25 +1457,46 @@ const ConnectionSelectorView = () => {
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setShowAuthModal(false)}
+                onClick={() => {
+                  setTerminalLoading(false);
+                  setTerminalError(null);
+                  setShowAuthModal(false);
+                }}
               >
                 Cancel
               </button>
-              <button
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                }}
-                onClick={handleAuthSubmit}
-              >
-                Connect
-              </button>
+              {!terminalLoading ? (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                  onClick={handleAuthSubmit}
+                >
+                  Connect
+                </button>
+              ) : (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Loading...
+                </button>
+              )}
             </div>
           </div>
         </div>
