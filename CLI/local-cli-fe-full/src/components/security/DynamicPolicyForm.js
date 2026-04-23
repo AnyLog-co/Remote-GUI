@@ -36,17 +36,15 @@ function DynamicPolicyForm({
   const generatePolicyPreview = () => {
     if (!template || !formData) return null;
 
+    const fields = (template.fields || []).filter(f => f && f.name);
     const result = {};
 
-    // Process each field
-    for (const field of template.fields) {
+    for (const field of fields) {
       const name = field.name;
       const value = formData[name];
 
-      // Skip generated fields
       if (field.type === 'generated') continue;
 
-      // If field has modifiers
       if (field.modifiers) {
         const val = value;
         const val_str = typeof val === 'boolean' ? val.toString().toLowerCase() : String(val);
@@ -62,12 +60,11 @@ function DynamicPolicyForm({
       }
     }
 
-    // Merge custom fields into preview
     if (formData._customFields) {
       Object.assign(result, customFieldsToObject(formData._customFields));
     }
 
-    return { [template.policy_type]: result };
+    return { [template.policy_type || 'policy']: result };
   };
 
   useEffect(() => {
@@ -142,11 +139,10 @@ function DynamicPolicyForm({
 
       const updated = { ...dynamicOptions };
 
-      for (const field of template.fields) {
-        // Backward compatibility for node/table
+      for (const field of (template.fields || [])) {
+        if (!field || !field.name || !field.type) continue;
 
         if (tempDynamicTypes.includes(field.type) && !updated[field.name]) {
-          // For any dynamic type, fetch its options
           updated[field.name] = await fetchTypeOptions(node, field.type);
         }
       }
@@ -486,7 +482,18 @@ function DynamicPolicyForm({
   }
 
   // If no template or fields, render nothing
-  if (!template || !template.fields) return null;
+  if (!template || !Array.isArray(template.fields)) return null;
+
+  // Normalise fields: skip entries without a name, apply safe defaults
+  const safeFields = template.fields
+    .filter(f => f && f.name)
+    .map(f => ({
+      ...f,
+      label: f.label || f.name,
+      type: f.type || 'text',
+      description: f.description || '',
+      required: f.required ?? false,
+    }));
 
   const policyPreview = generatePolicyPreview();
 
@@ -505,7 +512,7 @@ function DynamicPolicyForm({
         />
       )}
       
-      {template.fields.map((field) => {
+      {safeFields.map((field) => {
         if (field.type === 'generated') return null; // Skip generated fields
 
         // If allowedPolicyFields is provided, skip fields not in the allowed list

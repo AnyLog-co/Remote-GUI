@@ -89,16 +89,44 @@ def get_policy_template(policy_file: str):
     file_path = os.path.join(TEMPLATE_DIR, f"{policy_file}.json")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Policy template not found")
-    with open(file_path, "r") as f:
-        return json.load(f)
+    try:
+        with open(file_path, "r") as f:
+            template = json.load(f)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template JSON is malformed: {e}",
+        )
+    # Ensure minimum required structure so the frontend doesn't break
+    if not isinstance(template, dict):
+        raise HTTPException(status_code=422, detail="Template must be a JSON object")
+    template.setdefault("policy_type", policy_file.replace("_policy", ""))
+    template.setdefault("fields", [])
+    template.setdefault("name", policy_file.replace("_", " ").title())
+    template.setdefault("requires_signature", False)
+    return template
 
 
 def _policy_factory(policy_file: str, policy_data: Dict, node: str = None):
     template_path = os.path.join(TEMPLATE_DIR, f"{policy_file}.json")
     if not os.path.exists(template_path):
         raise HTTPException(status_code=404, detail="Template not found")
-    with open(template_path, "r") as f:
-        template = json.load(f)
+    try:
+        with open(template_path, "r") as f:
+            template = json.load(f)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template JSON is malformed: {e}",
+        )
+
+    if not isinstance(template, dict):
+        raise HTTPException(status_code=422, detail="Template must be a JSON object")
+    if "policy_type" not in template:
+        template["policy_type"] = policy_file.replace("_policy", "")
+    if "fields" not in template:
+        template["fields"] = []
+
     try:
         return GenericPolicy(template, policy_data, node)
     except ValueError as e:

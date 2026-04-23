@@ -358,7 +358,12 @@ const SqlQueryGenerator = ({ node }) => {
           }
           return `period(${period.timeScale}, ${period.amount}, ${startValue}, ${period.column})`;
         });
-        periodStr = periodStrings.join(' AND ');
+        if (validConditions.length > 0) {
+          whereParts.push('and ' + periodStrings.join(' and '));
+        } else {
+          whereParts.push(periodStrings.join(' and '));
+        }
+//        periodStr = periodStrings.join(' AND ');
       }
 
       // Combine: wrap conditions in parens when both conditions and period exist

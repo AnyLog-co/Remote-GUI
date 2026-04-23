@@ -13,11 +13,14 @@ sys.path.append("..")
 class GenericPolicy(BasePolicy):
     def __init__(self, template: Dict[str, Any], data: Dict[str, Any], node: str = None):
         self.template = template
-        self.policy_type = template["policy_type"]
+        self.policy_type = template.get("policy_type", "unknown")
         self.node = node
 
-        # Separate custom fields from template fields before validation
-        template_field_names = {f["name"] for f in template["fields"]}
+        fields = template.get("fields", [])
+        # Normalise fields — skip entries that have no "name" key
+        fields = [f for f in fields if f.get("name")]
+
+        template_field_names = {f["name"] for f in fields}
         self.custom_fields = {
             k: v for k, v in data.items() if k not in template_field_names
         }
@@ -25,16 +28,14 @@ class GenericPolicy(BasePolicy):
             k: v for k, v in data.items() if k in template_field_names
         }
 
-        # Build dynamic Pydantic model
-        self.schema = self._build_pydantic_model(template["fields"])
-        
-        # Validate and store data
+        self.schema = self._build_pydantic_model(fields)
+
         try:
             self.data_model = self.schema(**template_data)
         except ValidationError as e:
             raise ValueError(f"Validation error: {e}")
 
-        self.generated_fields = self._generate_backend_fields(template["fields"])
+        self.generated_fields = self._generate_backend_fields(fields)
 
     def _build_pydantic_model(self, fields: List[Dict[str, Any]]) -> BaseModel:
         model_fields = {}
@@ -139,7 +140,8 @@ class GenericPolicy(BasePolicy):
         if "post_process" in self.template:
             final_result["__post_process__"] = self.template["post_process"]
 
-        for field in self.template["fields"]:
+        fields = [f for f in self.template.get("fields", []) if f.get("name")]
+        for field in fields:
             name = field["name"]
 
             # If field has modifiers

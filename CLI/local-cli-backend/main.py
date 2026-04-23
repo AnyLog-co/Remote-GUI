@@ -213,7 +213,6 @@ else:
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
-
     try:
         # project_root = os.path.dirname(os.path.dirname(BASE_DIR))
         # setup_cfg_path = os.path.join(project_root, 'setup.cfg')
