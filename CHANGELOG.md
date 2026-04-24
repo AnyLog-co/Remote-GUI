@@ -8,7 +8,21 @@ layout: page
 - 2026-04-23 | Created document
 -->
 
-<!-- last-processed: 68cc6b3 -->
+<!-- last-processed: 8c445cc -->
+
+<!-- os-dev: 8c445cc (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * CI/CD: working remote-gui with all changes
+  * Docker: working merge between ucsc + os-dev
+  * General: working remote-gui with all changes; working merge between ucsc + os-dev
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: added error handling for periods
+* **Pouria Rezaei** (2026-04-23)
+  * CI/CD: Updated SSH Client [ Bug fixes ] (#31)
+  * Dependencies: Updated SSH Client [ Bug fixes ] (#31)
+  * Docker: Updated SSH Client [ Bug fixes ] (#31)
+  * General: Updated SSH Client [ Bug fixes ] (#31)
 
 <!-- os-dev: 68cc6b3 (2026-04-23) -->
 
