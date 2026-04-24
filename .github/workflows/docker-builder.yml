@@ -74,22 +74,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#      - name: Build & Push
-#        run: |
-#          TAG=""
-#          if [[ "${GITHUB_REF_NAME}" == "pre-develop" ]]; then
-#            TAG=$(grep -m1 '^version =' setup.cfg  | cut -d= -f2-| tr -d '"\r'  | awk -F " " '{print $1}')
-#          elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
-#            TAG=latest
-#          fi
-#          if [[ "${TAG}" ]] ; then
-#            echo "Using Docker tag: ${TAG}"
-#            bash image_builder.sh \
-#              --tag ${TAG} \
-#              --platform linux/amd64,linux/arm64 \
-#              --push
-#          else
-#            bash image_builder.sh \
-#            --platform linux/amd64,linux/arm64 \
-#            --push
-#          fi
+      - name: Build & Push
+        run: |
+          TAG=""
+          if [[ "${GITHUB_REF_NAME}" == "pre-develop" ]]; then
+            TAG=$(grep -m1 '^version =' setup.cfg  | cut -d= -f2-| tr -d '"\r'  | awk -F " " '{print $1}')
+          elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            TAG=latest
+          fi
+          if [[ "${TAG}" ]] ; then
+            echo "Using Docker tag: ${TAG}"
+            bash image_builder.sh \
+              --tag ${TAG} \
+              --platform linux/amd64,linux/arm64 \
+              --push
+          else
+            bash image_builder.sh \
+            --platform linux/amd64,linux/arm64 \
+            --push
+          fi
