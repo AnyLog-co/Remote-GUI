@@ -393,13 +393,16 @@ const SqlQueryGenerator = ({ node }) => {
         periodStr = periodStrings.join(' AND ');
       }
 
-      // Combine: wrap conditions in parens when both conditions and period exist
-      if (conditionsStr && periodStr) {
-        anylogQuery += ` WHERE (${conditionsStr}) AND ${periodStr}`;
-      } else if (conditionsStr) {
-        anylogQuery += ` WHERE ${conditionsStr}`;
+      // Period comes first, then conditions.
+      // Multiple conditions get wrapped in parens so the AND binds correctly.
+      if (periodStr && conditionsStr) {
+        const hasMultipleConditions = validConditions.length > 1;
+        const condsPart = hasMultipleConditions ? `(${conditionsStr})` : conditionsStr;
+        anylogQuery += ` WHERE ${periodStr} AND ${condsPart}`;
       } else if (periodStr) {
         anylogQuery += ` WHERE ${periodStr}`;
+      } else if (conditionsStr) {
+        anylogQuery += ` WHERE ${conditionsStr}`;
       }
     }
     
