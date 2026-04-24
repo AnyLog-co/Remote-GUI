@@ -8,7 +8,14 @@ layout: page
 - 2026-04-23 | Created document
 -->
 
-<!-- last-processed: 15bfd5f -->
+<!-- last-processed: 36fbf25 -->
+
+<!-- os-dev: 36fbf25 (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * Docker: docker compose up --build logic
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: another fix for period to lock down the logic
 
 <!-- os-dev: 15bfd5f (2026-04-24) -->
 
