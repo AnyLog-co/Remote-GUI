@@ -18,7 +18,6 @@ import { cliState } from './state/state';
  */
 const ConnectionView = ({ conn }) => {
   const entries = Object.entries(conn);
-
   // Subscribe to the currently focused terminal ID from global CLI state.
   // Used to trigger auto-scroll when a terminal is selected externally
   // (e.g., from a sidebar or search result).
@@ -76,7 +75,6 @@ const ConnectionView = ({ conn }) => {
              * - Single connection: grows to fill all available height (flex: 1 1 auto).
              * - Multiple connections: fixed at near-full viewport height so each card
              *   is independently scrollable without collapsing (flex: 0 0 auto).
-             * - Starred connections receive a warm amber background as a visual cue.
              * - The DOM ID (terminal-card-{id}) is the scroll target for focusedTerminalId.
              */
             <div
@@ -92,7 +90,7 @@ const ConnectionView = ({ conn }) => {
                 flexDirection: 'column',
                 border: '1px solid #e2e8f0',
                 borderRadius: '8px',
-                backgroundColor: c.starred ? '#fffbeb' : 'white',
+                backgroundColor: 'white',
                 transition: 'background-color 0.2s',
                 overflow: 'hidden',
               }}
@@ -119,6 +117,7 @@ const ConnectionView = ({ conn }) => {
                   credential={c.credential}
                   action={c.action ?? 'direct_ssh'}
                   authType={c.authType}
+                  port={c.port}
                 />
               </div>
             </div>

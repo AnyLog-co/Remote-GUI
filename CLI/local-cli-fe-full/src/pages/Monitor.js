@@ -137,7 +137,7 @@ const Monitor = ({ node }) => {
             }}
             disabled={!isMonitoring}
           />
-          {inputError && <span style={{ color: 'red' }}>{inputError}</span>}
+          {inputError && <span style={{ color: 'red' }}>{inputError} <span className="error-dismiss" onClick={() => setInputError(null)}>×</span></span>}
           {isMonitoring && (
             <span style={{ 
               color: '#28a745', 
@@ -194,7 +194,7 @@ const Monitor = ({ node }) => {
           Stop Monitoring
         </button>
       </div>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p style={{ color: 'red' }}><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</p>}
       {data && data.length > 0 && <MonitorTable data={data} />}
     </div>
   );

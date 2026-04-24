@@ -15,6 +15,13 @@ ALLOWED_CONNECTION_METHODS = ["password", "key-string", "keyfile"]
 # Global mapping of all active sessions.
 sessions = {}
 
+def container_exists(ssh_client, container_name: str) -> bool:
+    """Returns True if the container exists on the remote host."""
+    _, stdout, _ = ssh_client.exec_command(
+        f"docker inspect --format='{{{{.State.Status}}}}' {container_name} 2>/dev/null"
+    )
+    output = stdout.read().decode().strip()
+    return bool(output) 
 
 async def listen_to_ssh(ws: WebSocket, channel: paramiko.Channel):
     """
@@ -31,7 +38,7 @@ async def listen_to_ssh(ws: WebSocket, channel: paramiko.Channel):
         pass
 
 
-def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
+def connect_client(ip, user, port, password=None, pkey=None) -> paramiko.SSHClient:
     """
     Inputs hostname, user, password, or possible p-key and returns a Paramiko-initialized Client
     """
@@ -42,7 +49,7 @@ def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
         client.connect(
             hostname=ip,
             username=user,
-            port=22,
+            port=port,
             password=password,
             pkey=pkey,
             timeout=10,
@@ -58,7 +65,7 @@ def connect_client(ip, user, password=None, pkey=None) -> paramiko.SSHClient:
         return None
 
 
-def open_ssh_chan(ip, name, user, conn_method):
+def open_ssh_chan(ip, name, user, port, conn_method):
     """
     Requires a hostname, user, and conn_method object
     conn_method in form of a dictionary:
@@ -71,7 +78,11 @@ def open_ssh_chan(ip, name, user, conn_method):
     """
     pref_method = conn_method.get("method")
     method_data = conn_method.get("data")
+
+
     print("Method: ", pref_method)
+    print("Port: ", port)
+
 
     if pref_method not in ALLOWED_CONNECTION_METHODS:
         print("Connection Method Error: Not key or password.\n")
@@ -81,7 +92,7 @@ def open_ssh_chan(ip, name, user, conn_method):
         # Password
         case "password":
             print("Connecting via password...")
-            client = connect_client(ip, user, password=method_data)
+            client = connect_client(ip, user, port, password=method_data)
 
         case "key-string":
             # Handle key file data as string
@@ -98,7 +109,7 @@ def open_ssh_chan(ip, name, user, conn_method):
                 key_stream.seek(0)
                 key = paramiko.RSAKey.from_private_key(key_stream)
 
-            client = connect_client(ip, user, pkey=key)
+            client = connect_client(ip, user, port, pkey=key)
 
         case "keyfile":
             # Handle raw keyfile data buffer
@@ -139,12 +150,14 @@ async def ws_handler(ws: WebSocket):
                     message["ip"],
                     node_name,
                     message["user"],
+                    message["port"],
                     conn_method_info,
                 )
 
+
                 if not client:
-                    print("Unauthorized User.")
-                    await ws.close(code=1008, reason="Unauthorized User")
+                    print("Invalid Credentials.")
+                    await ws.close(code=1008, reason="Invalid Credentials")
                     return None
 
                 if action == "direct_ssh":
@@ -158,15 +171,21 @@ async def ws_handler(ws: WebSocket):
                     channel.get_pty(term="xterm", width=cols, height=rows)
 
                     if action == "docker_attach":
+                        if not container_exists(client, node_name):
+                            await ws.close(code=1008, reason=f"Container '{node_name}' not found")
+                            return
+
                         # Create shell and launch docker attach to node on-start
                         channel.exec_command(f"docker attach {node_name}")
-
                         # Relay shell ready status
                         await ws.send_text(
                             f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
                         )
 
                     if action == "docker_exec":
+                        if not container_exists(client, node_name):
+                            await ws.close(code=1008, reason=f"Container '{node_name}' not found")
+                            return
                         # Create shell and launch docker exec to node on-start
                         channel.exec_command(f"docker exec -it {node_name} sh")
 

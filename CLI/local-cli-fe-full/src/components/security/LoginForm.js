@@ -61,6 +61,7 @@ function LoginForm({ onLoginSuccess }) {
           
           {error && (
             <div className="error-message">
+              <span className="error-dismiss" onClick={() => setError('')}>×</span>
               {error}
             </div>
           )}

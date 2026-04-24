@@ -1,13 +1,16 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:1.0.0-c15f31-amd64
+#    image: anylogco/remote-gui:1.1.0-68cc6b-amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: remote-gui
     restart: always
     stdin_open: true
     hostname: remote-gui
     tty: true
     environment:
-      VITE_API_URL: http://127.0.0.1:8080
+        VITE_API_URL: http://127.0.0.1:8080
       # Optional request timeout tuning (seconds)
       # ANYLOG_CONNECT_TIMEOUT: 5
       # ANYLOG_READ_TIMEOUT: 30

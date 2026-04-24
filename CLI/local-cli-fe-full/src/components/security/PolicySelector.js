@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { fetchPolicyTypes } from '../../services/security_api';
+import { fetchPolicyTypes as defaultFetchPolicyTypes } from '../../services/security_api';
 import '../../styles/security/PolicySelector.css';
 
-function PolicySelector({ value, onChange, allowedPolicyTypes }) {
+function PolicySelector({ value, onChange, allowedPolicyTypes, fetchPolicyTypesFn }) {
   const [types, setTypes] = useState([]);
+  const _fetchPolicyTypes = fetchPolicyTypesFn || defaultFetchPolicyTypes;
 
   useEffect(() => {
     console.log('Fetching policy types...');
-    fetchPolicyTypes().then(result => {
+    _fetchPolicyTypes().then(result => {
       console.log('Fetched policy types:', result);
       setTypes(result);
     });
-  }, []);
+  }, [_fetchPolicyTypes]);
 
   useEffect(() => {
     console.log("PolicySelector types:", types);
