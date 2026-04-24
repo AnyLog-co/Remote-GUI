@@ -14,6 +14,15 @@ export const cliState = create(
       activeConnection: {},
       connectionsList: [],
       focusedTerminalId: null,
+      terminalLoading: false,
+      terminalError: null,
+      showAuthModal: false,
+
+      setShowAuthModal: (state) => set({ showAuthModal: state }),
+
+      setTerminalLoading: (state) => set({ terminalLoading: state }),
+
+      setTerminalError: (err) => set({ terminalError: err }),
 
       setCredLocked: (lockedState) => set({ credLocked: lockedState }),
 

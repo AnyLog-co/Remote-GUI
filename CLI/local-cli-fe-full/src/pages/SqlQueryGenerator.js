@@ -1,8 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { getDatabases, getTables, getColumns, sendCommand } from '../services/api';
 import DataTable from '../components/DataTable';
 import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import '../styles/SqlQueryGenerator.css';
+
+class QueryBuilderErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="sql-query-generator">
+          <h2>AnyLog Query Generator</h2>
+          <div className="error-message">
+            <strong>Something went wrong while rendering the query builder.</strong>
+            <p>{this.state.error?.message}</p>
+            <button onClick={() => this.setState({ hasError: false, error: null })}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // run client () sql opcua_demo format = table "SELECT min(value), max(value), avg(value) FROM t11 WHERE period(hour, 3, now(), timestamp)"
 // implement:
@@ -102,7 +129,13 @@ const SqlQueryGenerator = ({ node }) => {
 
   // Update query when selections change
   useEffect(() => {
-    buildQuery();
+    try {
+      buildQuery();
+    } catch (err) {
+      console.error('buildQuery error:', err);
+      setError('Failed to build query: ' + err.message);
+      setQuery('');
+    }
   }, [selectedColumns, whereConditions, periods, groupBy, groupByColumns, orderBy, orderByColumns, limit, format, timezone, distinct, aggregations, joins, useIncrements, incrementsUnit, incrementsInterval, incrementsDateColumn, columnMode, timeSeriesMode, includeTables, extendFields, useTargetNodes, selectedNodes, operatorFilters]);
 
   const fetchDatabases = async () => {
@@ -140,7 +173,7 @@ const SqlQueryGenerator = ({ node }) => {
         database: selectedDatabase, 
         table: selectedTable 
       });
-      setColumns(result.data || []);
+      setColumns(Array.isArray(result?.data) ? result.data : []);
     } catch (err) {
       setError('Failed to fetch columns: ' + err.message);
     } finally {
@@ -216,7 +249,7 @@ const SqlQueryGenerator = ({ node }) => {
     // Add query options (format and timezone)
     anylogQuery += ` format = ${format}`;
     if (timezone !== 'utc') {
-      anylogQuery += ` timezone = ${timezone}`;
+      anylogQuery += ` and timezone = ${timezone}`;
     }
     
     // Add include tables if specified
@@ -323,23 +356,19 @@ const SqlQueryGenerator = ({ node }) => {
         period.timeScale && period.amount && period.startValue !== undefined && period.startValue !== '' && period.column
       );
       
-      const whereParts = [];
-      
-      // Add regular WHERE conditions
+      // Build the user's filter conditions
+      let conditionsStr = '';
       if (validConditions.length > 0) {
         const conditionStrings = validConditions.map((condition, index) => {
-          // Handle different value types
           let value = condition.value;
           if (condition.value === 'NOW()') {
             value = 'NOW()';
           } else if (typeof condition.value === 'string' && !condition.value.startsWith('NOW()')) {
-            // Quote string values unless they're functions
             value = `'${condition.value}'`;
           }
           
           const conditionString = `${condition.column} ${condition.operator} ${value}`;
           
-          // Add logical operator for all conditions except the first one
           if (index > 0) {
             const logicalOp = condition.logicalOperator || 'AND';
             return `${logicalOp} ${conditionString}`;
@@ -347,26 +376,33 @@ const SqlQueryGenerator = ({ node }) => {
           
           return conditionString;
         });
-        whereParts.push(...conditionStrings);
+        conditionsStr = conditionStrings.join(' ');
       }
-      
-      // Add period conditions
+
+      // Build period conditions
+      let periodStr = '';
       if (validPeriods.length > 0) {
         const periodStrings = validPeriods.map(period => {
-          let startValue = period.startValue;
-          if (period.startValue === 'NOW()') {
-            startValue = 'NOW()';
-          } else if (typeof period.startValue === 'string' && !period.startValue.startsWith('NOW()')) {
-            // Quote string values unless they're functions
-            startValue = `'${period.startValue}'`;
+          let startValue = period.startValue || 'NOW()';
+          if (startValue !== 'NOW()' && typeof startValue === 'string' && !startValue.startsWith('NOW()')) {
+            startValue = `'${startValue}'`;
           }
-          return `period(${period.timeScale}, ${period.amount}, ${startValue}, ${period.column})`;
+          const amount = Number.isFinite(period.amount) ? period.amount : 1;
+          return `period(${period.timeScale || 'hour'}, ${amount}, ${startValue}, ${period.column})`;
         });
-        whereParts.push(...periodStrings);
+        periodStr = periodStrings.join(' AND ');
       }
-      
-      if (whereParts.length > 0) {
-        anylogQuery += ` WHERE ${whereParts.join(' ')}`;
+
+      // Period comes first, then conditions.
+      // Multiple conditions get wrapped in parens so the AND binds correctly.
+      if (periodStr && conditionsStr) {
+        const hasMultipleConditions = validConditions.length > 1;
+        const condsPart = hasMultipleConditions ? `(${conditionsStr})` : conditionsStr;
+        anylogQuery += ` WHERE ${periodStr} AND ${condsPart}`;
+      } else if (periodStr) {
+        anylogQuery += ` WHERE ${periodStr}`;
+      } else if (conditionsStr) {
+        anylogQuery += ` WHERE ${conditionsStr}`;
       }
     }
     
@@ -1798,6 +1834,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Execution Results */}
         {executionError && (
           <div className="execution-error">
+            <span className="error-dismiss" onClick={() => setExecutionError(null)}>×</span>
             <h3>Execution Error</h3>
             <div className="error-content">
               <strong>Error:</strong> {executionError}
@@ -1885,6 +1922,7 @@ const SqlQueryGenerator = ({ node }) => {
         {/* Error Display */}
         {error && (
           <div className="error-message">
+            <span className="error-dismiss" onClick={() => setError(null)}>×</span>
             <strong>Error:</strong> {error}
           </div>
         )}
@@ -1893,4 +1931,12 @@ const SqlQueryGenerator = ({ node }) => {
   );
 };
 
-export default SqlQueryGenerator; 
+function SqlQueryGeneratorWithBoundary(props) {
+  return (
+    <QueryBuilderErrorBoundary>
+      <SqlQueryGenerator {...props} />
+    </QueryBuilderErrorBoundary>
+  );
+}
+
+export default SqlQueryGeneratorWithBoundary;

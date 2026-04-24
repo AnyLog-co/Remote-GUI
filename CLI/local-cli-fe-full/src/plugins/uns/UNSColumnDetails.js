@@ -93,7 +93,7 @@ const UNSColumnDetails = ({
   if (error) {
     return (
       <div className="uns-column-details">
-        <div className="uns-column-details-error">{error}</div>
+        <div className="uns-column-details-error"><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</div>
       </div>
     );
   }

@@ -120,7 +120,7 @@ const AddData = ({ node }) => {
       )}
 
       {/* Error message */}
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message"><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</div>}
 
       {/* Submit button */}
       <button

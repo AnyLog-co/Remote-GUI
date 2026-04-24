@@ -106,6 +106,8 @@ Before you begin, ensure you have the following installed:
 
     # Run on cloud
     fastapi dev CLI/Local_CLI/local_cli_backend/main.py --host 0.0.0.0 --port 8000
+    or 
+    uvicorn CLI.local-cli-backend.main:app --reload --port 8000
     ```
 
 5. The backend server should now be running at:  

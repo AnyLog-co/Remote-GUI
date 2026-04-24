@@ -49,6 +49,17 @@ export async function getVersion() {
   }
 }
 
+/** Fetch environment configuration from backend (GET /env-config). */
+export async function getEnvConfig() {
+  try {
+    const response = await fetch(`${API_URL}/env-config`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (e) {
+    return null;
+  }
+}
+
 const REACHABILITY_TIMEOUT_MS = 10_000;
 
 /**
