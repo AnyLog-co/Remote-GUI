@@ -390,12 +390,7 @@ const SqlQueryGenerator = ({ node }) => {
           const amount = Number.isFinite(period.amount) ? period.amount : 1;
           return `period(${period.timeScale || 'hour'}, ${amount}, ${startValue}, ${period.column})`;
         });
-        if (validConditions.length > 0) {
-          whereParts.push('and ' + periodStrings.join(' and '));
-        } else {
-          whereParts.push(periodStrings.join(' and '));
-        }
-//        periodStr = periodStrings.join(' AND ');
+        periodStr = periodStrings.join(' AND ');
       }
 
       // Combine: wrap conditions in parens when both conditions and period exist
