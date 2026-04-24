@@ -1,6 +1,6 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:1.1.0-5b9cce-amd64
+    image: anylogco/remote-gui:1.1.0-68cc6b-amd64
     container_name: remote-gui
     restart: always
     stdin_open: true
