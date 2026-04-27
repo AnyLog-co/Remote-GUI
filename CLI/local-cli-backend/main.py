@@ -7,6 +7,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 sys.path.append(BASE_DIR)
 
+import logging
+from logging_config import setup_logging
+setup_logging()
+logger = logging.getLogger("uvicorn.error")
+
 from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -15,9 +20,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict
-import logging
-
-logger = logging.getLogger("uvicorn.error")
 
 from parsers import parse_response
 from classes import *
