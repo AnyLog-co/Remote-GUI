@@ -234,6 +234,10 @@ function FileuploaderPage({ node }) {
     }
   };
 
+  const handleFileDrop = (newFiles) => {
+    changeFiles(newFiles);
+  }
+
   return (
     <div className="fileuploader-page">
       <div className="fileuploader-header">
@@ -283,7 +287,7 @@ function FileuploaderPage({ node }) {
         {/* Drag and Drop functionality through react-dropzone */}
         <div className="form-section">
           <h3>File Drop Zone</h3>
-          <FileDropzone setFilesCallback={changeFiles}/>
+          <FileDropzone setFilesCallback={handleFileDrop}/>
         </div>
 
         {/* Configure file settings if there exist duplicate file names, and file view with deletion settings */}
