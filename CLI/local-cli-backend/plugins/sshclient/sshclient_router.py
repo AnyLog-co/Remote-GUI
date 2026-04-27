@@ -3,6 +3,17 @@ import io
 
 import paramiko
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from rsyslog_logger import setup_logger
+
+logger = setup_logger(
+    name="SSH_Client",
+    log_file="/var/log/syslog",
+    log_level="INFO",
+    log_format="rsyslog",
+    console_log_level="ERROR",
+    max_size=20,
+    backup_count=10
+)
 
 # Backend-required 'api_router' object to consume SSHClient's router into main router
 api_router = APIRouter(prefix="/sshclient", tags=["SSH Client"])
@@ -178,6 +189,7 @@ async def ws_handler(ws: WebSocket):
                         # Create shell and launch docker attach to node on-start
                         channel.exec_command(f"docker attach {node_name}")
                         # Relay shell ready status
+                        logger.info(f'docker attach {node_name}')
                         await ws.send_text(
                             f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
                         )
