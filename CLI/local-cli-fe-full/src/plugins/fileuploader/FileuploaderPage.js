@@ -160,6 +160,23 @@ function FileuploaderPage({ node }) {
     setLoadingDeleteUploaded(false);
   };
 
+  const getUploadResponse = async () => {
+    const formData = new FormData();
+    formData.set("conn", node);
+    formData.set("directory_path", directory);
+    files.forEach((file) => {
+      formData.append("files", file.file);
+      formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
+    })
+
+    const response = await fetch(`${API_URL}/fileuploader/upload`, {
+      method: "POST",
+      body: formData
+    });
+
+    return response;
+  }
+
   const handleUploadButtonClick = async () => {
     if (files.length > 0) {
       try {
@@ -167,18 +184,7 @@ function FileuploaderPage({ node }) {
         setError(null);
         setSuccess(null);
         
-        const formData = new FormData();
-        formData.set("conn", node);
-        formData.set("directory_path", directory);
-        files.forEach((file) => {
-          formData.append("files", file.file);
-          formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
-        })
-
-        const response = await fetch(`${API_URL}/fileuploader/upload`, {
-          method: "POST",
-          body: formData
-        });
+        const response = await getUploadResponse();
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
