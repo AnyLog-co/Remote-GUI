@@ -20,7 +20,10 @@ const TerminalView = ({
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window._env_?.VITE_API_URL || 'http://localhost:8080';
+  const API_URL =
+    window._env_?.VITE_API_URL ||
+    'http://localhost:8080' ||
+    'http://localhost:8000';
   var strippedURL = (strippedURL = API_URL.replace('http://', ''));
   const [isReady, setIsReady] = useState(false);
 

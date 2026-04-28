@@ -3,17 +3,23 @@ import io
 
 import paramiko
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from rsyslog_logger import setup_logger
+import logging
 
-logger = setup_logger(
-    name="SSH_Client",
-    log_file="/var/log/syslog",
-    log_level="INFO",
-    log_format="rsyslog",
-    console_log_level="ERROR",
-    max_size=20,
-    backup_count=10
-)
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            "time": self.formatTime(record),
+            "name": record.name,
+            "level": record.levelname,
+            "message": record.getMessage()
+        })
+
+logger = logging.getLogger("SSH_Client")
+logger.setLevel(logging.INFO)
+
+handler = logging.FileHandler("/var/log/syslog")
+handler.setFormatter(JSONFormatter())
+logger.addHandler(handler)
 
 # Backend-required 'api_router' object to consume SSHClient's router into main router
 api_router = APIRouter(prefix="/sshclient", tags=["SSH Client"])
@@ -22,6 +28,7 @@ api_router = APIRouter(prefix="/sshclient", tags=["SSH Client"])
 ALLOWED_ON_START_TASKS = ["direct_ssh", "docker_attach", "docker_exec"]
 # Possible allowed conn method.
 ALLOWED_CONNECTION_METHODS = ["password", "key-string", "keyfile"]
+input_buffer = {}
 
 # Global mapping of all active sessions.
 sessions = {}
@@ -200,6 +207,7 @@ async def ws_handler(ws: WebSocket):
                             return
                         # Create shell and launch docker exec to node on-start
                         channel.exec_command(f"docker exec -it {node_name} sh")
+                        logger.info(f'docker exec -it {node_name} sh')
 
                         # Relay shell ready status
                         await ws.send_text(f"Started in {node_name}\r\n")
@@ -219,7 +227,17 @@ async def ws_handler(ws: WebSocket):
             elif action == "client_input":
                 # Relay user keystrokes in terminal
                 if channel:
-                    channel.send(message.get("input", ""))
+                    data = message.get("input", "")
+                    channel.send(data)
+                    
+                    # Log completed input only
+                    input_buffer.setdefault(ws, "")
+                    if "\r" in data or "\n" in data:
+                        if input_buffer[ws].strip(): 
+                            logger.info(f'input: {input_buffer[ws]}')
+                        input_buffer[ws] = ""
+                    else:
+                        input_buffer[ws] += data
     except WebSocketDisconnect:
         print("WS Disconnect\n")
     except Exception as e:
@@ -232,6 +250,7 @@ async def ws_handler(ws: WebSocket):
     finally:
         # Clean up client and session
         session = sessions.pop(ws, None)
+        input_buffer.pop(ws, None)
         if session:
             channel = session.get("channel")
             client = session.get("client")
