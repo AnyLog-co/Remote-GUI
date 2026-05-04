@@ -177,8 +177,25 @@ function FileuploaderPage({ node }) {
     return response;
   }
 
-  const handleUploadButtonClick = async () => {
+  const getLargeFileCount = () => {
+    const largeFileSize = 10 * 1024 * 1024; // 10 MB
+    const largeFiles = files.filter(file => file.file.size >= largeFileSize);
+    return largeFiles.length;
+  }
+
+  const [displaySizeWarning, setDisplaySizeWarning] = useState(false);
+
+  const handleUploadButtonClick = async (overrideSizeWarning = false) => {
     if (files.length > 0) {
+
+      // User should confirm they're ok with uploading large files
+      const largeFileCount = getLargeFileCount();
+      if (largeFileCount > 0 && !overrideSizeWarning) {
+        setDisplaySizeWarning(true);
+        return;
+      }
+      setDisplaySizeWarning(false);
+
       try {
         setLoading(true);
         setError(null);
@@ -221,6 +238,10 @@ function FileuploaderPage({ node }) {
     }
   };
 
+  const handleSizeWarningAccept = async () => {
+    handleUploadButtonClick(true);
+  }
+
   // get correct title for upload button when you hover over it
   const getUploadButtonTitle = () => {
     if (!isValidDirectory) {
@@ -249,6 +270,27 @@ function FileuploaderPage({ node }) {
           </div>
         )}
       </div>
+
+      {displaySizeWarning ?
+        <div className="sizewarning-container">
+          <div className="sizewarning-body">
+            <div className="sizewarning-text">
+              WARNING! At least one file you are trying to upload
+              is larger than 10MB. Are you sure you want
+              to upload these files?
+            </div>
+            <div className="sizewarning-options">
+              <button className="upload-button" onClick={handleSizeWarningAccept}>
+                Upload
+              </button>
+              <button className="upload-button" onClick={() => setDisplaySizeWarning(false)}>
+                Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+        : <></>
+      }
 
       <div className="fileuploader-form">
 
@@ -393,7 +435,7 @@ function FileuploaderPage({ node }) {
           className="upload-button"
           disabled={!canSubmit || !isValidDirectory || hasConflicts}
           title={getUploadButtonTitle()}
-          onClick={handleUploadButtonClick}
+          onClick={() => handleUploadButtonClick()}
         >
           {loading ? "Uploading..." : "Upload"}
         </button>
