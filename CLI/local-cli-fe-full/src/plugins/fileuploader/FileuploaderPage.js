@@ -275,9 +275,8 @@ function FileuploaderPage({ node }) {
         <div className="sizewarning-container">
           <div className="sizewarning-body">
             <div className="sizewarning-text">
-              WARNING! At least one file you are trying to upload
-              is larger than 10MB. Are you sure you want
-              to upload these files?
+              At least one file is larger than 10 MB. Please confirm
+              to proceed.
             </div>
             <div className="sizewarning-options">
               <button className="upload-button" onClick={handleSizeWarningAccept}>
