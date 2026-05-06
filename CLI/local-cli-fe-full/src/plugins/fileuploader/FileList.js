@@ -42,9 +42,20 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
     else if (soundExtension.includes(fileExtension)) return '🔊';
     else if (videoExtension.includes(fileExtension)) return '🎬';
     else {
-      return '';
+      return '📁';
     }
   }
+
+  const formatSize = (bytes) => {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    let i = 0;
+    while (bytes >= 1024 && i < units.length - 1) {
+      bytes /= 1024;
+      i++;
+    }
+    const digits = bytes < 10 ? 2 : bytes < 100 ? 2 : bytes < 1000 ? 1 : 0;
+    return `${bytes.toFixed(digits)} ${units[i]}`;
+  };
 
   const handleChange = (event) => {
     setActiveValue(event.target.value);
@@ -62,6 +73,10 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
             className={`file-list-item-info
             ${file.result ? 'message' : ''}`}
           >
+            <input
+              type="checkbox"
+              className="file-list-item-icon checkbox"
+            />
             <div className="file-list-item-icon">
               {getFileExtensionEmoji(file.file.name)}
             </div>
@@ -92,6 +107,11 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
               />
             </div>
             <div className="file-list-item-actions">
+              <div
+                className={file.file.size > 10 * 1024 * 1024 ? 'error-text-color' : ''}
+              >
+                {formatSize(file.file.size)}
+              </div>
               <div className="duplicate-handling-options-toggle">
                 <button 
                   className={`mode-btn ${file.duplicateHandlingOption === 'skip' ? 'active' : ''}`}

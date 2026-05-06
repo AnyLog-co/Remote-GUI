@@ -39,6 +39,8 @@ function FileuploaderPage({ node }) {
   const [loading, setLoading] = useState(false); // upload button
   const [loadingDeleteUploaded, setLoadingDeleteUploaded] = useState(false);
 
+  const [displaySizeWarning, setDisplaySizeWarning] = useState(false);
+
   // upload button becomes valid if there are files selected
   // also checks for duplicate file names
   // triggered by FileDropzone.js and FileList.js
@@ -182,8 +184,6 @@ function FileuploaderPage({ node }) {
     const largeFiles = files.filter(file => file.file.size >= largeFileSize);
     return largeFiles.length;
   }
-
-  const [displaySizeWarning, setDisplaySizeWarning] = useState(false);
 
   const handleUploadButtonClick = async (overrideSizeWarning = false) => {
     if (files.length > 0) {
@@ -395,6 +395,15 @@ function FileuploaderPage({ node }) {
             className="file-list-container form-group"
           >
             <div className="file-list-container-header">
+              <div
+                className="file-list-container-header-info"
+              >
+                <input
+                  type="checkbox"
+                  // checked={}
+                  className="file-list-item-icon checkbox"
+                />
+              </div>
               Files selected ({files.length})
             </div>
             <div className="file-list-content">

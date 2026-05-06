@@ -48,7 +48,7 @@
 /* Drag-and-drop styling */
 /* Text animation from https://stackoverflow.com/questions/33057737/css-replacing-a-text-on-hover-but-smooth-transition-to-the-new-text-does-not-w*/
 .file-dropzone {
-  height: 50px;
+  height: 100px;
   flex: 1;
   display: flex;
   position: relative;
@@ -120,6 +120,27 @@
   background-color: #5a6268;
 }
 
+/* .file-list-item-icon.checkbox {
+  width: fit-content;
+  color: #3b82f6;
+  font-weight: bold;
+  font-size: 16px;
+} */
+
+.file-list-item-icon.checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: #2563eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+
+.file-list-item-icon.checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #2563eb33;
+} 
+
 /* Only space buttons to the right of the first button */
 .file-list-action-container button:not(:first-child) {
   margin-left: 10px;
@@ -152,6 +173,8 @@
 }
 
 .file-list-container-header {
+  display: flex;
+  align-items: center;
   max-width: inherit;
   padding: 12px 15px;
   background-color: #f8f9fa;
@@ -169,7 +192,8 @@
   max-height: 400px;
 }
 
-.file-list-item-icon {
+.file-list-item-icon, .file-list-container-header-info {
+  display: flex;
   font-size: 20px;
   margin-right: 10px;
   flex-shrink: 0;
