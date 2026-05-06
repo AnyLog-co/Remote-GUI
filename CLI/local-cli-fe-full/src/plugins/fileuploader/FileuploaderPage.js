@@ -160,25 +160,48 @@ function FileuploaderPage({ node }) {
     setLoadingDeleteUploaded(false);
   };
 
-  const handleUploadButtonClick = async () => {
+  const getUploadResponse = async () => {
+    const formData = new FormData();
+    formData.set("conn", node);
+    formData.set("directory_path", directory);
+    files.forEach((file) => {
+      formData.append("files", file.file);
+      formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
+    })
+
+    const response = await fetch(`${API_URL}/fileuploader/upload`, {
+      method: "POST",
+      body: formData
+    });
+
+    return response;
+  }
+
+  const getLargeFileCount = () => {
+    const largeFileSize = 10 * 1024 * 1024; // 10 MB
+    const largeFiles = files.filter(file => file.file.size >= largeFileSize);
+    return largeFiles.length;
+  }
+
+  const [displaySizeWarning, setDisplaySizeWarning] = useState(false);
+
+  const handleUploadButtonClick = async (overrideSizeWarning = false) => {
     if (files.length > 0) {
+
+      // User should confirm they're ok with uploading large files
+      const largeFileCount = getLargeFileCount();
+      if (largeFileCount > 0 && !overrideSizeWarning) {
+        setDisplaySizeWarning(true);
+        return;
+      }
+      setDisplaySizeWarning(false);
+
       try {
         setLoading(true);
         setError(null);
         setSuccess(null);
         
-        const formData = new FormData();
-        formData.set("conn", node);
-        formData.set("directory_path", directory);
-        files.forEach((file) => {
-          formData.append("files", file.file);
-          formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
-        })
-
-        const response = await fetch(`${API_URL}/fileuploader/upload`, {
-          method: "POST",
-          body: formData
-        });
+        const response = await getUploadResponse();
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -215,6 +238,10 @@ function FileuploaderPage({ node }) {
     }
   };
 
+  const handleSizeWarningAccept = async () => {
+    handleUploadButtonClick(true);
+  }
+
   // get correct title for upload button when you hover over it
   const getUploadButtonTitle = () => {
     if (!isValidDirectory) {
@@ -228,6 +255,10 @@ function FileuploaderPage({ node }) {
     }
   };
 
+  const handleFileDrop = (newFiles) => {
+    changeFiles(newFiles);
+  }
+
   return (
     <div className="fileuploader-page">
       <div className="fileuploader-header">
@@ -239,6 +270,27 @@ function FileuploaderPage({ node }) {
           </div>
         )}
       </div>
+
+      {displaySizeWarning ?
+        <div className="sizewarning-container">
+          <div className="sizewarning-body">
+            <div className="sizewarning-text">
+              WARNING! At least one file you are trying to upload
+              is larger than 10MB. Are you sure you want
+              to upload these files?
+            </div>
+            <div className="sizewarning-options">
+              <button className="upload-button" onClick={handleSizeWarningAccept}>
+                Upload
+              </button>
+              <button className="upload-button" onClick={() => setDisplaySizeWarning(false)}>
+                Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+        : <></>
+      }
 
       <div className="fileuploader-form">
 
@@ -277,7 +329,7 @@ function FileuploaderPage({ node }) {
         {/* Drag and Drop functionality through react-dropzone */}
         <div className="form-section">
           <h3>File Drop Zone</h3>
-          <FileDropzone setFilesCallback={changeFiles}/>
+          <FileDropzone setFilesCallback={handleFileDrop}/>
         </div>
 
         {/* Configure file settings if there exist duplicate file names, and file view with deletion settings */}
@@ -383,7 +435,7 @@ function FileuploaderPage({ node }) {
           className="upload-button"
           disabled={!canSubmit || !isValidDirectory || hasConflicts}
           title={getUploadButtonTitle()}
-          onClick={handleUploadButtonClick}
+          onClick={() => handleUploadButtonClick()}
         >
           {loading ? "Uploading..." : "Upload"}
         </button>
