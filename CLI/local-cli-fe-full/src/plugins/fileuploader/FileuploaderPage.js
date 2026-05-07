@@ -220,12 +220,15 @@ function FileuploaderPage({ node }) {
         
         // keep track of selected files and files that weren't selected
         // also keep track of indices to maintain order of files after upload
+        // mapping fileList index to selectedFiles index
         const selectedFiles = [];
         const selectedIndexObject = {};
+        let selectedIndex = 0;
         fileList.forEach((file, index) => {
           if (isFirstAttempt || file.selected) {
             selectedFiles.push(file);
-            selectedIndexObject[index] = index;
+            selectedIndexObject[index] = selectedIndex;
+            selectedIndex++;
           }
         });
 
@@ -246,7 +249,7 @@ function FileuploaderPage({ node }) {
 
         fileList.forEach((file, index) => {
           if (selectedIndexObject.hasOwnProperty(index)) {
-            const result = data.results[index];
+            const result = data.results[selectedIndexObject[index]];
             if (result.success)
               successful.push(`${file.file.name} was stored as ${result.stored_filename}`)
             else
@@ -255,7 +258,11 @@ function FileuploaderPage({ node }) {
                 firstAttempt: false,
                 result: result,
               });
-          }
+          } else
+            otherFiles.push({
+              ...file,
+              firstAttempt: false,
+            });
         });
         if (isFirstAttempt)
           appendFiles(otherFiles);

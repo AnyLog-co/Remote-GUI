@@ -112,7 +112,7 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
             <div className="file-list-item-actions">
               <div
                 className={file.file.size > 10 * 1024 * 1024 ? 'error-text-color' : ''}
-                title={file.file.size > 10 * 1024 * 1024 ? 'Warning: this file is greater than 10 MB' : ''}
+                title={file.file.size > 10 * 1024 * 1024 ? `Warning: ${file.file.name} has a size greater than 10 MB` : ''}
               >
                 {formatSize(file.file.size)}
               </div>
