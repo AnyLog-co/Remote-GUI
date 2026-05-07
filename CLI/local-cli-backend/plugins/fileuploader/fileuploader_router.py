@@ -238,21 +238,20 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
             # can optimize api calls by keeping a local copy of this list
             file_list = exec_get_files(conn, dir_path)
             file_already_exists = file.filename in file_list
-            if file_already_exists and option != 'replace':
+            if file_already_exists and option != 'overwrite':
 
                 # if on skip option, abort the upload for this file and give warning (instead of error)
                 if option == 'skip':
                     results.append({
                         "filename": file.filename,
                         "success": False,
-                        "skipped": True,
-                        "warning": "File already exists in this folder and the 'Skip' option was selected"
+                        "skipped": True
                     })
                     continue
                 
                 # if on keep option, get a numbered file name
                 if option == 'keep':
-                    name = get_numbered_filename(file, file_list) if file_already_exists else file.filename
+                    name = get_numbered_filename(file, file_list)
                     stored_name = push_file(conn, file, name, dir_path)
 
                 # if an option was somehow not selected, skip uploading this file and give a warning

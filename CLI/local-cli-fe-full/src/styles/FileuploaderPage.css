@@ -95,37 +95,18 @@
   background-color: #0056b3;
 }
 
-.reset-button-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 1rem;
-}
-
-.reset-button-width {
-  width: fit-content;
-}
-
-.reset-button {
-  padding: 10px;
-  font-size: 16px;
-  background-color: #6c757d;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+.form-group .inline-span {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  column-gap: 5px;
 }
 
 .reset-button:hover:not(:disabled) {
+  color: #fff;
   background-color: #5a6268;
+  transition: color 0.2;
 }
-
-/* .file-list-item-icon.checkbox {
-  width: fit-content;
-  color: #3b82f6;
-  font-weight: bold;
-  font-size: 16px;
-} */
 
 .file-list-item-icon.checkbox {
   width: 20px;
@@ -257,46 +238,9 @@ input.file-list-item-name {
   flex-shrink: 0;
 }
 
-/* Duplicate handling options toggle */
-.duplicate-handling-options-toggle {
-  display: flex;
-  gap: 5px;
-  background: white;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.mode-btn {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6c757d;
-  transition: all 0.2s ease;
-}
-
-.mode-btn:hover:not(:disabled) {
-  background: #e9ecef;
-  color: #495057;
-}
-
-.mode-btn.active {
-  background: #007bff;
-  color: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.mode-btn.active:hover {
-  background: #0056b3;
-  color: white;
-}
-
-.file-list-item-delete-btn {
+.file-list-item-delete-btn, .reset-button {
   background: none;
+  color:#000;
   border: none;
   font-size: 16px;
   cursor: pointer;
@@ -374,6 +318,27 @@ input.file-list-item-name {
   font-weight: 600;
 }
 
+.form-section.expandable {
+  overflow: hidden;
+  transition: max-height 1s ease, opacity 1s ease, padding 1s ease, margin 1s ease;
+}
+
+.form-section.expandable:not(.expanded) {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  border-bottom: none;
+  transition: max-height 2s ease, opacity 1s ease, padding 1s ease, margin 1s ease;
+  overflow: hidden;
+}
+
+.form-section.expandable.expanded {
+  max-height: 100vh;
+  opacity: 1;
+  transition: max-height 2s ease, opacity 1.5s ease, padding 1.5s ease, margin 1.5s ease;
+}
+
 .form-group {
   margin-bottom: 20px;
   max-width: inherit; 
@@ -421,6 +386,17 @@ input.file-list-item-name {
   color: #6c757d;
   font-size: 12px;
   font-style: italic;
+}
+
+.uploading-message {
+  background: #d4deed;
+  border: 1px solid #c3d3e6;
+  border-radius: 6px;
+  padding: 15px 20px;
+  margin-bottom: 20px;
+  color: #153757;
+  font-weight: 500;
+  white-space: pre-wrap;
 }
 
 .error-message {

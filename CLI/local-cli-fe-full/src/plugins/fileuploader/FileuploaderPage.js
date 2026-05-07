@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import '../../styles/FileuploaderPage.css';
 import FileList from './FileList';
 import FileDropzone from './FileDropzone';
@@ -9,7 +9,8 @@ const API_URL = window._env_?.VITE_API_URL || "http://localhost:8000";
 function FileuploaderPage({ node }) {
 
   const [files, setFiles] = useState([]);
-  const changeFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
+  const appendFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
+  const [filesQueue, setFilesQueue] = useState([]);
 
   const defaultDirectory = "/app/AnyLog-Network/data/upload_dir";
   // const [directory, setDirectory] = useState({label: defaultDirectory, value: defaultDirectory});
@@ -29,38 +30,35 @@ function FileuploaderPage({ node }) {
   }, [nameConflictObject]);
   const [hasConflicts, setHasConflicts] = useState(false);
   const [canSubmit, setCanSubmit] = useState(false);
-  const [canDeleteUploaded, setCanDeleteUploaded] = useState(false);
 
-  const duplicateHandlingOptions = ["skip", "replace", "keep"];
+  const [numberSelected, setNumberSelected] = useState(0);
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [successFiles, setSuccessFiles] = useState(null);
 
-  const [loading, setLoading] = useState(false); // upload button
-  const [loadingDeleteUploaded, setLoadingDeleteUploaded] = useState(false);
+  // upload buttons (with string of button name)
+  const [loadingButton, setLoadingButton] = useState('');
 
   const [displaySizeWarning, setDisplaySizeWarning] = useState(false);
+
+  // select all button value
+  const [selectAllChecked, setSelectAllChecked] = useState(false);
+
+  // for size warning modal
+  const modalRef = useRef();
 
   // upload button becomes valid if there are files selected
   // also checks for duplicate file names
   // triggered by FileDropzone.js and FileList.js
-  useEffect(() =>{
-    if (files.length > 0)
-      setCanSubmit(true);
-    else {
-      setCanSubmit(false);
-      setCanDeleteUploaded(false);
-    }
+  useEffect(() => {
 
-    // build duplicates object and check if there are any successful files
+    // build duplicates object
     const names = {};
     const duplicates = {};
+    let numSelections = 0;
     let hasDuplicates = false;
-    let hasSuccess = false;
     for (const file of files) {
-
-      if (file.result?.success)
-        hasSuccess = true;
 
       // names keeps track of current namespace
       // duplicates keeps track of which names have duplicates
@@ -71,17 +69,26 @@ function FileuploaderPage({ node }) {
       }
       else
         names[name] = 1;
-    }
-    if (hasSuccess)
-      setCanDeleteUploaded(true);
-    else
-      setCanDeleteUploaded(false);
 
-    if (hasDuplicates)
-      setHasConflicts(true);
+      // check if a file is selected
+      if (file.selected) {
+        numSelections += 1;
+      }
+    }
+    
+    if (files.length > 0 && numSelections > 0)
+      setCanSubmit(true);
     else
-      setHasConflicts(false);
+      setCanSubmit(false);
+
+    // if any file is selected, the select all checkbox will be checked
+    // this allows for everything to be deselected easily
+    numSelections > 0 ? setSelectAllChecked(true) : setSelectAllChecked(false);
+
+    hasDuplicates ? setHasConflicts(true) : setHasConflicts(false);
+    
     setNameConflictObject({...duplicates});
+    setNumberSelected(numSelections);
   }, [files]);
 
   // directory validation every time it changes (triggered by buttons and SelectDirectory.js)
@@ -106,11 +113,42 @@ function FileuploaderPage({ node }) {
       setIsValidDirectory(true);
   }, [directory]);
 
+  useEffect(() => {
+
+    // Close modal on outside click
+    const handleClickOutside = (e) => {
+      if (modalRef.current && !modalRef.current.contains(e.target)) {
+        setDisplaySizeWarning(false);
+      }
+    };
+
+    // close modal on key press
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape")
+        setDisplaySizeWarning(false);
+    };
+
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   // remove individual file (prop used by FileList.js)
   const handleDeleteButtonClick = (id) => {
     const index = files.findIndex((element) => element.id === id);
     files.splice(index, 1);
     setFiles([...files]);
+  };
+
+  // remove multiple files selected at once
+  const handleDeleteSelected = () => {
+    const newFiles = files.filter((file) => !file.selected);
+    setFiles([...newFiles]);
   };
 
   // rename individual file (prop used by FileList.js)
@@ -131,44 +169,21 @@ function FileuploaderPage({ node }) {
     setFiles([...files]);
   };
 
-  // change if individual file should skip this file, replace, or keep both source and destination
+  // change if individual file should be selected
   // (prop used by FileList.js)
-  const changeDuplicateOption = (id, newOption) => {
-    if (duplicateHandlingOptions.includes(newOption)) {
-      const index = files.findIndex((element) => element.id === id);
-      files[index].duplicateHandlingOption = newOption;
-      setFiles([...files]);
-    }
-  };
-
-  // used by reset buttons
-  const changeDuplicateOptionAll = (newOption) => {
-    if (duplicateHandlingOptions.includes(newOption)) {
-      files.forEach((file) => file.duplicateHandlingOption = newOption);
-      setFiles([...files]);
-    }
-  };
-
-  // remove all successfully uploaded buttons (instead of deleting them manually)
-  const handleDeleteUploadedButtonClick = () => {
-    setLoadingDeleteUploaded(true);
-    for (let i = files.length - 1; i >= 0; i--) {
-      if (files[i].result?.success) {
-          files.splice(i, 1);
-      }
-    }
+  const changeSelection = (id, newValue) => {
+    const index = files.findIndex((element) => element.id === id);
+    files[index].selected = newValue;
     setFiles([...files]);
-    setCanDeleteUploaded(false);
-    setLoadingDeleteUploaded(false);
   };
 
-  const getUploadResponse = async () => {
+  const getUploadResponse = async (selectedFiles, duplicateHandlingOption) => {
     const formData = new FormData();
     formData.set("conn", node);
     formData.set("directory_path", directory);
-    files.forEach((file) => {
+    selectedFiles.forEach((file) => {
       formData.append("files", file.file);
-      formData.append("duplicateHandlingOptions", file.duplicateHandlingOption);
+      formData.append("duplicateHandlingOptions", duplicateHandlingOption);
     })
 
     const response = await fetch(`${API_URL}/fileuploader/upload`, {
@@ -179,29 +194,42 @@ function FileuploaderPage({ node }) {
     return response;
   }
 
-  const getLargeFileCount = () => {
+  const getLargeFileCount = (fileList) => {
     const largeFileSize = 10 * 1024 * 1024; // 10 MB
-    const largeFiles = files.filter(file => file.file.size >= largeFileSize);
+    const largeFiles = fileList.filter(file => file.file.size >= largeFileSize);
     return largeFiles.length;
   }
 
-  const handleUploadButtonClick = async (overrideSizeWarning = false) => {
-    if (files.length > 0) {
+  const handleUpload = async (fileList = files, isFirstAttempt = false, overrideSizeWarning = false, duplicateHandlingOption) => {
+    if (fileList.length > 0) {
 
       // User should confirm they're ok with uploading large files
-      const largeFileCount = getLargeFileCount();
+      const largeFileCount = getLargeFileCount(fileList);
       if (largeFileCount > 0 && !overrideSizeWarning) {
+        setFilesQueue(fileList);
         setDisplaySizeWarning(true);
         return;
       }
       setDisplaySizeWarning(false);
 
       try {
-        setLoading(true);
+        setLoadingButton(duplicateHandlingOption);
         setError(null);
         setSuccess(null);
+        setSuccessFiles(null);
         
-        const response = await getUploadResponse();
+        // keep track of selected files and files that weren't selected
+        // also keep track of indices to maintain order of files after upload
+        const selectedFiles = [];
+        const selectedIndexObject = {};
+        fileList.forEach((file, index) => {
+          if (isFirstAttempt || file.selected) {
+            selectedFiles.push(file);
+            selectedIndexObject[index] = index;
+          }
+        });
+
+        const response = await getUploadResponse(selectedFiles, duplicateHandlingOption);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -211,19 +239,29 @@ function FileuploaderPage({ node }) {
         const data = await response.json();
 
         // add upload result to each file to be displayed in the file list
-        // if there is a successful file, allow it to be deleted
-        let hasSuccess = false;
-        const filesWithResult = files.map((file, index) => {
-          if (data.results[index].success)
-            hasSuccess = true;
-          return ({
-            ...file,
-            result: data.results[index],
-          });
+        // if there is a successful file, move it to success list
+        // non-selected or failing files get put into the other list
+        const successful = [];
+        const otherFiles = [];
+
+        fileList.forEach((file, index) => {
+          if (selectedIndexObject.hasOwnProperty(index)) {
+            const result = data.results[index];
+            if (result.success)
+              successful.push(`${file.file.name} was stored as ${result.stored_filename}`)
+            else
+              otherFiles.push({
+                ...file,
+                firstAttempt: false,
+                result: result,
+              });
+          }
         });
-        setFiles(filesWithResult);
-        if (hasSuccess)
-          setCanDeleteUploaded(true);
+        if (isFirstAttempt)
+          appendFiles(otherFiles);
+        else
+          setFiles(otherFiles);
+        setSuccessFiles(successful);
         
         // array of strings to hold each line
         setSuccess([`Total files: ${data.total_files}`,
@@ -233,30 +271,43 @@ function FileuploaderPage({ node }) {
       } catch (err) {
         setError(err.message || 'Failed to upload files');
       } finally {
-        setLoading(false);
+        setLoadingButton('');
       }
     }
   };
 
   const handleSizeWarningAccept = async () => {
-    handleUploadButtonClick(true);
+    handleUpload(filesQueue, true, true, 'skip');
+    setFilesQueue([]);
   }
 
   // get correct title for upload button when you hover over it
-  const getUploadButtonTitle = () => {
+  const getUploadButtonTitle = (duplicateHandlingOption) => {
     if (!isValidDirectory) {
       return "You must select a valid directory to upload your files";
     } else if (!canSubmit) {
       return "You must select at least one file to upload";
     } else if (hasConflicts) {
       return "You must resolve the duplicate file names to upload";
+    } else if (duplicateHandlingOption === 'overwrite') {
+      return "Upload all selected files, overwriting the duplicate files in the upload directory";
+    } else if (duplicateHandlingOption === 'keep') {
+      return "Upload all selected files, appending them with a number in the upload directory";
     } else {
       return "Upload all selected files";
     }
   };
 
+  // update file list
+  // (prop used by FileDropzone.js)
   const handleFileDrop = (newFiles) => {
-    changeFiles(newFiles);
+    handleUpload(newFiles, true, false, 'skip');
+  }
+
+  const handleSelectAll = () => {
+    files.forEach((file) => file.selected = !selectAllChecked);
+    setSelectAllChecked(!selectAllChecked);
+    setFiles([...files]);
   }
 
   return (
@@ -273,11 +324,13 @@ function FileuploaderPage({ node }) {
 
       {displaySizeWarning ?
         <div className="sizewarning-container">
-          <div className="sizewarning-body">
+          <div 
+            ref={modalRef}
+            className="sizewarning-body"
+          >
             <div className="sizewarning-text">
-              WARNING! At least one file you are trying to upload
-              is larger than 10MB. Are you sure you want
-              to upload these files?
+              At least one file is larger than 10 MB. Please confirm
+              to proceed.
             </div>
             <div className="sizewarning-options">
               <button className="upload-button" onClick={handleSizeWarningAccept}>
@@ -299,19 +352,17 @@ function FileuploaderPage({ node }) {
           <h3>Search Folder</h3>
           <div className="form-group">
             <span
-              className={!isValidDirectory ? "error-text-color" : ""}
+              className={`inline-span ${!isValidDirectory ? "error-text-color" : ""}`}
             >
-              Destination folder: {directory}
-            </span>
-            <div className="form-row">
               <button
-                className="reset-button reset-button-width"
+                className="reset-button"
                 title={`Reset to default upload folder ${defaultDirectory}`}
                 onClick={() => setDirectory(defaultDirectory)}
               >
-                Reset to Default
+                &#8635;
               </button>
-            </div>
+              Destination folder: {directory}
+            </span>
             <span>Choose upload folder starting with /app/. There is an option to create a folder if it doesn't exist.</span>
             <SelectDirectory
               node={node}
@@ -332,54 +383,23 @@ function FileuploaderPage({ node }) {
           <FileDropzone setFilesCallback={handleFileDrop}/>
         </div>
 
+
         {/* Configure file settings if there exist duplicate file names, and file view with deletion settings */}
-        <div className="form-section">
-          <h3>File List View</h3>
+        <div 
+          className={`form-section expandable ${files.length > 0 ? 'expanded' : ''}`}
+        >
+          <h3
+            className={`expandable ${files.length > 0 ? 'expanded' : ''}`}
+          >Handle duplicate file names</h3>
           <div className="form-group">
-            <span>You can view, rename, and delete files, as well as 
-              choose what happens to files with the same name in the upload directory.</span>
-            <div
-              className="reset-button-row"
-            >
-              <button 
-                className="reset-button"
-                disabled={!canSubmit}
-                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
-                  : "Set all files to skip their upload if a file with the same name already exists in the upload directory"
-                }
-                onClick={() => changeDuplicateOptionAll('skip')}
-              >
-                Skip These Files
-              </button>
-
-              <button 
-                className="reset-button"
-                disabled={!canSubmit}
-                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
-                  : "Set all files to replace a file with the same name if it already exists in the upload directory"
-                }
-                onClick={() => changeDuplicateOptionAll('replace')}
-              >
-                Replace Existing Files
-              </button>
-
-              <button 
-                className="reset-button"
-                disabled={!canSubmit}
-                title={!canSubmit ? "You must select files in order to configure duplicated file handling settings"
-                  : "Set all files to upload with a number if there is an existing file with the same name in the upload directory"
-                }
-                onClick={() => changeDuplicateOptionAll('keep')}
-              >
-                Keep Both Files
-              </button>
-            </div>
+            <span>The following file names already exist in the upload directory. You can rename or ignore these files, 
+              or choose what happens to files with the same name in the upload directory.</span>
             {/* Limit number of duplicate file name conflicts to filenamesInfo.maxDisplayed */}
             {hasConflicts &&
               <span
                 className="form-group error-text-color"
               >
-                The files you selected have duplicate names. You must remove the duplicate files or rename them by clicking on the file name. 
+                There are files that have duplicate names. You must remove the duplicate files or rename them by clicking on the file name. 
                 Check the files with these names:
                 {filenamesInfo.list.slice(0, filenamesInfo.maxDisplayed).map(
                   (line) => `\n- ${line}`
@@ -400,11 +420,13 @@ function FileuploaderPage({ node }) {
               >
                 <input
                   type="checkbox"
-                  // checked={}
+                  title={selectAllChecked ? "Click to deselect all files" : "Click to select all files"}
+                  checked={selectAllChecked}
+                  onChange={() => handleSelectAll()}
                   className="file-list-item-icon checkbox"
                 />
               </div>
-              Files selected ({files.length})
+              {numberSelected} of {files.length} files selected
             </div>
             <div className="file-list-content">
               <FileList 
@@ -412,7 +434,7 @@ function FileuploaderPage({ node }) {
                 nameConflictObject={nameConflictObject}
                 handleDeleteButtonClick={handleDeleteButtonClick}
                 handleRename={handleRename}
-                changeDuplicateOption={changeDuplicateOption}
+                changeSelection={changeSelection}
               />
             </div>
           </div>
@@ -421,33 +443,37 @@ function FileuploaderPage({ node }) {
             className="form-row"
           >
             <button 
-              className="delete-button"
-              disabled={!canDeleteUploaded}
-              title={!canDeleteUploaded ? "You must have successfully uploaded at least one file" : "Delete all successfully uploaded files"}
-              onClick={handleDeleteUploadedButtonClick}
+              className="upload-button"
+              disabled={!canSubmit || !isValidDirectory || hasConflicts || (loadingButton !== '' && loadingButton !== 'overwrite')}
+              title={getUploadButtonTitle('overwrite')}
+              onClick={() => handleUpload(files, false, true, 'overwrite')}
             >
-              {loadingDeleteUploaded ? "Removing Uploaded..." : "Remove All Uploaded"}
+              {loadingButton === "overwrite" ? "Uploading..." : "Overwrite All Files"}
             </button>
-
+            <button 
+              className="upload-button"
+              disabled={!canSubmit || !isValidDirectory || hasConflicts || (loadingButton !== '' && loadingButton !== 'keep')}
+              title={getUploadButtonTitle("keep")}
+              onClick={() => handleUpload(files, false, true, 'keep')}
+            >
+              {loadingButton === "keep" ? "Uploading..." : "Keep All Files"}
+            </button>
             <button 
               className="delete-button"
-              disabled={!canSubmit}
-              title={!canSubmit ? "You must select files in order to delete all of them" : "Delete all selected files"}
-              onClick={() => setFiles([])}
+              disabled={!canSubmit || !isValidDirectory || hasConflicts || loadingButton !== ''}
+              title={!canSubmit ? "You must select files in order to delete all of them" : "Ignore all selected files and remove them from view"}
+              onClick={() => handleDeleteSelected()}
             >
-              Delete All
+              Ignore
             </button>
           </div>
         </div>
 
-        <button 
-          className="upload-button"
-          disabled={!canSubmit || !isValidDirectory || hasConflicts}
-          title={getUploadButtonTitle()}
-          onClick={() => handleUploadButtonClick()}
-        >
-          {loading ? "Uploading..." : "Upload"}
-        </button>
+        {loadingButton === 'skip' && files.length === 0 && (
+          <div className="uploading-message">
+            <strong>Uploading...</strong>
+          </div>
+        )}
 
         {error && (
           <div className="error-message">
@@ -456,10 +482,13 @@ function FileuploaderPage({ node }) {
           </div>
         )}
 
-        {success && (
+        {success && successFiles.length > 0 && (
           <div className="success-message">
             <strong>Result: </strong>
             {success.map((line) => `\n${line}`)}
+            {'\n\n'}
+            <strong>Successfully uploaded files: </strong>
+            {successFiles.map((line) => `\n- ${line}`)}
           </div>
         )}
 
