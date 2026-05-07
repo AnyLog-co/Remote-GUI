@@ -71,7 +71,7 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
         >
           <div
             className={`file-list-item-info
-            ${file.result ? 'message' : ''}`}
+            ${file.result?.warning > 0 || file.result?.errors ? 'message' : ''}`}
           >
             <input
               type="checkbox"
@@ -126,23 +126,16 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
               </button>
             </div>
           </div>
-          {file.result && (file.result.success ?
-          <div className="file-list-item-success">
-            Stored as: {file.result.location}
-          </div>
-          :
-          (file.result.skipped && file.result.warning?.length > 0 ?
+          {file.result.skipped && file.result.warning?.length > 0 ?
           <div className="file-list-item-warning">
             Warning: {file.result.warning}
           </div>
           :
-          (file.result.errors ? 
+          (file.result.errors &&
           <div className="file-list-item-error">
             Error(s): {file.result.errors.map((error) => `${error}\n`)}
           </div>
-          :
-          (file.result.skipped)
-          )))}
+          )}
         </div>
       ))}
     </React.Fragment>
