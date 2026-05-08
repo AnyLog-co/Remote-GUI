@@ -200,17 +200,74 @@ function FileuploaderPage({ node }) {
     return largeFiles.length;
   }
 
+  const handleLargeFiles = async (fileList, overrideSizeWarning) => {
+    const largeFileCount = getLargeFileCount(fileList);
+    if (largeFileCount > 0 && !overrideSizeWarning) {
+      setFilesQueue(fileList);
+      setDisplaySizeWarning(true);
+      return false;
+    }
+    setDisplaySizeWarning(false);
+    return true;
+  }
+
+  const indexFileList = (fileList, selectedFiles, selectedIndexObject, isFirstAttempt) => {
+    let selectedIndex = 0;
+    fileList.forEach((file, index) => {
+      if (isFirstAttempt || file.selected) {
+        selectedFiles.push(file);
+        selectedIndexObject[index] = selectedIndex;
+        selectedIndex++;
+      }
+    });
+  }
+
+  const getResponseData = async (selectedFiles, duplicateHandlingOption) => {
+    const response = await getUploadResponse(selectedFiles, duplicateHandlingOption);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    return response.json()
+  }
+
+  const displayUploadResult = (fileList, selectedIndexObject, data, isFirstAttempt) => {
+    // add upload result to each file to be displayed in the file list
+    // if there is a successful file, move it to success list
+    // non-selected or failing files get put into the other list
+    const successful = [];
+    const otherFiles = [];
+
+    fileList.forEach((file, index) => {
+      if (selectedIndexObject.hasOwnProperty(index)) {
+        const result = data.results[selectedIndexObject[index]];
+        if (result.success)
+          successful.push(`${file.file.name} was stored as ${result.stored_filename}`)
+        else
+          otherFiles.push({
+            ...file,
+            firstAttempt: false,
+            result: result,
+          });
+      } else
+        otherFiles.push({
+          ...file,
+          firstAttempt: false,
+        });
+    });
+    if (isFirstAttempt)
+      appendFiles(otherFiles);
+    else
+      setFiles(otherFiles);
+    setSuccessFiles(successful);
+  }
+
   const handleUpload = async (fileList = files, isFirstAttempt = false, overrideSizeWarning = false, duplicateHandlingOption) => {
     if (fileList.length > 0) {
 
       // User should confirm they're ok with uploading large files
-      const largeFileCount = getLargeFileCount(fileList);
-      if (largeFileCount > 0 && !overrideSizeWarning) {
-        setFilesQueue(fileList);
-        setDisplaySizeWarning(true);
-        return;
-      }
-      setDisplaySizeWarning(false);
+      const handledLargeFiles = await handleLargeFiles(fileList, overrideSizeWarning);
+      if (!handledLargeFiles) return;
 
       try {
         setLoadingButton(duplicateHandlingOption);
@@ -223,52 +280,11 @@ function FileuploaderPage({ node }) {
         // mapping fileList index to selectedFiles index
         const selectedFiles = [];
         const selectedIndexObject = {};
-        let selectedIndex = 0;
-        fileList.forEach((file, index) => {
-          if (isFirstAttempt || file.selected) {
-            selectedFiles.push(file);
-            selectedIndexObject[index] = selectedIndex;
-            selectedIndex++;
-          }
-        });
+        indexFileList(fileList, selectedFiles, selectedIndexObject, isFirstAttempt);
 
-        const response = await getUploadResponse(selectedFiles, duplicateHandlingOption);
+        const data = await getResponseData(selectedFiles, duplicateHandlingOption);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        // add upload result to each file to be displayed in the file list
-        // if there is a successful file, move it to success list
-        // non-selected or failing files get put into the other list
-        const successful = [];
-        const otherFiles = [];
-
-        fileList.forEach((file, index) => {
-          if (selectedIndexObject.hasOwnProperty(index)) {
-            const result = data.results[selectedIndexObject[index]];
-            if (result.success)
-              successful.push(`${file.file.name} was stored as ${result.stored_filename}`)
-            else
-              otherFiles.push({
-                ...file,
-                firstAttempt: false,
-                result: result,
-              });
-          } else
-            otherFiles.push({
-              ...file,
-              firstAttempt: false,
-            });
-        });
-        if (isFirstAttempt)
-          appendFiles(otherFiles);
-        else
-          setFiles(otherFiles);
-        setSuccessFiles(successful);
+        displayUploadResult(fileList, selectedIndexObject, data, isFirstAttempt)
         
         // array of strings to hold each line
         setSuccess([`Total files: ${data.total_files}`,
