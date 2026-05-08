@@ -17,6 +17,7 @@ function FileuploaderPage({ node }) {
   const [directory, setDirectory] = useState(defaultDirectory);
   const [isValidDirectory, setIsValidDirectory] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
+  const [resetDirectory, toggleResetDirectory] = useState(false);
 
   // "hashtable" representation of file names
   const [nameConflictObject, setNameConflictObject] = useState({});
@@ -45,7 +46,7 @@ function FileuploaderPage({ node }) {
   // select all button value
   const [selectAllChecked, setSelectAllChecked] = useState(false);
 
-  // for size warning modal
+  // for clicking away from size warning modal
   const modalRef = useRef();
 
   // upload button becomes valid if there are files selected
@@ -127,7 +128,6 @@ function FileuploaderPage({ node }) {
       if (e.key === "Escape")
         setDisplaySizeWarning(false);
     };
-
 
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
@@ -364,15 +364,19 @@ function FileuploaderPage({ node }) {
               <button
                 className="reset-button"
                 title={`Reset to default upload folder ${defaultDirectory}`}
-                onClick={() => setDirectory(defaultDirectory)}
+                onClick={() => {
+                  setDirectory(defaultDirectory);
+                  toggleResetDirectory(!resetDirectory);
+                }}
               >
                 &#8635;
               </button>
-              Destination folder: {directory}
+              <strong>Destination folder: {directory}</strong>
             </span>
             <span>Choose upload folder starting with /app/. There is an option to create a folder if it doesn't exist.</span>
             <SelectDirectory
               node={node}
+              resetDirectory={resetDirectory}
               defaultDirectory={defaultDirectory}
               setDirectoryCallback={setDirectory}
             />

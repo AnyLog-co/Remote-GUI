@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../../styles/FileuploaderPage.css';
 import AsyncCreatableSelect from 'react-select/async-creatable';
 import { components } from 'react-select';
@@ -8,10 +8,10 @@ const API_URL = window._env_?.VITE_API_URL || "http://localhost:8000";
 // solution: https://github.com/JedWatson/react-select/discussions/4302
 const Input = (props) => <components.Input {...props} isHidden={false} />;
 
-function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
+function SelectDirectory({ node, resetDirectory, defaultDirectory, setDirectoryCallback }) {
 
   const [value, setValue] = useState();
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState('');
   const selectRef = useRef();
 
   // keeps track of current options to rearrange if needed
@@ -19,9 +19,13 @@ function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
   const prevDirectoryCount = useRef(0);
 
   const defaultDirectorySetting = {
-    label: defaultDirectory, 
+    label: `Default: ${defaultDirectory}`, 
     value: defaultDirectory
   }
+
+  useEffect(() => {
+    setInputValue('');
+  }, [resetDirectory]);
 
   // load current directory for navigation (only rearrange current list if a / wasn't put in)
   const loadDirectories = async (input) => {
@@ -40,7 +44,7 @@ function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
 
       const matches = [];
       for (let i = list.length - 1; i >= 0; i--) {
-        if (list[i].label.toLowerCase().includes(directory.toLowerCase())) {
+        if (list[i].value.toLowerCase().includes(directory.toLowerCase())) {
           matches.push(list.splice(i, 1)[0]);
         }
       }
@@ -103,8 +107,8 @@ function SelectDirectory({ node, defaultDirectory, setDirectoryCallback }) {
   const onChange = (option) => {
     if (option) {
       setValue(option);
-      setInputValue(option.label);
-      setDirectoryCallback(option.label.trim());
+      setInputValue(option.value);
+      setDirectoryCallback(option.value.trim());
     } else {
 
       // do default directory if empty

@@ -7,10 +7,10 @@ def _get_parsed_elements(path: str) -> List[str] | None:
     '''
     if len(path.split('/')) > 1:
         # Unix convention
-        return path.split('/')
+        return path.split('/')[1:]
     elif len(path.split('\\')) > 1:
         # Windows convention
-        return path.split('\\')
+        return path.split('\\')[1:]
     return None
 
 def _alert_to_forbidden_elements(dest: List[str], parsed_elements: List[str]) -> None:
@@ -18,11 +18,6 @@ def _alert_to_forbidden_elements(dest: List[str], parsed_elements: List[str]) ->
     Checks that the parsed path elements do not violate any rules for paths
     used by the file uploader. Raises ValueError if a violation is found.
     '''
-
-    # we want this file upload system to upload only through the /app top directory
-    if parsed_elements[0] != 'app':
-        dest.clear()
-        raise ValueError("File path must start with /app/")
 
     # we want this file upload system to disallow '..' to stay in /app
     if '..' in parsed_elements:
@@ -62,10 +57,6 @@ def _parse(path: str, dest: List[str]) -> None:
         raise ValueError("Path may not start with .")
     if len(path) <= 0:
         return None
-    if path[0] == '/' or path[0] == '\\':
-        path = path[1:]
-    if len(path) <= 3:
-        raise ValueError("File path must start with /app/")
     
     parsed_elements = _get_parsed_elements(path)
     if parsed_elements is None:
@@ -85,14 +76,14 @@ class PathParser:
     def __repr__(self) -> str:
         if len(self.elements) > 0:
             return f"/{'/'.join(self.elements)}"
-        return "."
+        return "/"
 
     def stem(self) -> str | None:
         '''
         Returns the full name of the last file or directory in the path if it
         exists. Returns None if it does not exist.
         '''
-        if len(self.elements)  > 0:
+        if len(self.elements) > 0:
             return self.elements[-1]
         return None
 
