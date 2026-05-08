@@ -1,4 +1,5 @@
 from typing import List
+import re
 
 def _get_parsed_elements(path: str) -> List[str] | None:
     '''
@@ -57,6 +58,10 @@ def _parse(path: str, dest: List[str]) -> None:
         raise ValueError("Path may not start with .")
     if len(path) <= 0:
         return None
+
+    # get rid of duplicate slashes (without this, user can do // to see siblings of /app)
+    path = re.sub(r'/+', r'/', path)
+    path = re.sub(r'\\+', r'\\', path)
     
     parsed_elements = _get_parsed_elements(path)
     if parsed_elements is None:
