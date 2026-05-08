@@ -175,6 +175,10 @@ async def get_current_directories(request: getDirectoriesRequest) -> List[str]:
     parsed_path = directory_path
     try:
         parsed_path = PathParser(directory_path)
+
+        # force only /app/ to show if at parent
+        if str(parsed_path).count("/") == 1:
+            return ["/app/"]
     except ValueError:
         return []
     
@@ -220,6 +224,8 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
 
     results: List[Dict[str, str | bool | List[str] | None]] = []
 
+    file_list = exec_get_files(conn, dir_path)
+
     for file, option in zip(files, duplicateHandlingOptions):
         validation = await validate_file(file)
 
@@ -234,25 +240,22 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
         try:
             stored_name = ""
 
-            # first, check if file name exists
-            # can optimize api calls by keeping a local copy of this list
-            file_list = exec_get_files(conn, dir_path)
+            # optimization: keeping local copy of file_list, but may lead to race conditions
             file_already_exists = file.filename in file_list
-            if file_already_exists and option != 'replace':
+            if file_already_exists and option != 'overwrite':
 
                 # if on skip option, abort the upload for this file and give warning (instead of error)
                 if option == 'skip':
                     results.append({
                         "filename": file.filename,
                         "success": False,
-                        "skipped": True,
-                        "warning": "File already exists in this folder and the 'Skip' option was selected"
+                        "skipped": True
                     })
                     continue
                 
                 # if on keep option, get a numbered file name
                 if option == 'keep':
-                    name = get_numbered_filename(file, file_list) if file_already_exists else file.filename
+                    name = get_numbered_filename(file, file_list)
                     stored_name = push_file(conn, file, name, dir_path)
 
                 # if an option was somehow not selected, skip uploading this file and give a warning
@@ -267,6 +270,8 @@ async def add_files(files: List[UploadFile] = File(...), duplicateHandlingOption
             else:
                 # otherwise, push file as normal
                 stored_name = push_file(conn, file, file.filename, dir_path)
+            
+            file_list.append(stored_name)
 
             results.append({
                 "filename": file.filename,

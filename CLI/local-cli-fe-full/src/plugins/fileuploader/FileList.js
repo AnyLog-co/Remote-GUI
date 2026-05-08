@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import '../../styles/FileuploaderPage.css';
 
-function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRename, changeDuplicateOption }) {
+function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRename, changeSelection }) {
 
   // only one state needed to handle renaming of one file
   const inputRef = useRef();
-  const [activeFile, setActiveFile] = useState(null);
-  const [activeValue, setActiveValue] = useState("");
+  const [activeName, setActiveName] = useState(null);
+  const [activeNameValue, setActiveNameValue] = useState("");
 
   const getFileExtensionEmoji = (fileName) => {
     const fileExtension = fileName.split('.').pop().toLowerCase();
@@ -57,8 +57,8 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
     return `${bytes.toFixed(digits)} ${units[i]}`;
   };
 
-  const handleChange = (event) => {
-    setActiveValue(event.target.value);
+  const handleNameChange = (event) => {
+    setActiveNameValue(event.target.value);
   }
 
   return (
@@ -71,75 +71,50 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
         >
           <div
             className={`file-list-item-info
-            ${file.result ? 'message' : ''}`}
+            ${file.result?.warning > 0 || file.result?.errors ? 'message' : ''}`}
           >
             <input
               type="checkbox"
+              title={file.selected ? `Click to deselect the file ${file.file.name}` : `Click to select the file ${file.file.name}`}
               className="file-list-item-icon checkbox"
+              checked={file.selected}
+              onChange={() => changeSelection(file.id, !file.selected)}
             />
             <div className="file-list-item-icon">
               {getFileExtensionEmoji(file.file.name)}
             </div>
             <div 
-              className={`file-list-item-name-container ${activeFile === file.id ? 'name-focused' : ''}`}
+              className={`file-list-item-name-container ${activeName === file.id ? 'name-focused' : ''}`}
             >
               <input
-                ref={activeFile === file.id ? inputRef : null}
+                ref={activeName === file.id ? inputRef : null}
                 type="text"
                 name={`${file.file.name}-${file.id}`}
-                title={activeFile === file.id ? activeValue : `Click to rename the file ${file.file.name}`}
+                title={activeName === file.id ? activeNameValue : `Click to rename the file ${file.file.name}`}
                 className="file-list-item-name"
-                value={activeFile === file.id ? activeValue : file.file.name}
-                onChange={handleChange}
+                value={activeName === file.id ? activeNameValue : file.file.name}
+                onChange={handleNameChange}
                 onFocus={() => {
-                  setActiveValue(file.file.name);
-                  setActiveFile(file.id);
+                  setActiveNameValue(file.file.name);
+                  setActiveName(file.id);
                 }}
                 onKeyDown={(e) => {if (e.key === 'Enter') {
                   inputRef.current.blur();
-                  handleRename(file.id, file.file.name, activeValue);
-                  setActiveFile(null);
+                  handleRename(file.id, file.file.name, activeNameValue);
+                  setActiveName(null);
                 }}}
                 onBlur={() => {
-                  handleRename(file.id, file.file.name, activeValue);
-                  setActiveFile(null);
+                  handleRename(file.id, file.file.name, activeNameValue);
+                  setActiveName(null);
                 }}  
               />
             </div>
             <div className="file-list-item-actions">
               <div
                 className={file.file.size > 10 * 1024 * 1024 ? 'error-text-color' : ''}
+                title={file.file.size > 10 * 1024 * 1024 ? `Warning: ${file.file.name} has a size greater than 10 MB` : ''}
               >
                 {formatSize(file.file.size)}
-              </div>
-              <div className="duplicate-handling-options-toggle">
-                <button 
-                  className={`mode-btn ${file.duplicateHandlingOption === 'skip' ? 'active' : ''}`}
-                  onClick={() => changeDuplicateOption(file.id, 'skip')}
-                  title={[file.duplicateHandlingOption === 'skip' ? 
-                    'Currently toggled' : 'Toggle', `to skip uploading this file ${file.file.name}`,
-                    'if it already exists in the upload directory'].join(' ')}
-                >
-                  Skip
-                </button>
-                <button 
-                  className={`mode-btn ${file.duplicateHandlingOption === 'replace' ? 'active' : ''}`}
-                  onClick={() => changeDuplicateOption(file.id, 'replace')}
-                  title={[file.duplicateHandlingOption === 'replace' ? 
-                    'Currently toggled' : 'Toggle', 'to replace a possibly existing file in the',
-                    `upload directory with this file ${file.file.name}`].join(' ')}
-                >
-                  Replace
-                </button>
-                <button 
-                  className={`mode-btn ${file.duplicateHandlingOption === 'keep' ? 'active' : ''}`}
-                  onClick={() => changeDuplicateOption(file.id, 'keep')}
-                  title={[file.duplicateHandlingOption === 'keep' ? 
-                    'Currently toggled' : 'Toggle', `to rename this file ${file.file.name} with a number`,
-                    'and keep any existing file in the upload directory'].join(' ')}
-                >
-                  Keep
-                </button>
               </div>
               <button
                 className="file-list-item-delete-btn"
@@ -151,20 +126,16 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
               </button>
             </div>
           </div>
-          {file.result && (file.result.success ?
-          <div className="file-list-item-success">
-            Stored as: {file.result.location}
-          </div>
-          :
-          (file.result.skipped ?
+          {file.result.skipped && file.result.warning?.length > 0 ?
           <div className="file-list-item-warning">
             Warning: {file.result.warning}
           </div>
           :
+          (file.result.errors &&
           <div className="file-list-item-error">
             Error(s): {file.result.errors.map((error) => `${error}\n`)}
           </div>
-          ))}
+          )}
         </div>
       ))}
     </React.Fragment>
