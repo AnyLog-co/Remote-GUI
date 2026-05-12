@@ -158,7 +158,7 @@ def push_file(conn: str, file: UploadFile, filename: str, dir: PathParser) -> st
 
             # # removes quotes in each key-value pair and makes string dictionary into dictionary
             r_dict = dict([kv.strip('"') for kv in item.split(": ")] for item in r_text.split(", "))
-            print(f"REPORTED PUSH FAILURE ({r.status_code}, {r_dict.get("err_code")})")
+            print(f"REPORTED PUSH FAILURE ({r.status_code}, {r_dict.get('err_code')})")
             raise Exception(r_dict.get("err_text"))
         return filename
     except Exception as e:
