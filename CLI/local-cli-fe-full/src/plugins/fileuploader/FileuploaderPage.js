@@ -242,7 +242,7 @@ function FileuploaderPage({ node }) {
       if (selectedIndexObject.hasOwnProperty(index)) {
         const result = data.results[selectedIndexObject[index]];
         if (result.success)
-          successful.push(`${file.file.name} was stored as ${result.stored_filename}`)
+          successful.push(`${file.file.name} was stored in ${result.location}`)
         else
           otherFiles.push({
             ...file,

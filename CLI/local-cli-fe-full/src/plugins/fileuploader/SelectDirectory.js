@@ -30,7 +30,8 @@ function SelectDirectory({ node, resetDirectory, defaultDirectory, setDirectoryC
   // load current directory for navigation (only rearrange current list if a / wasn't put in)
   const loadDirectories = async (input) => {
 
-    const directory = input.trim();
+    const spacesRemoved = input.replace(/\s/g, '');
+    const directory = spacesRemoved.replace(/\/+/g, '\/');
 
     // rearrange elements if there is no need to re-fetch
     // condition is based on checking if user is leaving or entering directory (discrepancy in number of /'s)
