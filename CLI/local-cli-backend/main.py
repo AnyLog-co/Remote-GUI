@@ -10,6 +10,11 @@ SETUP_CFG_FILE = os.path.join(__file__.split("CLI")[0], "setup.cfg")
 if not os.path.isfile(SETUP_CFG_FILE):
     raise Exception(f"File not found - {SETUP_CFG_FILE}")
 
+import logging
+from logging_config import setup_logging
+setup_logging()
+logger = logging.getLogger("uvicorn.error")
+
 from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -18,9 +23,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict
-import logging
-
-logger = logging.getLogger("uvicorn.error")
 
 from parsers import parse_response
 from classes import *
