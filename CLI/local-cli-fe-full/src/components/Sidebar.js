@@ -7,13 +7,15 @@ import {
   isFeatureEnabled, 
   isPluginEnabled 
 } from '../services/featureConfig';
+import { getLicenseInfo } from '../services/api';
 import '../styles/Sidebar.css';
 
-const Sidebar = () => {
+const Sidebar = ({ selectedNode }) => {
   const [pluginItems, setPluginItems] = useState(() => getPluginSidebarItems());
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [license, setLicense] = useState(null);
   
   // Feature configuration mapping
   const featureConfig = [
@@ -66,6 +68,14 @@ const Sidebar = () => {
     
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    if (!selectedNode) {
+      setLicense(null);
+      return;
+    }
+    getLicenseInfo({ connectInfo: selectedNode }).then(setLicense);
+  }, [selectedNode]);
   
   // Filter features based on config
   const visibleFeatures = featureConfig.filter(feature => 
@@ -103,7 +113,13 @@ const Sidebar = () => {
           ))}
         </div>
       )}
-      
+
+      <div className="sidebar-version">
+        <NavLink to="about" className="sidebar-about-link">About</NavLink>
+        <span className="sidebar-licensee">
+          Licensee: {license?.company ?? '—'}
+        </span>
+      </div>
     </nav>
   );
 };

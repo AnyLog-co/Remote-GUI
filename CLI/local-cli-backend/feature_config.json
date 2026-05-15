@@ -26,7 +26,7 @@
       "backend_router": "sql_router"
     },
     "blockchain": {
-      "enabled": false,
+      "enabled": true,
       "description": "Blockchain Manager"
     },
     "presets": {
@@ -65,6 +65,22 @@
     "mcpclient": {
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
+    },
+    "sshclient": {
+      "enabled": true,
+      "description": "SSH Client Plugin"
+    },
+    "uns": {
+      "enabled": true,
+      "description": "Unified Namespace Plugin - Provides filesystem-like interface for blockchain metadata"
+    },
+    "videostreamviewer": {
+      "enabled": true,
+      "description": "Video Stream Viewer Plugin"
+    },
+    "policycreator": {
+      "enabled": true,
+      "description": "Policy Creator Plugin - All-round helper for creating various AnyLog policy types"
     }
   },
   "version": "1.0.0"

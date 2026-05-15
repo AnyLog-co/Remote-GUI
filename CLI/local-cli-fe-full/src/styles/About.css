@@ -1,0 +1,210 @@
+.about-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.about-content h1 {
+  margin-bottom: 24px;
+  font-size: 1.75rem;
+  color: #1e1e2f;
+}
+
+.about-section,
+.about-footer {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.about-section p,
+.about-footer p {
+  margin: 10px 0;
+}
+
+.about-section p:first-child,
+.about-footer p:first-child {
+  margin-top: 0;
+}
+
+.about-section p:last-child,
+.about-footer p:last-child {
+  margin-bottom: 0;
+}
+
+.about-footer {
+  color: #555;
+}
+
+.about-footer a {
+  color: #2e86de;
+  text-decoration: none;
+}
+
+.about-footer a:hover {
+  text-decoration: underline;
+}
+
+.about-back {
+  margin-top: 24px;
+}
+
+.about-back a {
+  color: #2e86de;
+  text-decoration: none;
+}
+
+.about-back a:hover {
+  text-decoration: underline;
+}
+
+/* ── Environment Variables section ── */
+
+.about-env-section {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.about-env-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.about-env-header:hover {
+  background: #eef1f4;
+}
+
+.about-env-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e1e2f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.env-chevron {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.2s;
+  color: #64748b;
+}
+
+.env-chevron.open {
+  transform: rotate(90deg);
+}
+
+.env-count {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.env-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.env-table thead {
+  background: #eef1f4;
+}
+
+.env-table th {
+  text-align: left;
+  padding: 8px 16px;
+  font-weight: 600;
+  color: #475569;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.env-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.env-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.env-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.env-name {
+  font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.env-value code {
+  background: #e0e7ff;
+  color: #1e40af;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+  word-break: break-all;
+}
+
+.env-not-set {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.env-desc {
+  color: #64748b;
+  font-size: 12px;
+}
+
+tr.env-unset {
+  opacity: 0.5;
+}
+
+tr.env-default {
+  opacity: 0.8;
+}
+
+.env-source {
+  white-space: nowrap;
+}
+
+.env-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.env-badge-set {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.env-badge-default {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.env-badge-none {
+  background: #f1f5f9;
+  color: #94a3b8;
+}

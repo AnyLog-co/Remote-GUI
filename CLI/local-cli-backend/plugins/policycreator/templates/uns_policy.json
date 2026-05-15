@@ -1,0 +1,156 @@
+{
+  "name": "UNS Policy",
+  "policy_file": "uns_policy",
+  "policy_type": "uns",
+  "requires_signature": false,
+  "defaults": {
+    "enterprise_node": {
+      "name": "Enterprise Node",
+      "description": "Top-level enterprise UNS node",
+      "values": {
+        "name": "MyEnterprise",
+        "namespace": "MyEnterprise",
+        "uns_level": "enterprise",
+        "description": "Enterprise-level UNS node",
+        "ledger": "global"
+      }
+    },
+    "site_node": {
+      "name": "Site Node",
+      "description": "Site-level UNS node within an enterprise",
+      "values": {
+        "name": "MainSite",
+        "namespace": "MyEnterprise/MainSite",
+        "uns_level": "site",
+        "description": "Site-level UNS node",
+        "ledger": "global"
+      }
+    },
+    "data_leaf": {
+      "name": "Data Leaf Node",
+      "description": "Leaf node linked to a database table",
+      "values": {
+        "name": "sensor_readings - Raw",
+        "namespace": "MyEnterprise/MainSite/Area1/sensor_readings/Raw",
+        "uns_level": "side",
+        "description": "Raw sensor data from Area1",
+        "dbms": "myenterprise",
+        "table": "sensor_readings",
+        "where": "type='Raw'",
+        "ledger": "global"
+      }
+    }
+  },
+  "fields": [
+    {
+      "name": "name",
+      "type": "text",
+      "label": "Name",
+      "description": "Display name for this UNS node",
+      "required": true
+    },
+    {
+      "name": "namespace",
+      "type": "text",
+      "label": "Namespace",
+      "description": "Hierarchical path (e.g. Enterprise/Site/Area/Table/Filter)",
+      "required": true
+    },
+    {
+      "name": "uns_level",
+      "type": "select",
+      "label": "UNS Level",
+      "options": ["enterprise", "site", "area", "line", "vessel", "side", "cell", "device"],
+      "allow_custom": true,
+      "description": "Level in the UNS hierarchy — pick a standard level or type your own",
+      "required": true
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "label": "Description",
+      "description": "Human-readable description of this UNS node",
+      "required": false
+    },
+    {
+      "name": "isa95",
+      "type": "object",
+      "label": "ISA-95 Metadata",
+      "description": "Optional ISA-95 classification for this node",
+      "required": false,
+      "fields": [
+        {
+          "name": "level",
+          "type": "select",
+          "label": "ISA-95 Level",
+          "options": ["L0", "L1", "L2", "L3", "L4"],
+          "description": "ISA-95 hierarchy level (L0=Process, L1=Control, L2=WorkCenter, L3=Site, L4=Enterprise)",
+          "required": false
+        },
+        {
+          "name": "entity",
+          "type": "text",
+          "label": "Entity Type",
+          "description": "ISA-95 entity type (e.g. Control Module, Work Center, Enterprise)",
+          "required": false
+        },
+        {
+          "name": "standard",
+          "type": "text",
+          "label": "Standard",
+          "description": "Reference standard name",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "dbms",
+      "type": "text",
+      "label": "Database",
+      "description": "Database name this node maps to (leaf nodes only)",
+      "required": false
+    },
+    {
+      "name": "table",
+      "type": "text",
+      "label": "Table",
+      "description": "Table name this node maps to (leaf nodes only)",
+      "required": false
+    },
+    {
+      "name": "where",
+      "type": "text",
+      "label": "Where Clause",
+      "description": "Filter condition for table data (e.g. side='DLT')",
+      "required": false
+    },
+    {
+      "name": "parent",
+      "type": "text",
+      "label": "Parent ID",
+      "description": "ID of the parent UNS node in the hierarchy",
+      "required": false
+    },
+    {
+      "name": "loc",
+      "type": "text",
+      "label": "Location",
+      "description": "GPS coordinates (latitude, longitude)",
+      "required": false
+    },
+    {
+      "name": "id",
+      "type": "generated",
+      "source": "hash_id",
+      "label": "Policy ID",
+      "description": "Auto-generated unique identifier"
+    },
+    {
+      "name": "date",
+      "type": "generated",
+      "source": "date",
+      "label": "Creation Date",
+      "description": "Auto-generated creation timestamp"
+    }
+  ]
+}

@@ -5,6 +5,78 @@ import anylog_api.anylog_connector as anylog_connector
 from typing import Dict, Any
 import hashlib
 import time
+import os
+
+DEFAULT_ANYLOG_CONNECT_TIMEOUT = 5.0
+DEFAULT_ANYLOG_READ_TIMEOUT = 30.0
+
+
+def _parse_positive_timeout(
+    value: str | None,
+    *,
+    default: float,
+    env_name: str
+) -> float:
+    """Parse timeout env values safely with sane fallbacks."""
+    if value is None or value == "":
+        return default
+    try:
+        parsed = float(value)
+        if parsed <= 0:
+            raise ValueError("Timeout must be > 0")
+        return parsed
+    except (TypeError, ValueError):
+        print(
+            f"Invalid {env_name} value '{value}'. "
+            f"Falling back to default {default}s."
+        )
+        return default
+
+
+def _get_anylog_timeout():
+    """
+    Return timeout for AnyLogConnector.
+    Supports either a single timeout (ANYLOG_REQUEST_TIMEOUT) or
+    split connect/read values (ANYLOG_CONNECT_TIMEOUT, ANYLOG_READ_TIMEOUT).
+    """
+    request_timeout = os.getenv("ANYLOG_REQUEST_TIMEOUT")
+    if request_timeout not in (None, ""):
+        return _parse_positive_timeout(
+            request_timeout,
+            default=DEFAULT_ANYLOG_READ_TIMEOUT,
+            env_name="ANYLOG_REQUEST_TIMEOUT"
+        )
+
+    connect_timeout = _parse_positive_timeout(
+        os.getenv("ANYLOG_CONNECT_TIMEOUT"),
+        default=DEFAULT_ANYLOG_CONNECT_TIMEOUT,
+        env_name="ANYLOG_CONNECT_TIMEOUT"
+    )
+    read_timeout = _parse_positive_timeout(
+        os.getenv("ANYLOG_READ_TIMEOUT"),
+        default=DEFAULT_ANYLOG_READ_TIMEOUT,
+        env_name="ANYLOG_READ_TIMEOUT"
+    )
+    return (connect_timeout, read_timeout)
+
+
+def _create_anylog_connector(conn: str, auth: tuple):
+    """Create connector with compatibility fallback for timeout formats."""
+    timeout = _get_anylog_timeout()
+    try:
+        return anylog_connector.AnyLogConnector(conn=conn, auth=auth, timeout=timeout)
+    except TypeError:
+        # Older connector versions may not accept tuple timeout.
+        if isinstance(timeout, tuple):
+            fallback_timeout = max(timeout)
+            print(
+                "AnyLogConnector does not accept tuple timeout; "
+                f"using single timeout={fallback_timeout}s."
+            )
+            return anylog_connector.AnyLogConnector(
+                conn=conn, auth=auth, timeout=fallback_timeout
+            )
+        raise
 
 def get_node_options(node: str):
     response = make_request(node, "GET", "test network")
@@ -97,10 +169,23 @@ def make_policy(conn:str, policy: Dict):
 
 
     # Configure the policy with its data
-    for key, value in policy.data.items():
-        command = f'set policy new_policy [{policy.name}][{key}] = {value}'
-        print(f"Setting Policy Config: {command}")
-        make_request(conn, "POST", command)
+    def _set_fields(path_prefix, data):
+        for key, value in data.items():
+            path = f'{path_prefix}[{key}]'
+            if isinstance(value, dict):
+                make_request(conn, "POST", f'set policy new_policy {path} = {{}}')
+                _set_fields(path, value)
+            elif isinstance(value, list):
+                for item in value:
+                    cmd = f'set policy new_policy {path} = {item}'
+                    print(f"Setting Policy Config: {cmd}")
+                    make_request(conn, "POST", cmd)
+            else:
+                cmd = f'set policy new_policy {path} = {value}'
+                print(f"Setting Policy Config: {cmd}")
+                make_request(conn, "POST", cmd)
+
+    _set_fields(f'[{policy.name}]', policy.data)
 
 
     # # Construct the policy command
@@ -307,8 +392,7 @@ def post_apply_signature(policy, conn):
 
 def make_request(conn, method, command, topic=None, destination=None, payload=None):
     auth = ()
-    timeout = 30
-    anylog_conn = anylog_connector.AnyLogConnector(conn=conn, auth=auth, timeout=timeout)
+    anylog_conn = _create_anylog_connector(conn=conn, auth=auth)
 
     if command.startswith("run client () sql"):
         destination = 'network'

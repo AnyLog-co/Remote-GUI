@@ -149,6 +149,7 @@ const CalculatorPage = () => {
         }}>
           {result.error ? (
             <div>
+              <span className="error-dismiss" onClick={() => setResult(null)}>×</span>
               <h3 style={{ color: '#721c24', margin: '0 0 10px 0' }}>❌ Error</h3>
               <p style={{ color: '#721c24', margin: 0 }}>{result.error}</p>
             </div>
