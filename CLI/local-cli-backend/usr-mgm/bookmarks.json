@@ -34,6 +34,15 @@
       },
       "description": "",
       "created_at": "2026-04-08T17:11:08.314317",
+      "is_default": false
+    },
+    {
+      "id": "2084aa96-0eae-4671-bde0-ffca465ef839",
+      "node": {
+        "conn": "172.233.208.212:32349"
+      },
+      "description": "",
+      "created_at": "2026-05-15T13:48:17.287091",
       "is_default": true
     }
   ]

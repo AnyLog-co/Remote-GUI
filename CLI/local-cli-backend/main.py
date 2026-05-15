@@ -22,7 +22,7 @@ import logging
 
 logger = logging.getLogger("uvicorn.error")
 
-from parsers import parse_response
+from parsers import parse_response, check_format_table_sql_query
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
@@ -345,8 +345,16 @@ def send_command(conn: Connection, command: Command):
         raise HTTPException(status_code=403, detail="Feature 'client' is disabled")
     try:
         normalized_cmd = command.cmd.strip()
-        force_raw_text = should_force_raw_text(normalized_cmd)
-        raw_response = make_request(conn.conn, command.type, normalized_cmd)
+        ### All SQL requests should be sent with format=json. if table format, then we will update the result in the display
+        is_table, sql_json_request = check_format_table_sql_query(normalized_cmd)
+        # if sql query and format=table
+        if is_table:
+            raw_response = make_request(conn.conn, command.type, sql_json_request)
+            force_raw_text = should_force_raw_text(sql_json_request)
+        else:
+            # send original query
+            raw_response = make_request(conn.conn, command.type, normalized_cmd)
+            force_raw_text = should_force_raw_text(normalized_cmd)
         print("raw_response", raw_response)
 
         # Check if the response is already an error response
@@ -359,6 +367,12 @@ def send_command(conn: Connection, command: Command):
             return {"type": "raw", "data": str(raw_response) if raw_response is not None else ""}
 
         structured_data = parse_response(raw_response)
+        # if sql table format was specified
+        if is_table:
+            structured_data['type'] = "table" # set type to table
+            structured_data['data'] = structured_data['data'].get("Query") # return data list not dictionary
+            structured_data['additional_content'] = str({"Statistics": raw_response.get("Statistics")})
+
         print("structured_data", structured_data)
         return structured_data
     except Exception as e:
