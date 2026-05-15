@@ -345,16 +345,18 @@ def send_command(conn: Connection, command: Command):
         raise HTTPException(status_code=403, detail="Feature 'client' is disabled")
     try:
         normalized_cmd = command.cmd.strip()
-        ### All SQL requests should be sent with format=json. if table format, then we will update the result in the display
-        is_table, sql_json_request = check_format_table_sql_query(normalized_cmd)
-        # if sql query and format=table
-        if is_table:
-            raw_response = make_request(conn.conn, command.type, sql_json_request)
-            force_raw_text = should_force_raw_text(sql_json_request)
-        else:
-            # send original query
-            raw_response = make_request(conn.conn, command.type, normalized_cmd)
-            force_raw_text = should_force_raw_text(normalized_cmd)
+
+        # SQL requests should be sent with format=json.
+        # If the user requested format=table, we request JSON and handle table display later.
+        is_table, request_cmd = check_format_table_sql_query(normalized_cmd)
+
+        # If not a table-format SQL query, keep the original command.
+        if not is_table:
+            request_cmd = normalized_cmd
+
+        raw_response = make_request(conn.conn, command.type, request_cmd)
+        force_raw_text = should_force_raw_text(request_cmd)
+
         print("raw_response", raw_response)
 
         # Check if the response is already an error response
