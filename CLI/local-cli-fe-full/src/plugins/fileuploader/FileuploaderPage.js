@@ -11,15 +11,16 @@ function FileuploaderPage({ node }) {
   const [files, setFiles] = useState([]);
   const appendFiles = (newFiles) => setFiles((prevState) => [...prevState, ...newFiles]);
   const [filesQueue, setFilesQueue] = useState([]);
+  const [largeFiles, setLargeFiles] = useState([]);
+  const maxLargeFilesDisplayed = 3;
 
   const defaultDirectory = "/app/AnyLog-Network/data/upload_dir";
-  // const [directory, setDirectory] = useState({label: defaultDirectory, value: defaultDirectory});
   const [directory, setDirectory] = useState(defaultDirectory);
   const [isValidDirectory, setIsValidDirectory] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
   const [resetDirectory, toggleResetDirectory] = useState(false);
 
-  // "hashtable" representation of file names
+  // "hashtable" representation of file names (which can help detect name collisions)
   const [nameConflictObject, setNameConflictObject] = useState({});
   const filenamesInfo = useMemo(() => {
     const list = Object.keys(nameConflictObject);
@@ -116,7 +117,7 @@ function FileuploaderPage({ node }) {
 
   useEffect(() => {
 
-    // Close modal on outside click
+    // close modal on outside click
     const handleClickOutside = (e) => {
       if (modalRef.current && !modalRef.current.contains(e.target)) {
         setDisplaySizeWarning(false);
@@ -194,16 +195,17 @@ function FileuploaderPage({ node }) {
     return response;
   }
 
-  const getLargeFileCount = (fileList) => {
+  const getLargeFiles = (fileList) => {
     const largeFileSize = 10 * 1024 * 1024; // 10 MB
     const largeFiles = fileList.filter(file => file.file.size >= largeFileSize);
-    return largeFiles.length;
+    return largeFiles;
   }
 
   const handleLargeFiles = async (fileList, overrideSizeWarning) => {
-    const largeFileCount = getLargeFileCount(fileList);
-    if (largeFileCount > 0 && !overrideSizeWarning) {
+    const largeFileList = getLargeFiles(fileList);
+    if (largeFileList.length > 0 && !overrideSizeWarning) {
       setFilesQueue(fileList);
+      setLargeFiles(largeFileList);
       setDisplaySizeWarning(true);
       return false;
     }
@@ -211,6 +213,8 @@ function FileuploaderPage({ node }) {
     return true;
   }
 
+  // index creates a mapping from file list indices to the indices of the list of selected files
+  // this allows for the selected files to be updated or deleted once upload is attempted
   const indexFileList = (fileList, selectedFiles, selectedIndexObject, isFirstAttempt) => {
     let selectedIndex = 0;
     fileList.forEach((file, index) => {
@@ -352,9 +356,19 @@ function FileuploaderPage({ node }) {
             className="sizewarning-body"
           >
             <div className="sizewarning-text">
-              At least one file is larger than 10 MB. Please confirm
+              The following file(s) are larger than 10 MB. Please confirm
               to proceed.
             </div>
+            <span>
+              {`- ${largeFiles[0].file.name}`}
+              {largeFiles.slice(1, maxLargeFilesDisplayed).map(
+                (file) => `\n- ${file.file.name}`
+              )}
+              {largeFiles.length > maxLargeFilesDisplayed ?
+                `\n... and ${largeFiles.length - maxLargeFilesDisplayed} more`
+              : ''
+              } 
+            </span> 
             <div className="sizewarning-options">
               <button className="upload-button" onClick={handleSizeWarningAccept}>
                 Upload
@@ -432,7 +446,7 @@ function FileuploaderPage({ node }) {
                   (line) => `\n- ${line}`
                 )}
                 {filenamesInfo.length > filenamesInfo.maxDisplayed ?
-                  `\n...and ${filenamesInfo.length - filenamesInfo.maxDisplayed} more`
+                  `\n... and ${filenamesInfo.length - filenamesInfo.maxDisplayed} more`
                 : ''
                 } 
               </span>
