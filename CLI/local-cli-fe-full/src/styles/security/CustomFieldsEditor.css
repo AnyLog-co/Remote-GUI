@@ -1,0 +1,307 @@
+/* ── Custom Fields Editor ── */
+
+.cfe-section {
+  margin-top: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.cfe-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  transition: background 0.15s;
+}
+
+.cfe-section-header:hover {
+  background: #e2e8f0;
+}
+
+.cfe-section-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cfe-chevron {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.2s;
+  color: #64748b;
+}
+
+.cfe-chevron.open {
+  transform: rotate(90deg);
+}
+
+.cfe-badge {
+  background: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.cfe-section-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.cfe-container {
+  padding: 14px 18px 10px;
+  overflow: hidden;
+}
+
+/* ── Individual field ── */
+
+.cfe-field {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  transition: border-color 0.15s;
+  overflow: hidden;
+}
+
+.cfe-field:hover {
+  border-color: #cbd5e1;
+}
+
+/* Depth-based left-border accent */
+.cfe-field.depth-0 { border-left: 3px solid #2563eb; }
+.cfe-field.depth-1 { border-left: 3px solid #7c3aed; }
+.cfe-field.depth-2 { border-left: 3px solid #0891b2; }
+.cfe-field.depth-3 { border-left: 3px solid #d97706; }
+.cfe-field.depth-4 { border-left: 3px solid #dc2626; }
+
+.cfe-field-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cfe-key-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+
+.cfe-key-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+}
+
+.cfe-type-select {
+  width: 140px !important;
+  flex-shrink: 0;
+  padding: 8px 10px !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.cfe-type-select:focus {
+  border-color: #2563eb !important;
+}
+
+.cfe-field-value {
+  margin-top: 8px;
+}
+
+.cfe-value-input {
+  width: 100%;
+  padding: 8px 12px !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  box-sizing: border-box;
+}
+
+.cfe-value-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* ── Buttons ── */
+
+.cfe-add-btn {
+  background: #f1f5f9 !important;
+  color: #2563eb !important;
+  border: 2px dashed #cbd5e1 !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  transition: all 0.15s !important;
+  margin-top: 4px !important;
+  width: 100%;
+  text-align: center;
+}
+
+.cfe-add-btn:hover {
+  background: #e0e7ff !important;
+  border-color: #2563eb !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.cfe-add-sm {
+  width: auto !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+}
+
+.cfe-remove-btn {
+  flex-shrink: 0;
+  width: 30px !important;
+  height: 30px;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 6px !important;
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+  font-size: 16px !important;
+  font-weight: 600;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s !important;
+}
+
+.cfe-remove-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #dc2626 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.cfe-remove-sm {
+  width: 24px !important;
+  height: 24px;
+  font-size: 14px !important;
+}
+
+/* ── Nested container ── */
+
+.cfe-nested {
+  margin-top: 4px;
+  padding-left: 4px;
+}
+
+/* ── Boolean toggle ── */
+
+.cfe-bool-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  width: auto !important;
+}
+
+.cfe-bool-label input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* ── Array items ── */
+
+.cfe-array {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cfe-array-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cfe-array-item input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  box-sizing: border-box;
+}
+
+/* ── Object toggle (in DynamicPolicyForm) ── */
+
+.object-field-wrapper {
+  width: 100%;
+}
+
+.object-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.object-toggle-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px !important;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  width: auto !important;
+  margin: 0 !important;
+}
+
+.object-toggle-label input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px;
+  cursor: pointer;
+}
+
+.object-clear-btn {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  margin: 0 !important;
+  transition: all 0.15s !important;
+}
+
+.object-clear-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #dc2626 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}

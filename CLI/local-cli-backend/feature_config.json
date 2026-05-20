@@ -71,7 +71,7 @@
       "description": "File Uploader Plugin"
     },
     "sshclient": {
-      "enabled": false,
+      "enabled": true,
       "description": "SSH Client Plugin"
     },
     "uns": {
@@ -81,6 +81,10 @@
     "videostreamviewer": {
       "enabled": true,
       "description": "Video Stream Viewer Plugin"
+    },
+    "policycreator": {
+      "enabled": true,
+      "description": "Policy Creator Plugin - All-round helper for creating various AnyLog policy types"
     }
   },
   "version": "1.0.0"

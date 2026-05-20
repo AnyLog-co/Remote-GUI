@@ -1,5 +1,6 @@
 {
   "plugin_order": [
+    "policycreator",
     "grafana",
     "reportgenerator",
     "nodecheck",

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { fetchAvailablePermissions } from '../../services/security_api';
+import { fetchAvailablePermissions as defaultFetchAvailablePermissions } from '../../services/security_api';
 import '../../styles/security/PermissionPolicySelector.css';
 
-function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabled = false, refreshTrigger = 0 }) {
+function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabled = false, refreshTrigger = 0, fetchAvailablePermissionsFn }) {
+  const fetchAvailablePermissions = fetchAvailablePermissionsFn || defaultFetchAvailablePermissions;
   const [availablePermissions, setAvailablePermissions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -66,6 +67,7 @@ function PermissionPolicySelector({ node, selectedPermissionId, onChange, disabl
   if (error) {
     return (
       <div className="permission-policy-selector error">
+        <span className="error-dismiss" onClick={() => setError(null)}>×</span>
         <p>Error: {error}</p>
         <button onClick={fetchPermissions} disabled={loading}>Retry</button>
       </div>

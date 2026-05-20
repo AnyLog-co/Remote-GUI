@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { fetchAvailablePermissions, fetchCustomTypes, fetchTypeOptions } from '../../services/security_api';
+import {
+  fetchAvailablePermissions as defaultFetchAvailablePermissions,
+  fetchCustomTypes as defaultFetchCustomTypes,
+  fetchTypeOptions as defaultFetchTypeOptions,
+} from '../../services/security_api';
 import PermissionsTable from './PermissionsTable';
 import FieldPermissionsTable from './FieldPermissionsTable';
 import SecurityGroupsTable from './SecurityGroupsTable';
@@ -7,31 +11,40 @@ import TableTable from './TableTable';
 import DefaultSelector from './DefaultSelector';
 import MemberSelector from './MemberSelector';
 import PermissionPolicySelector from './PermissionPolicySelector';
+import CustomFieldsEditor, { customFieldsToObject } from './CustomFieldsEditor';
 import '../../styles/security/DynamicPolicyForm.css';
 
 // DynamicPolicyForm renders a form based on a policy template definition
-function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFields, showPreview = false, refreshTrigger = 0, currentUserPubkey = null }) {
+function DynamicPolicyForm({
+  template, formData, onChange, node, allowedPolicyFields,
+  showPreview = false, refreshTrigger = 0, currentUserPubkey = null,
+  fetchAvailablePermissionsFn, fetchCustomTypesFn, fetchTypeOptionsFn,
+  enableCustomFields = false,
+}) {
+  const fetchAvailablePermissions = fetchAvailablePermissionsFn || defaultFetchAvailablePermissions;
+  const fetchCustomTypes = fetchCustomTypesFn || defaultFetchCustomTypes;
+  const fetchTypeOptions = fetchTypeOptionsFn || defaultFetchTypeOptions;
   // State for dynamic options (e.g., node or table options fetched from backend)
   const [dynamicTypes, setDynamicTypes] = useState([])
   const [dynamicOptions, setDynamicOptions] = useState({});
   const [allowedFields, setAllowedFields] = useState([]);
   const [availablePermissions, setAvailablePermissions] = useState([]);
+  // Track which optional object fields are enabled
+  const [enabledObjects, setEnabledObjects] = useState({});
 
   // Function to generate the policy JSON based on form data and template
   const generatePolicyPreview = () => {
     if (!template || !formData) return null;
 
+    const fields = (template.fields || []).filter(f => f && f.name);
     const result = {};
 
-    // Process each field
-    for (const field of template.fields) {
+    for (const field of fields) {
       const name = field.name;
       const value = formData[name];
 
-      // Skip generated fields
       if (field.type === 'generated') continue;
 
-      // If field has modifiers
       if (field.modifiers) {
         const val = value;
         const val_str = typeof val === 'boolean' ? val.toString().toLowerCase() : String(val);
@@ -41,14 +54,17 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
           Object.assign(result, modifier);
         }
       } else {
-        // Normal field - only include if it has a value
-        if (value !== undefined && value !== null && value !== '') {
+        if (value !== undefined && value !== null && value !== '' && value !== '__custom__') {
           result[name] = value;
         }
       }
     }
 
-    return { [template.policy_type]: result };
+    if (formData._customFields) {
+      Object.assign(result, customFieldsToObject(formData._customFields));
+    }
+
+    return { [template.policy_type || 'policy']: result };
   };
 
   useEffect(() => {
@@ -123,11 +139,10 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
 
       const updated = { ...dynamicOptions };
 
-      for (const field of template.fields) {
-        // Backward compatibility for node/table
+      for (const field of (template.fields || [])) {
+        if (!field || !field.name || !field.type) continue;
 
         if (tempDynamicTypes.includes(field.type) && !updated[field.name]) {
-          // For any dynamic type, fetch its options
           updated[field.name] = await fetchTypeOptions(node, field.type);
         }
       }
@@ -207,13 +222,40 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
     // Render select dropdown for select, node, or table fields
     if (field.type === 'select' || dynamicTypes.includes(field.type)) {
       const options = field.options || dynamic || [];
+      const allowCustom = field.allow_custom === true;
+      const inCustomMode = allowCustom && value != null && value !== '' && !options.includes(value);
+      const selectValue = inCustomMode ? '__custom__' : (value || '');
+
       return (
-        <select value={value || ''} onChange={handleChange}>
-          <option value="">-- Select --</option>
-          {options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <div className="select-with-custom">
+          <select
+            value={selectValue}
+            onChange={(e) => {
+              if (e.target.value === '__custom__') {
+                onChange(field.name, '__custom__');
+              } else {
+                onChange(field.name, e.target.value);
+              }
+            }}
+          >
+            <option value="">-- Select --</option>
+            {options.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+            {allowCustom && <option value="__custom__">Other (custom)...</option>}
+          </select>
+          {allowCustom && inCustomMode && (
+            <input
+              type="text"
+              value={value === '__custom__' ? '' : value}
+              onChange={(e) => {
+                onChange(field.name, e.target.value || '__custom__');
+              }}
+              placeholder="Enter custom value"
+              className="custom-select-input"
+            />
+          )}
+        </div>
       );
     }
 
@@ -338,35 +380,67 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
         return (
           <input type="number" value={value || ''} onChange={handleChange} />
         );
-      case 'object':
-        // Render nested object fields recursively
+      case 'object': {
+        const isOptional = !field.required;
+        const isEnabled = isOptional ? (enabledObjects[field.name] ?? (value != null && Object.keys(value || {}).length > 0)) : true;
+
+        const toggleEnabled = () => {
+          if (isEnabled) {
+            onChange(field.name, undefined);
+            setEnabledObjects(prev => ({ ...prev, [field.name]: false }));
+          } else {
+            setEnabledObjects(prev => ({ ...prev, [field.name]: true }));
+          }
+        };
+
         return (
-          <div style={{ marginLeft: 16, paddingLeft: 8, borderLeft: '2px solid #e5e7eb' }}>
-            <strong>{field.label || field.name}</strong>
-            {field.fields && field.fields.map((subField) => (
-              <div key={subField.name} style={{ marginTop: 8 }}>
-                <label>
-                  {subField.label || subField.name}
-                  {subField.required && <span className="required-asterisk"> *</span>}
-                  <span className="tooltip-icon">ⓘ
-                    <span className="tooltip-text">
-                      {subField.description} {subField.required ? "(Required)" : ""}
-                    </span>
-                  </span>
+          <div className="object-field-wrapper">
+            {isOptional && (
+              <div className="object-toggle">
+                <label className="object-toggle-label">
+                  <input type="checkbox" checked={isEnabled} onChange={toggleEnabled} />
+                  Enable {field.label || field.name}
                 </label>
-                {renderFieldInput(
-                  subField,
-                  (value && typeof value === 'object') ? value[subField.name] : undefined,
-                  (subName, subVal) => {
-                    const newObj = { ...(value && typeof value === 'object' ? value : {}) };
-                    newObj[subName] = subVal;
-                    onChange(field.name, newObj);
-                  }
+                {isEnabled && value && Object.keys(value).length > 0 && (
+                  <button
+                    type="button"
+                    className="object-clear-btn"
+                    onClick={() => { onChange(field.name, undefined); setEnabledObjects(prev => ({ ...prev, [field.name]: false })); }}
+                  >
+                    Clear
+                  </button>
                 )}
               </div>
-            ))}
+            )}
+            {isEnabled && (
+              <div style={{ marginLeft: 16, paddingLeft: 8, borderLeft: '2px solid #e5e7eb' }}>
+                {field.fields && field.fields.map((subField) => (
+                  <div key={subField.name} style={{ marginTop: 8 }}>
+                    <label>
+                      {subField.label || subField.name}
+                      {subField.required && <span className="required-asterisk"> *</span>}
+                      <span className="tooltip-icon">ⓘ
+                        <span className="tooltip-text">
+                          {subField.description} {subField.required ? "(Required)" : ""}
+                        </span>
+                      </span>
+                    </label>
+                    {renderFieldInput(
+                      subField,
+                      (value && typeof value === 'object') ? value[subField.name] : undefined,
+                      (subName, subVal) => {
+                        const newObj = { ...(value && typeof value === 'object' ? value : {}) };
+                        newObj[subName] = subVal;
+                        onChange(field.name, newObj);
+                      }
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
+      }
       default:
         // Special handling for permissions field in assignment policies
         if (field.name === 'permissions' && template.policy_type === 'assignment') {
@@ -408,7 +482,18 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
   }
 
   // If no template or fields, render nothing
-  if (!template || !template.fields) return null;
+  if (!template || !Array.isArray(template.fields)) return null;
+
+  // Normalise fields: skip entries without a name, apply safe defaults
+  const safeFields = template.fields
+    .filter(f => f && f.name)
+    .map(f => ({
+      ...f,
+      label: f.label || f.name,
+      type: f.type || 'text',
+      description: f.description || '',
+      required: f.required ?? false,
+    }));
 
   const policyPreview = generatePolicyPreview();
 
@@ -427,7 +512,7 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
         />
       )}
       
-      {template.fields.map((field) => {
+      {safeFields.map((field) => {
         if (field.type === 'generated') return null; // Skip generated fields
 
         // If allowedPolicyFields is provided, skip fields not in the allowed list
@@ -435,21 +520,55 @@ function DynamicPolicyForm({ template, formData, onChange, node, allowedPolicyFi
           return null; // Skip fields not in allowed list
         }
 
+        const hasValue = (() => {
+          const v = formData[field.name];
+          if (v === undefined || v === null || v === '') return false;
+          if (Array.isArray(v) && v.length === 0) return false;
+          if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return false;
+          return true;
+        })();
+
         return (
           <div key={field.name} className="dynamic-policy-form-field">
-            <label className="dynamic-policy-form-label">
-              {field.label}
-              {field.required && <span className="required-asterisk"> *</span>}
-              <span className="tooltip-icon">ⓘ
-                <span className="tooltip-text">
-                  {field.description} {field.required ? "(Required)" : ""}
+            <div className="dynamic-policy-form-label-row">
+              <label className="dynamic-policy-form-label">
+                {field.label}
+                {field.required && <span className="required-asterisk"> *</span>}
+                <span className="tooltip-icon">ⓘ
+                  <span className="tooltip-text">
+                    {field.description} {field.required ? "(Required)" : ""}
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+              {hasValue && (
+                <button
+                  type="button"
+                  className="field-clear-btn"
+                  onClick={() => {
+                    const cleared = { ...formData };
+                    delete cleared[field.name];
+                    if (field.type === 'object') {
+                      setEnabledObjects(prev => ({ ...prev, [field.name]: false }));
+                    }
+                    onChange(cleared);
+                  }}
+                  title={`Clear ${field.label}`}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
             {renderFieldInput(field, formData[field.name], (name, val) => onChange({ ...formData, [name]: val }))}
           </div>
         );
       })}
+
+      {enableCustomFields && (
+        <CustomFieldsEditor
+          fields={formData._customFields || []}
+          onChange={(fields) => onChange({ ...formData, _customFields: fields })}
+        />
+      )}
       </div>
       
       {showPreview && (

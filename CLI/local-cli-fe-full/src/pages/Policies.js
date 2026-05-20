@@ -108,7 +108,7 @@ const Policies = ({ node }) => {
             </button>
 
             {/* Error Message */}
-            {error && <div className="error-message">{error}</div>}
+            {error && <div className="error-message"><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</div>}
             {loading && <div className="loading-message">Loading...</div>}
 
             {/* Box showing the policy ID after successful submission */}

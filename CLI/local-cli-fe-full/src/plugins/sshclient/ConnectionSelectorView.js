@@ -33,15 +33,23 @@ const ConnectionSelectorView = () => {
     activeConnection,
     credLocked,
     setFocusedTerminalId,
+    terminalLoading,
+    setTerminalLoading,
+    terminalError,
+    setTerminalError,
+    showAuthModal,
+    setShowAuthModal,
   } = cliState();
 
   // --- Auth modal state ---
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
   const [authMethod, setAuthMethod] = useState('password');
   const [authPassword, setAuthPassword] = useState('');
   const [keyFile, setKeyFile] = useState(null);
+  const [user, setUser] = useState('root');
+  const [portNumber, setPortNumber] = useState(22);
+  const [containerName, setContainerName] = useState('');
 
   // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
@@ -81,6 +89,7 @@ const ConnectionSelectorView = () => {
     setKeyFile(null);
     setAuthMethod('password');
     setSaveToVault(false);
+    setContainerName(conn.name);
 
     // Attempt to prefill from previously stored credentials.
     const storedPassword = retrieveStoredCredential(conn.hostname, 'password');
@@ -110,6 +119,18 @@ const ConnectionSelectorView = () => {
    *   4. Generates a unique connection ID and registers the active session.
    */
   const handleAuthSubmit = async () => {
+    if (!user) {
+      alert('Please enter a user');
+      return;
+    }
+    if (!portNumber) {
+      alert('Please enter a port number');
+      return;
+    }
+    if (!containerName) {
+      alert('Please enter a container id / name');
+      return;
+    }
     if (authMethod === 'password' && !authPassword) {
       alert('Please enter a password');
       return;
@@ -118,6 +139,8 @@ const ConnectionSelectorView = () => {
       alert('Please upload a key file');
       return;
     }
+
+    setTerminalError(null);
 
     if (saveToVault) {
       console.log('Attempting to save to vault:', {
@@ -170,13 +193,14 @@ const ConnectionSelectorView = () => {
 
     setActiveConnection(uuid, {
       ...selectedConnection,
-      user: 'root',
+      user: user,
+      port: portNumber,
+      name: containerName,
       credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
       isConnected: false,
     });
-    setShowAuthModal(false);
   };
 
   useEffect(() => {
@@ -217,19 +241,17 @@ const ConnectionSelectorView = () => {
   */
   useEffect(() => {
     setConnectionsList([]);
+
     const fetchNodes = async () => {
       try {
         const rawNodes = await fetchAllNodes();
         console.log('rawNodes: ', rawNodes);
+
         if (rawNodes === false) {
-          console.log('nada');
           return;
         }
+
         const nodeData = normalizeNodes(rawNodes);
-        // if () {
-        //   console.log('NOPE');
-        //   return;
-        // }
         setConnectionsList(
           Object.values(nodeData)
             .flat()
@@ -242,10 +264,6 @@ const ConnectionSelectorView = () => {
     };
     fetchNodes();
   }, [setConnectionsList]);
-
-  useEffect(() => {
-    console.log(connectionsList);
-  }, [connectionsList]);
 
   const getSortedConnections = (connections) => {
     const sorted = [...connections].sort((a, b) => {
@@ -269,6 +287,10 @@ const ConnectionSelectorView = () => {
     const sorted = getSortedConnections(connectionsList);
     setSortedConns(sorted);
   }, [connectionsList, starredConns]);
+
+  useEffect(() => {
+    console.log(terminalLoading);
+  }, [terminalLoading]);
 
   const handleConnStarring = (conn) => {
     setStarredConns((prev) =>
@@ -687,13 +709,14 @@ const ConnectionSelectorView = () => {
   @param {Array|Object} selectedList
   */
   const displayChosenList = (selectedList) => {
+    console.log(selectedList);
     const normalizedList = Array.isArray(selectedList)
       ? selectedList
-      : Object.entries(selectedList).map(([key, value]) => ({
+      : Object.entries(selectedList || {}).map(([key, value]) => ({
           id: key,
           ...value,
         }));
-
+    console.log('array?', Array.isArray(selectedList));
     if (normalizedList.length < 1)
       return (
         <div
@@ -728,9 +751,9 @@ const ConnectionSelectorView = () => {
       );
     };
 
-    return normalizedList.map((conn) => (
+    return normalizedList.map((conn, i) => (
       <div
-        key={conn?.id ?? `${conn.ip}-${conn.hostname}`}
+        key={conn?.id ?? `${conn.ip}-${conn.hostname}-${i}`}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -943,6 +966,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('all')}
                 >
                   All Connections
+                  <span
+                    style={{ color: 'grey' }}
+                  >{` (${connectionsList.length})`}</span>
                 </button>
                 <button
                   style={{
@@ -957,6 +983,9 @@ const ConnectionSelectorView = () => {
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
+                  <span style={{ color: 'grey' }}>
+                    {` (${Object.entries(activeTerminals || {}).length})`}
+                  </span>
                 </button>
               </div>
               <div
@@ -1076,6 +1105,122 @@ const ConnectionSelectorView = () => {
               </button>
             </div>
 
+            {/* Allows user to enter the User and Port number */}
+            <div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  User
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    placeholder="Enter User"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#1a365d',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Port Number
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <input
+                    type="number"
+                    value={portNumber}
+                    onChange={(e) => setPortNumber(e.target.value)}
+                    placeholder="Enter Port Number"
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '14px',
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') handleAuthSubmit();
+                    }}
+                  />
+                </div>
+              </div>
+              {selectedAction !== 'direct_ssh' && (
+                <div style={{ marginBottom: '24px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      color: '#1a365d',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                    }}
+                  >
+                    Container ID / Name
+                  </label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={containerName}
+                      onChange={(e) => setContainerName(e.target.value)}
+                      placeholder="Enter Port Number"
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '14px',
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') handleAuthSubmit();
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
             {/*
              * Password input panel.
              * The trash icon clears the stored credential for this hostname
@@ -1279,6 +1424,21 @@ const ConnectionSelectorView = () => {
               </p>
             </div>
 
+            {terminalError && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  color: 'red',
+                  margin: 5,
+                  fontWeight: 'bold',
+                }}
+              >
+                Error: {terminalError}
+              </div>
+            )}
+
             <div
               style={{
                 display: 'flex',
@@ -1297,25 +1457,46 @@ const ConnectionSelectorView = () => {
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setShowAuthModal(false)}
+                onClick={() => {
+                  setTerminalLoading(false);
+                  setTerminalError(null);
+                  setShowAuthModal(false);
+                }}
               >
                 Cancel
               </button>
-              <button
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                }}
-                onClick={handleAuthSubmit}
-              >
-                Connect
-              </button>
+              {!terminalLoading ? (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                  onClick={handleAuthSubmit}
+                >
+                  Connect
+                </button>
+              ) : (
+                <button
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Loading...
+                </button>
+              )}
             </div>
           </div>
         </div>

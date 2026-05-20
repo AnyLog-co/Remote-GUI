@@ -600,7 +600,7 @@ const Presets = () => {
         )}
       </section>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="error-message"><span className="error-dismiss" onClick={() => setError("")}>×</span>{error}</div>}
       {successMsg && (
         <div className="success-message">{successMsg}</div>
       )}
