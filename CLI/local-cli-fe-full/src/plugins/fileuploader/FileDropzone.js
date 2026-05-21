@@ -16,7 +16,7 @@ const activeStyle = {
   transition: 'background-color .12s ease-in-out, border .24s ease-in-out'
 };
 
-function FileDropzone({ setFilesCallback }) {
+function FileDropzone({ setFilesCallback, currentDirectory }) {
 
   // put in list of files with a unique id
   const onDrop = useCallback(acceptedFiles => {
@@ -30,7 +30,7 @@ function FileDropzone({ setFilesCallback }) {
       });
     })
     setFilesCallback(filesToBeAdded);
-  }, []);
+  }, [currentDirectory]);
 
   const {
     getRootProps,

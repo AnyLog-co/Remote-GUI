@@ -119,8 +119,8 @@ function FileList({ files, nameConflictObject, handleDeleteButtonClick, handleRe
               <button
                 className="file-list-item-delete-btn"
                 onClick={() => handleDeleteButtonClick(file.id)}
-                title={`Remove selected file ${file.file.name}`}
-                aria-label={`Remove selected file ${file.file.name}`}
+                title={`Ignore file ${file.file.name} and remove it from view`}
+                aria-label={`Ignore file ${file.file.name} and remove it from view`}
               >
                 ❌
               </button>

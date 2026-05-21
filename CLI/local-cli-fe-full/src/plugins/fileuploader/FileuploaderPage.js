@@ -421,7 +421,7 @@ function FileuploaderPage({ node }) {
         {/* Drag and Drop functionality through react-dropzone */}
         <div className="form-section">
           <h3>File Drop Zone</h3>
-          <FileDropzone setFilesCallback={handleFileDrop}/>
+          <FileDropzone setFilesCallback={handleFileDrop} currentDirectory={directory}/>
         </div>
 
 
@@ -501,7 +501,7 @@ function FileuploaderPage({ node }) {
             </button>
             <button 
               className="delete-button"
-              disabled={!canSubmit || !isValidDirectory || hasConflicts || loadingButton !== ''}
+              disabled={!canSubmit || !isValidDirectory || loadingButton !== ''}
               title={!canSubmit ? "You must select files in order to delete all of them" : "Ignore all selected files and remove them from view"}
               onClick={() => handleDeleteSelected()}
             >
