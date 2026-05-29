@@ -26,7 +26,17 @@ import {
 import PolicyGeneratorPage from './Security';
 // import Presets from './Presets';
 import '../styles/Dashboard.css'; // dashboard-specific styles
-import { getBookmarks } from '../services/file_auth';
+import { bookmarkNode, getBookmarks, setDefaultBookmark } from '../services/file_auth';
+
+const DEFAULT_BOOKMARK_PORT = '32149';
+
+function getBrowserDefaultNode() {
+  const host = window.location.hostname;
+  if (!host || host === '0.0.0.0') {
+    return null;
+  }
+  return `${host}:${DEFAULT_BOOKMARK_PORT}`;
+}
 
 const Dashboard = () => {
   // Load plugin pages
@@ -163,6 +173,16 @@ const Dashboard = () => {
             setSelectedNode(def.node);
             if (!nodes.includes(def.node)) {
               setNodes((prev) => [...prev, def.node]);
+            }
+          } else if (list.length === 0) {
+            const browserDefaultNode = getBrowserDefaultNode();
+            if (browserDefaultNode) {
+              await bookmarkNode({ node: browserDefaultNode });
+              await setDefaultBookmark({ node: browserDefaultNode });
+              setSelectedNode(browserDefaultNode);
+              if (!nodes.includes(browserDefaultNode)) {
+                setNodes((prev) => [...prev, browserDefaultNode]);
+              }
             }
           }
         }

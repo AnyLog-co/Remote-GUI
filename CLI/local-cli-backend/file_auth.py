@@ -5,10 +5,12 @@ import uuid
 import shutil
 import platform
 import socket
+from ipaddress import ip_address, ip_network
 from datetime import datetime
 from typing import Dict, List, Optional
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Default user ID for all operations (no authentication needed)
 DEFAULT_USER_ID = "default-user-12345"
@@ -143,11 +145,49 @@ def _ensure_bookmarks_list(bookmarks_data: Dict) -> List[Dict]:
     bookmarks_data["bookmarks"] = []
     return bookmarks_data["bookmarks"]
 
+def _host_from_env_value(value: Optional[str]) -> Optional[str]:
+    if not value or not value.strip():
+        return None
+
+    value = value.strip()
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    return parsed.hostname or value.split(":", 1)[0].strip() or None
+
+def _is_local_or_unspecified(host: str) -> bool:
+    lowered = host.lower()
+    if lowered in {"localhost", "0.0.0.0"}:
+        return True
+
+    try:
+        parsed = ip_address(host)
+    except ValueError:
+        return False
+
+    return parsed.is_loopback or parsed.is_unspecified
+
+def _is_docker_private_ip(host: str) -> bool:
+    try:
+        parsed = ip_address(host)
+    except ValueError:
+        return False
+
+    return parsed in ip_network("172.16.0.0/12")
+
+def _is_running_in_docker() -> bool:
+    return Path("/.dockerenv").exists()
+
 def _detect_inet_ip() -> Optional[str]:
     """Best-effort non-loopback IPv4 detection for the default node bookmark."""
-    override = os.environ.get("DEFAULT_BOOKMARK_HOST") or os.environ.get("INET_IP")
-    if override and override.strip():
-        return override.strip()
+    explicit_host = _host_from_env_value(
+        os.environ.get("DEFAULT_BOOKMARK_HOST") or os.environ.get("INET_IP")
+    )
+    if explicit_host:
+        return explicit_host
+
+    for env_name in ("REMOTE_GUI_HOST", "FRONTEND_URL", "VITE_API_URL"):
+        host = _host_from_env_value(os.environ.get(env_name))
+        if host and not _is_local_or_unspecified(host):
+            return host
 
     candidates = []
 
@@ -166,7 +206,12 @@ def _detect_inet_ip() -> Optional[str]:
         print(f"Unable to detect inet IP via hostname lookup: {e}")
 
     for ip in candidates:
-        if ip and not ip.startswith("127.") and ip != "0.0.0.0":
+        if not ip or _is_local_or_unspecified(ip):
+            continue
+        if _is_running_in_docker() and _is_docker_private_ip(ip):
+            print(f"Skipping Docker-private IP for default bookmark: {ip}")
+            continue
+        if ip:
             return ip
 
     return None
