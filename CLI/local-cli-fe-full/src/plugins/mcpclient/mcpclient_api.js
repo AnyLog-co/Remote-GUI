@@ -1,7 +1,9 @@
 // MCP Client Plugin API
 // API client for MCP Client plugin
 
-const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
+
+const API_URL = getApiBaseUrl();
 
 /**
  * Get MCP client information
@@ -181,4 +183,3 @@ export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, co
     throw error;
   }
 };
-

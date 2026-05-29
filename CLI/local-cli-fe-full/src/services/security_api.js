@@ -4,7 +4,9 @@
 //   ? "/api/security"  // In production (Docker), use relative path for nginx proxy
 //   : "http://localhost:8080/security"; // In development, use direct backend URL
 
-const API_BASE_URL = (window._env_?.VITE_API_URL || "http://localhost:8080") + "/security";
+import { getApiBaseUrl } from '../utils/runtimeConfig';
+
+const API_BASE_URL = `${getApiBaseUrl()}/security`;
 
 export async function login(nodeAddress, pubkey) {
   if (!nodeAddress || !pubkey) {

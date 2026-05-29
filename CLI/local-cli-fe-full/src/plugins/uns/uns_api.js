@@ -2,7 +2,9 @@
  * UNS Plugin API - all backend calls for the Unified Namespace plugin
  */
 
-const getBaseUrl = () => window._env_?.VITE_API_URL || "http://localhost:8080";
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
+
+const getBaseUrl = () => getApiBaseUrl();
 
 async function unsRequest(endpoint, body) {
   const response = await fetch(`${getBaseUrl()}${endpoint}`, {
