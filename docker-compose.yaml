@@ -23,6 +23,7 @@ services:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/
       - report-configs:/app/CLI/local-cli-backend/plugins/reportgenerator/templates
+      - backend-logs:/app/CLI/local-cli-backend/logs
 #  ollama-node:
 #    container_name: ollama
 #    image: ollama/ollama:latest
@@ -35,6 +36,7 @@ volumes:
   image-vol:
   usr-mgm-vol:
   report-configs:
+  backend-logs:
 #  ollama-data:
 
 

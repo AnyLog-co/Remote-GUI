@@ -9,6 +9,49 @@ layout: page
 - 2026-04-23 | updated for offical 1.0.0 release
 -->
 
+<<<<<<< HEAD
+=======
+<!-- last-processed: 36fbf25 -->
+
+<!-- os-dev: 36fbf25 (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * Docker: docker compose up --build logic
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: another fix for period to lock down the logic
+
+<!-- os-dev: 15bfd5f (2026-04-24) -->
+
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: another fix for period to lock down the logic
+
+<!-- os-dev: 8c445cc (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * CI/CD: working remote-gui with all changes
+  * Docker: working merge between ucsc + os-dev
+  * General: working remote-gui with all changes; working merge between ucsc + os-dev
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: added error handling for periods
+* **Pouria Rezaei** (2026-04-23)
+  * CI/CD: Updated SSH Client [ Bug fixes ] (#31)
+  * Dependencies: Updated SSH Client [ Bug fixes ] (#31)
+  * Docker: Updated SSH Client [ Bug fixes ] (#31)
+  * General: Updated SSH Client [ Bug fixes ] (#31)
+
+<!-- os-dev: 68cc6b3 (2026-04-23) -->
+
+* **Ori Shadmon** (2026-04-23)
+  * CI/CD: version control issue; docker builder logic; adding changelog processing
+  * Dependencies: local version changes
+  * Docker: UNS without LEDGER value; UNS policy builder logic; local version changes
+  * General: version control issue; UNS without LEDGER value; UNS policy builder logic; removed content not needed; remove ledger logic; local version changes
+* **Pranav Purathepparambil** (2026-04-23)
+  * General: editing the error message when backend isnt running; added env vars to the about section
+* **pintomax** (2026-04-23)
+  * General: AB-117: add "and" separator before period function; AB-114: fix for timezone query parameter
+
+>>>>>>> e86ea640e2de169d24723250778480affe6d531d
 The Remote GUI is a browser-based interface for interacting with AnyLog networks — querying data, managing policies, monitoring nodes, and exploring the Unified Namespace. Version 1.0.0 marks the first stable production release of the rewritten GUI.
 
 <!-- last-processed: 15bfd5f -->
