@@ -139,14 +139,6 @@
       "required": false
     },
     {
-      "name": "ledger",
-      "type": "select",
-      "label": "Ledger",
-      "options": ["global", "local"],
-      "description": "Blockchain ledger scope for this policy",
-      "required": false
-    },
-    {
       "name": "id",
       "type": "generated",
       "source": "hash_id",

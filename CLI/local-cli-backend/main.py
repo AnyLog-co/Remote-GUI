@@ -10,6 +10,11 @@ SETUP_CFG_FILE = os.path.join(__file__.split("CLI")[0], "setup.cfg")
 if not os.path.isfile(SETUP_CFG_FILE):
     raise Exception(f"File not found - {SETUP_CFG_FILE}")
 
+import logging
+from logging_config import setup_logging
+setup_logging()
+logger = logging.getLogger("uvicorn.error")
+
 from security.security_router import security_router
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -18,11 +23,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict
-import logging
 
-logger = logging.getLogger("uvicorn.error")
-
-from parsers import parse_response
+from parsers import parse_response, check_format_table_sql_query
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
@@ -213,7 +215,6 @@ else:
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
-
     try:
         # project_root = os.path.dirname(os.path.dirname(BASE_DIR))
         # setup_cfg_path = os.path.join(project_root, 'setup.cfg')
@@ -346,8 +347,18 @@ def send_command(conn: Connection, command: Command):
         raise HTTPException(status_code=403, detail="Feature 'client' is disabled")
     try:
         normalized_cmd = command.cmd.strip()
-        force_raw_text = should_force_raw_text(normalized_cmd)
-        raw_response = make_request(conn.conn, command.type, normalized_cmd)
+
+        # SQL requests should be sent with format=json.
+        # If the user requested format=table, we request JSON and handle table display later.
+        is_table, request_cmd = check_format_table_sql_query(normalized_cmd)
+
+        # If not a table-format SQL query, keep the original command.
+        if not is_table:
+            request_cmd = normalized_cmd
+
+        raw_response = make_request(conn.conn, command.type, request_cmd)
+        force_raw_text = should_force_raw_text(request_cmd)
+
         print("raw_response", raw_response)
 
         # Check if the response is already an error response
@@ -360,6 +371,12 @@ def send_command(conn: Connection, command: Command):
             return {"type": "raw", "data": str(raw_response) if raw_response is not None else ""}
 
         structured_data = parse_response(raw_response)
+        # if sql table format was specified
+        if is_table:
+            structured_data['type'] = "table" # set type to table
+            structured_data['data'] = structured_data['data'].get("Query") # return data list not dictionary
+            structured_data['additional_content'] = str({"Statistics": raw_response.get("Statistics")})
+
         print("structured_data", structured_data)
         return structured_data
     except Exception as e:

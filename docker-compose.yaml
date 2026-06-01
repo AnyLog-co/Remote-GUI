@@ -1,18 +1,16 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:1.0.0-c15f31-amd64
+#    image: anylogco/remote-gui:1.1.0-68cc6b-amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: remote-gui
     restart: always
     stdin_open: true
     hostname: remote-gui
     tty: true
     environment:
-      # VITE_API_URL: http://127.0.0.1:8000
-      VITE_API_URL: http://192.168.1.206:8000
-      # CORS: origin the browser loads the frontend from (scheme + host + FE port)
-      # FRONTEND_URL: http://192.168.1.206:3000
-      # Default AnyLog node connection (ip:port) — bookmarked and set as default on boot
-      # REST_CONN: 23.239.12.151:32349
+        VITE_API_URL: http://127.0.0.1:8080
       # Optional request timeout tuning (seconds)
       # ANYLOG_CONNECT_TIMEOUT: 5
       # ANYLOG_READ_TIMEOUT: 30
@@ -25,6 +23,7 @@ services:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/
       - report-configs:/app/CLI/local-cli-backend/plugins/reportgenerator/templates
+      - backend-logs:/app/CLI/local-cli-backend/logs
 #  ollama-node:
 #    container_name: ollama
 #    image: ollama/ollama:latest
@@ -37,6 +36,7 @@ volumes:
   image-vol:
   usr-mgm-vol:
   report-configs:
+  backend-logs:
 #  ollama-data:
 
 
