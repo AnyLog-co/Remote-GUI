@@ -38,6 +38,14 @@ function getBrowserDefaultNode() {
   return `${host}:${DEFAULT_BOOKMARK_PORT}`;
 }
 
+function uniqueNodes(nodeList) {
+  if (!Array.isArray(nodeList)) {
+    return [];
+  }
+
+  return [...new Set(nodeList.filter(Boolean))];
+}
+
 const Dashboard = () => {
   // Load plugin pages
   const pluginPages = getPluginPages();
@@ -50,7 +58,16 @@ const Dashboard = () => {
   // Load initial state from localStorage
   const [nodes, setNodes] = useState(() => {
     const savedNodes = localStorage.getItem('dashboard-nodes');
-    return savedNodes ? JSON.parse(savedNodes) : [];
+    if (!savedNodes) {
+      return [];
+    }
+
+    try {
+      return uniqueNodes(JSON.parse(savedNodes));
+    } catch (error) {
+      console.warn('Failed to parse saved dashboard nodes:', error);
+      return [];
+    }
   });
 
   const [selectedNode, setSelectedNode] = useState(() => {
@@ -124,7 +141,13 @@ const Dashboard = () => {
 
   // Save nodes to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('dashboard-nodes', JSON.stringify(nodes));
+    const dedupedNodes = uniqueNodes(nodes);
+    if (dedupedNodes.length !== nodes.length) {
+      setNodes(dedupedNodes);
+      return;
+    }
+
+    localStorage.setItem('dashboard-nodes', JSON.stringify(dedupedNodes));
   }, [nodes]);
 
   // Save selectedNode to localStorage whenever it changes
@@ -142,7 +165,9 @@ const Dashboard = () => {
   useEffect(() => {
     if (selectedNode && !nodes.includes(selectedNode)) {
       console.log('Selected node not in nodes list, adding it:', selectedNode);
-      setNodes((prevNodes) => [...prevNodes, selectedNode]);
+      setNodes((prevNodes) => (
+        prevNodes.includes(selectedNode) ? prevNodes : [...prevNodes, selectedNode]
+      ));
     }
   }, [selectedNode, nodes]);
 
@@ -171,18 +196,18 @@ const Dashboard = () => {
           const def = list.find((b) => b.is_default);
           if (def && def.node) {
             setSelectedNode(def.node);
-            if (!nodes.includes(def.node)) {
-              setNodes((prev) => [...prev, def.node]);
-            }
+            setNodes((prev) => (
+              prev.includes(def.node) ? prev : [...prev, def.node]
+            ));
           } else if (list.length === 0) {
             const browserDefaultNode = getBrowserDefaultNode();
             if (browserDefaultNode) {
               await bookmarkNode({ node: browserDefaultNode });
               await setDefaultBookmark({ node: browserDefaultNode });
               setSelectedNode(browserDefaultNode);
-              if (!nodes.includes(browserDefaultNode)) {
-                setNodes((prev) => [...prev, browserDefaultNode]);
-              }
+              setNodes((prev) => (
+                prev.includes(browserDefaultNode) ? prev : [...prev, browserDefaultNode]
+              ));
             }
           }
         }
@@ -205,11 +230,13 @@ const Dashboard = () => {
 
   // Adds a new node (if valid and not already in the list)
   const handleAddNode = (newNode) => {
-    if (newNode && !nodes.includes(newNode)) {
-      setNodes((nodes) => [...nodes, newNode]);
-      // Optionally set it as selected:
-      // setSelectedNode(newNode);
+    if (!newNode) {
+      return;
     }
+
+    setNodes((prevNodes) => (
+      prevNodes.includes(newNode) ? prevNodes : [...prevNodes, newNode]
+    ));
   };
 
   const handleRemoveNode = (nodeToRemove) => {

@@ -1,7 +1,7 @@
 // src/components/NodePicker.js
 import React, { useState, useRef } from 'react';
 import { getConnectedNodes, checkNodeReachable } from '../services/api';
-import { bookmarkNode } from '../services/file_auth';
+import { bookmarkNode, getBookmarks, updateBookmarkDescription } from '../services/file_auth';
 import '../styles/NodePicker.css';
 import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
@@ -19,7 +19,14 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
   const [editingNode, setEditingNode] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState(null);
+  const [showUploadBookmarks, setShowUploadBookmarks] = useState(false);
+  const [bookmarkJsonText, setBookmarkJsonText] = useState('');
+  const [uploadStatus, setUploadStatus] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadingBookmarks, setUploadingBookmarks] = useState(false);
+  const [isDraggingBookmarkFile, setIsDraggingBookmarkFile] = useState(false);
   const abortRef = useRef(null);
+  const bookmarkFileInputRef = useRef(null);
 
   useEffect(() => {
     if (!bookmarkMsg) return;
@@ -138,6 +145,196 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
     }
   };
 
+  const getBookmarkNodeValue = (bookmark) => {
+    if (typeof bookmark === 'string') {
+      return bookmark.trim();
+    }
+
+    if (!bookmark || typeof bookmark !== 'object') {
+      return '';
+    }
+
+    if (typeof bookmark.node === 'string') {
+      return bookmark.node.trim();
+    }
+
+    if (bookmark.node && typeof bookmark.node === 'object' && typeof bookmark.node.conn === 'string') {
+      return bookmark.node.conn.trim();
+    }
+
+    if (typeof bookmark.conn === 'string') {
+      return bookmark.conn.trim();
+    }
+
+    return '';
+  };
+
+  const getBookmarkDescription = (bookmark) => {
+    if (!bookmark || typeof bookmark !== 'object') {
+      return '';
+    }
+
+    return typeof bookmark.description === 'string' ? bookmark.description.trim() : '';
+  };
+
+  const parseBookmarkJson = (jsonText) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (err) {
+      throw new Error(`Invalid JSON: ${err.message}`);
+    }
+
+    const rawBookmarks = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.bookmarks)
+        ? parsed.bookmarks
+        : null;
+
+    if (!rawBookmarks) {
+      throw new Error('Expected a JSON array or an object with a "bookmarks" array.');
+    }
+
+    const seen = new Set();
+    const normalizedBookmarks = [];
+    let sourceDuplicateCount = 0;
+
+    rawBookmarks.forEach((bookmark, index) => {
+      const node = getBookmarkNodeValue(bookmark);
+      if (!node) {
+        throw new Error(`Bookmark ${index + 1} is missing a node value.`);
+      }
+
+      if (seen.has(node)) {
+        sourceDuplicateCount++;
+        return;
+      }
+
+      seen.add(node);
+      normalizedBookmarks.push({
+        node,
+        description: getBookmarkDescription(bookmark),
+      });
+    });
+
+    return {
+      bookmarks: normalizedBookmarks,
+      duplicateCount: sourceDuplicateCount,
+    };
+  };
+
+  const showUploadError = (message) => {
+    setUploadError(message);
+    setUploadStatus(null);
+    window.alert(message);
+  };
+
+  const importBookmarkText = async (jsonText) => {
+    if (!jsonText.trim()) {
+      showUploadError('Please provide bookmark JSON before importing.');
+      return;
+    }
+
+    let importPayload;
+    try {
+      importPayload = parseBookmarkJson(jsonText);
+    } catch (err) {
+      showUploadError(`Could not process bookmarks JSON. ${err.message}`);
+      return;
+    }
+
+    setUploadingBookmarks(true);
+    setUploadError(null);
+    setUploadStatus(null);
+
+    try {
+      const existingResponse = await getBookmarks();
+      const existingBookmarks = Array.isArray(existingResponse.data) ? existingResponse.data : [];
+      const existingNodes = new Set(existingBookmarks.map((bookmark) => bookmark.node).filter(Boolean));
+      const importedNodes = [];
+      let savedDuplicateCount = 0;
+
+      for (const bookmark of importPayload.bookmarks) {
+        if (existingNodes.has(bookmark.node)) {
+          savedDuplicateCount++;
+          continue;
+        }
+
+        await bookmarkNode({ node: bookmark.node });
+        existingNodes.add(bookmark.node);
+        importedNodes.push(bookmark.node);
+
+        if (bookmark.description) {
+          try {
+            await updateBookmarkDescription({
+              node: bookmark.node,
+              description: bookmark.description,
+            });
+          } catch (descriptionError) {
+            console.warn('Failed to update imported bookmark description:', descriptionError);
+          }
+        }
+      }
+
+      const dropdownNodes = importPayload.bookmarks.map((bookmark) => bookmark.node);
+      dropdownNodes.forEach((node) => onAddNode(node));
+      if (!selectedNode && dropdownNodes.length > 0) {
+        onSelectNode(dropdownNodes[0]);
+      }
+
+      window.dispatchEvent(new Event('bookmark-refresh'));
+
+      if (onBookmarkAdded) {
+        onBookmarkAdded();
+      }
+
+      setBookmarkJsonText('');
+      if (bookmarkFileInputRef.current) {
+        bookmarkFileInputRef.current.value = '';
+      }
+      const sourceDuplicateMessage = importPayload.duplicateCount > 0
+        ? ` Ignored ${importPayload.duplicateCount} duplicate${importPayload.duplicateCount === 1 ? '' : 's'} inside the uploaded JSON.`
+        : '';
+      setUploadStatus(`Added ${importedNodes.length} new bookmark${importedNodes.length === 1 ? '' : 's'}. Synced ${savedDuplicateCount} already-saved bookmark${savedDuplicateCount === 1 ? '' : 's'} to the dropdown.${sourceDuplicateMessage}`);
+    } catch (err) {
+      console.error('Bookmark import failed:', err);
+      showUploadError(`Bookmark import failed: ${err.message}`);
+    } finally {
+      setUploadingBookmarks(false);
+    }
+  };
+
+  const handleBookmarkFile = (file) => {
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+      showUploadError('Please upload a JSON file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      importBookmarkText(event.target.result || '');
+    };
+    reader.onerror = () => {
+      showUploadError('Could not read the selected JSON file.');
+    };
+    reader.readAsText(file);
+  };
+
+  const closeUploadBookmarks = () => {
+    setShowUploadBookmarks(false);
+    setBookmarkJsonText('');
+    setUploadError(null);
+    setUploadStatus(null);
+    setIsDraggingBookmarkFile(false);
+    if (bookmarkFileInputRef.current) {
+      bookmarkFileInputRef.current.value = '';
+    }
+  };
+
   const handleEditSave = () => {
     const check = validateNodeConnection(editValue);
     if (!check.ok) {
@@ -178,6 +375,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       setEditingNode(null);
     }
   };
+
+  const displayedNodes = [...new Set(nodes.filter(Boolean))];
 
   // If no node is selected, show connection input
   if (!selectedNode) {
@@ -229,8 +428,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
           value={selectedNode}
           onChange={handleDropdownChange}
         >
-          {nodes.map((node, index) => (
-            <option key={index} value={node}>
+          {displayedNodes.map((node) => (
+            <option key={node} value={node}>
               {node}
             </option>
           ))}
@@ -242,7 +441,88 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
         <button className="node-picker-btn secondary" onClick={handleBookmark}>
           Bookmark
         </button>
+        <button
+          className="node-picker-btn secondary"
+          onClick={() => setShowUploadBookmarks(true)}
+          type="button"
+        >
+          Upload Bookmarks
+        </button>
       </div>
+
+      {showUploadBookmarks && (
+        <div className="bookmark-upload-backdrop" role="presentation">
+          <div className="bookmark-upload-modal" role="dialog" aria-modal="true" aria-labelledby="bookmark-upload-title">
+            <div className="bookmark-upload-header">
+              <h2 id="bookmark-upload-title">Upload Bookmarks</h2>
+              <button
+                className="bookmark-upload-close"
+                type="button"
+                onClick={closeUploadBookmarks}
+                aria-label="Close upload bookmarks"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="bookmark-upload-options">
+              <section
+                className={`bookmark-drop-zone${isDraggingBookmarkFile ? ' dragging' : ''}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDraggingBookmarkFile(true);
+                }}
+                onDragLeave={() => setIsDraggingBookmarkFile(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDraggingBookmarkFile(false);
+                  handleBookmarkFile(event.dataTransfer.files[0]);
+                }}
+              >
+                <h3>Drag and drop JSON file</h3>
+                <p>Drop a bookmarks JSON file here, or choose one from your computer.</p>
+                <input
+                  ref={bookmarkFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(event) => handleBookmarkFile(event.target.files[0])}
+                  disabled={uploadingBookmarks}
+                />
+              </section>
+
+              <section className="bookmark-paste-zone">
+                <h3>Paste JSON string</h3>
+                <textarea
+                  value={bookmarkJsonText}
+                  onChange={(event) => setBookmarkJsonText(event.target.value)}
+                  placeholder='{"bookmarks":[{"node":{"conn":"192.168.0.138:32149"},"description":""}]}'
+                  rows={8}
+                  disabled={uploadingBookmarks}
+                />
+                <button
+                  className="node-picker-btn primary"
+                  type="button"
+                  onClick={() => importBookmarkText(bookmarkJsonText)}
+                  disabled={uploadingBookmarks || !bookmarkJsonText.trim()}
+                >
+                  {uploadingBookmarks ? 'Importing...' : 'Import Pasted JSON'}
+                </button>
+              </section>
+            </div>
+
+            {uploadError && (
+              <div className="bookmark-upload-error" role="alert">
+                {uploadError}
+              </div>
+            )}
+            {uploadStatus && (
+              <div className="bookmark-upload-status" role="status">
+                {uploadStatus}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {checking && (
         <div className="node-picker-connecting-msg">
