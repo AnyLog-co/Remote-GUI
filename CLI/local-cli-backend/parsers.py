@@ -2,7 +2,6 @@
 import json
 
 def parse_table_fixed(text: str) -> list:
-    lines = text.strip().splitlines()
 
     lines = text.strip().splitlines()
     if len(lines) < 2:
@@ -120,6 +119,99 @@ def parse_table_fixed(text: str) -> list:
             new_row = dict(zip(headers, parts))
             data.append(new_row)
     return {"data": data, "additional_info": additional_info}
+
+
+def check_format_table_sql_query(text: str) -> tuple[bool, str]:
+    """
+    Check whether a command string is a SQL query using table format, and if so,
+    return a modified command where the table format is changed to JSON.
+
+    Supported command forms:
+
+        run client (...) sql ... format=table
+        sql ... format=table
+
+    The second form starts directly with "sql", so "run" and "client" are not
+    required.
+
+    The format option may be written with or without spaces around the equals
+    sign, for example:
+
+        format=table
+        format = table
+        format= table
+        format =table
+
+    Args:
+        text: The command string to inspect.
+
+    Returns:
+        A tuple containing:
+            - True if the command is a SQL query using table format.
+            - The updated command string with format=json if matched,
+              otherwise the original command string.
+    """
+
+    # Normalize equals signs so all variants of "format=table" become:
+    # ["format", "=", "table"]
+    tokens = text.replace("=", " = ").split()
+
+    # Empty input cannot match.
+    if not tokens:
+        return False, text
+
+    first = tokens[0].lower()
+
+    # Case 1:
+    # The command starts directly with SQL, so "run client" is not required.
+    if first == "sql":
+        required = {"sql"}
+        found = {"sql"}
+
+    # Case 2:
+    # The command must begin with: run client
+    elif (
+        len(tokens) >= 2
+        and tokens[0].lower() == "run"
+        and tokens[1].lower() == "client"
+    ):
+        required = {"run", "client", "sql"}
+        found = {"run", "client"}
+
+    # Early stop:
+    # If the command does not start with either "sql" or "run client",
+    # it cannot be the command form we care about.
+    else:
+        return False, text
+
+    # Tracks where the "format = table" sequence starts.
+    format_index = None
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i].lower()
+
+        # Track required command keywords.
+        if token in required:
+            found.add(token)
+
+        # Detect: format = table
+        if (
+            token == "format"
+            and i + 2 < len(tokens)
+            and tokens[i + 1] == "="
+            and tokens[i + 2].lower() == "table"
+        ):
+            format_index = i
+
+        # Stop early once all required pieces have been found.
+        if found == required and format_index is not None:
+            tokens[format_index:format_index + 3] = ["format=json"]
+            return True, " ".join(tokens)
+
+        i += 1
+
+    return False, text.strip()
 
 
 
