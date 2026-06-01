@@ -17,6 +17,8 @@ import {
   storeCredentialInSession,
   saveCredentialToVault,
   clearStoredCredentials,
+  CRED_TYPE_PASSWORD,
+  CRED_TYPE_KEYFILE,
 } from './storage/stateStorage';
 
 // Selector view to show user's nodes and connect options
@@ -47,7 +49,7 @@ const ConnectionSelectorView = () => {
   // --- Auth modal state ---
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
-  const [authMethod, setAuthMethod] = useState('password');
+  const [authMethod, setAuthMethod] = useState(CRED_TYPE_PASSWORD);
   const [authPassword, setAuthPassword] = useState('');
   const [keyFile, setKeyFile] = useState(null);
   const [user, setUser] = useState('root');
@@ -92,24 +94,27 @@ const ConnectionSelectorView = () => {
     setSelectedAction(conn_action);
     setAuthPassword('');
     setKeyFile(null);
-    setAuthMethod('password');
+    setAuthMethod(CRED_TYPE_PASSWORD);
     setSaveToVault(false);
     setContainerName(conn.name);
 
     // Attempt to prefill from previously stored credentials.
-    const storedPassword = retrieveStoredCredential(conn.hostname, 'password');
-    const storedKey = retrieveStoredCredential(conn.hostname, 'keyfile');
+    const storedPassword = retrieveStoredCredential(
+      conn.hostname,
+      CRED_TYPE_PASSWORD,
+    );
+    const storedKey = retrieveStoredCredential(conn.hostname, CRED_TYPE_KEYFILE);
 
     if (storedPassword) {
       setAuthPassword(storedPassword);
-      setAuthMethod('password');
+      setAuthMethod(CRED_TYPE_PASSWORD);
     }
 
     // Keyfile overrides password if both are stored.
     if (storedKey) {
       setKeyFile(storedKey);
       console.log(`Autofilling key:`, storedKey);
-      setAuthMethod('keyfile');
+      setAuthMethod(CRED_TYPE_KEYFILE);
     }
 
     setShowAuthModal(true);
@@ -136,7 +141,7 @@ const ConnectionSelectorView = () => {
       alert('Please enter a container id / name');
       return;
     }
-    if (authMethod === 'password' && !authPassword) {
+    if (authMethod === CRED_TYPE_PASSWORD && !authPassword) {
       alert('Please enter a password');
       return;
     }
@@ -154,16 +159,16 @@ const ConnectionSelectorView = () => {
       });
 
       try {
-        if (authMethod === 'keyfile') {
+        if (authMethod === CRED_TYPE_KEYFILE) {
           await saveCredentialToVault(
             selectedConnection.hostname,
-            'keyfile',
+            CRED_TYPE_KEYFILE,
             keyFile,
           );
-        } else if (authMethod === 'password') {
+        } else if (authMethod === CRED_TYPE_PASSWORD) {
           await saveCredentialToVault(
             selectedConnection.hostname,
-            'password',
+            CRED_TYPE_PASSWORD,
             authPassword,
           );
         }
@@ -176,12 +181,16 @@ const ConnectionSelectorView = () => {
     }
 
     // Always store in session so the terminal can access credentials during this session.
-    if (authMethod === 'keyfile') {
-      storeCredentialInSession(selectedConnection.hostname, 'keyfile', keyFile);
-    } else if (authMethod === 'password') {
+    if (authMethod === CRED_TYPE_KEYFILE) {
       storeCredentialInSession(
         selectedConnection.hostname,
-        'password',
+        CRED_TYPE_KEYFILE,
+        keyFile,
+      );
+    } else if (authMethod === CRED_TYPE_PASSWORD) {
+      storeCredentialInSession(
+        selectedConnection.hostname,
+        CRED_TYPE_PASSWORD,
         authPassword,
       );
     }
@@ -201,7 +210,8 @@ const ConnectionSelectorView = () => {
       user: user,
       port: portNumber,
       name: containerName,
-      credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
+      credential:
+        authMethod === CRED_TYPE_KEYFILE ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
       isConnected: false,
@@ -1174,14 +1184,17 @@ const ConnectionSelectorView = () => {
                   padding: '12px 24px',
                   border: 'none',
                   backgroundColor: 'transparent',
-                  color: authMethod === 'password' ? '#2563eb' : '#64748b',
+                  color:
+                    authMethod === CRED_TYPE_PASSWORD ? '#2563eb' : '#64748b',
                   borderBottom:
-                    authMethod === 'password' ? '2px solid #2563eb' : 'none',
+                    authMethod === CRED_TYPE_PASSWORD
+                      ? '2px solid #2563eb'
+                      : 'none',
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setAuthMethod('password')}
+                onClick={() => setAuthMethod(CRED_TYPE_PASSWORD)}
               >
                 Password
               </button>
@@ -1190,14 +1203,17 @@ const ConnectionSelectorView = () => {
                   padding: '12px 24px',
                   border: 'none',
                   backgroundColor: 'transparent',
-                  color: authMethod === 'keyfile' ? '#2563eb' : '#64748b',
+                  color:
+                    authMethod === CRED_TYPE_KEYFILE ? '#2563eb' : '#64748b',
                   borderBottom:
-                    authMethod === 'keyfile' ? '2px solid #2563eb' : 'none',
+                    authMethod === CRED_TYPE_KEYFILE
+                      ? '2px solid #2563eb'
+                      : 'none',
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setAuthMethod('keyfile')}
+                onClick={() => setAuthMethod(CRED_TYPE_KEYFILE)}
               >
                 SSH Key
               </button>
@@ -1324,7 +1340,7 @@ const ConnectionSelectorView = () => {
              * The trash icon clears the stored credential for this hostname
              * from session storage, allowing the user to re-enter it manually.
              */}
-            {authMethod === 'password' && (
+            {authMethod === CRED_TYPE_PASSWORD && (
               <div style={{ marginBottom: '24px' }}>
                 <label
                   style={{
@@ -1367,7 +1383,7 @@ const ConnectionSelectorView = () => {
                     onClick={() => {
                       clearStoredCredentials(
                         selectedConnection?.hostname,
-                        'password',
+                        CRED_TYPE_PASSWORD,
                       );
                       setAuthPassword('');
                     }}
@@ -1382,7 +1398,7 @@ const ConnectionSelectorView = () => {
              * The drop zone border and background change color when a valid key is loaded.
              * "Clear Key" removes the key from session storage and resets local state.
              */}
-            {authMethod === 'keyfile' && (
+            {authMethod === CRED_TYPE_KEYFILE && (
               <div style={{ marginBottom: '24px' }}>
                 <label
                   style={{
@@ -1454,7 +1470,7 @@ const ConnectionSelectorView = () => {
                       onClick={() => {
                         clearStoredCredentials(
                           selectedConnection?.hostname,
-                          'keyfile',
+                          CRED_TYPE_KEYFILE,
                         );
                         setKeyFile(null);
                       }}
