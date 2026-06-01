@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import '../../styles/CLIPage.css';
 import TerminalView from './subcomponents/TerminalView';
 import StatusBar from './subcomponents/StatusBar';
-import { cliState } from './state/state';
+import { cliState, getOrderedTerminalIds } from './state/state';
 
 /**
  * ConnectionView
@@ -17,7 +17,14 @@ import { cliState } from './state/state';
  *   conn - A map of terminal IDs to their connection configuration objects.
  */
 const ConnectionView = ({ conn }) => {
-  const entries = Object.entries(conn);
+  const activeTerminalOrder = cliState((s) => s.activeTerminalOrder);
+  const entries = useMemo(() => {
+    const orderedIds = getOrderedTerminalIds({
+      activeConnection: conn,
+      activeTerminalOrder,
+    });
+    return orderedIds.map((id) => [id, conn[id]]);
+  }, [conn, activeTerminalOrder]);
   // Subscribe to the currently focused terminal ID from global CLI state.
   // Used to trigger auto-scroll when a terminal is selected externally
   // (e.g., from a sidebar or search result).

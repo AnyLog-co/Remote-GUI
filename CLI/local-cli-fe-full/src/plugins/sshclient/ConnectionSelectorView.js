@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   FaComputer,
   FaDocker,
   FaChevronDown,
   FaChevronRight,
+  FaGripVertical,
 } from 'react-icons/fa6';
 import { fetchAllNodes, normalizeNodes } from './utils/fetchNodes';
-import { cliState } from './state/state';
+import { cliState, getOrderedTerminalIds } from './state/state';
 import { CiTrash, CiStar } from 'react-icons/ci';
 import { FaStar } from 'react-icons/fa';
 import { TbBrandPowershell } from 'react-icons/tb';
@@ -31,6 +32,8 @@ const ConnectionSelectorView = () => {
   const {
     setActiveConnection,
     activeConnection,
+    activeTerminalOrder,
+    reorderActiveConnections,
     credLocked,
     setFocusedTerminalId,
     terminalLoading,
@@ -53,7 +56,6 @@ const ConnectionSelectorView = () => {
 
   // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
-  const [activeTerminals, setActiveTerminals] = useState(null);
   const [saveToVault, setSaveToVault] = useState(false);
 
   // Starred connections are persisted to localStorage so they survive page refreshes.
@@ -69,6 +71,9 @@ const ConnectionSelectorView = () => {
   const [terminalNames, setTerminalNames] = useState({});
   const [editingTerminalId, setEditingTerminalId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [draggedTerminalId, setDraggedTerminalId] = useState(null);
+  const [dropTargetTerminalId, setDropTargetTerminalId] = useState(null);
+  const dragSourceIdRef = useRef(null);
 
   const handleRemoveConnection = (id) => {
     removeConnection(id);
@@ -204,8 +209,18 @@ const ConnectionSelectorView = () => {
   };
 
   useEffect(() => {
-    setActiveTerminals(activeConnection);
-  }, [activeConnection]);
+    const endDrag = () => {
+      dragSourceIdRef.current = null;
+      setDraggedTerminalId(null);
+      setDropTargetTerminalId(null);
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    return () => {
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
+    };
+  }, []);
 
   /**
   Handles SSH key file upload and validation.
@@ -373,6 +388,36 @@ const ConnectionSelectorView = () => {
     return terminalNames[connId] ?? defaultName;
   };
 
+  /** Stable sort key from connection id (timestamp / action suffix), not display order. */
+  const getTerminalCreationKey = (id) => {
+    const dash = id?.indexOf('-');
+    if (dash == null || dash < 0) return id ?? '';
+    const tail = id.slice(dash + 1);
+    const asNum = Number(tail);
+    return Number.isFinite(asNum) ? asNum : tail;
+  };
+
+  /** Default labels like host-1, host-2 keyed by terminal id (unchanged when reordering). */
+  const buildDefaultTerminalNameMap = (connections) => {
+    const countByHostname = {};
+    const nameMap = {};
+    const byCreation = [...connections].sort((a, b) => {
+      const ka = getTerminalCreationKey(a.id);
+      const kb = getTerminalCreationKey(b.id);
+      if (ka !== kb) {
+        if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
+        return String(ka).localeCompare(String(kb));
+      }
+      return a.id.localeCompare(b.id);
+    });
+    byCreation.forEach((conn) => {
+      const h = conn.hostname || conn.ip || 'Unknown';
+      countByHostname[h] = (countByHostname[h] || 0) + 1;
+      nameMap[conn.id] = `${h}-${countByHostname[h]}`;
+    });
+    return nameMap;
+  };
+
   const startEditing = (connId, currentName) => {
     setEditingTerminalId(connId);
     setEditingName(currentName);
@@ -395,6 +440,31 @@ const ConnectionSelectorView = () => {
     }
   };
 
+  const reorderTerminalsById = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const ids = getOrderedTerminalIds(cliState.getState());
+    const fromIndex = ids.indexOf(fromId);
+    const toIndex = ids.indexOf(toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const next = [...ids];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    reorderActiveConnections(next);
+  };
+
+  const handleGripPointerDown = (connId) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragSourceIdRef.current = connId;
+    setDraggedTerminalId(connId);
+  };
+
+  const handleRowPointerEnter = (connId) => () => {
+    if (!dragSourceIdRef.current) return;
+    setDropTargetTerminalId(connId);
+    reorderTerminalsById(dragSourceIdRef.current, connId);
+  };
+
   /**
   Renders grouped active terminals view.
   Groups by hostname
@@ -403,13 +473,20 @@ const ConnectionSelectorView = () => {
   Displays terminal metadata
   @param {Object} activeTerminalsObj
   */
-  const displayActiveTerminalsTree = (activeTerminalsObj) => {
-    const list = Object.entries(activeTerminalsObj || {}).map(
-      ([key, value]) => ({
-        id: key,
-        ...value,
-      }),
-    );
+  const displayActiveTerminalsTree = () => {
+    const terminalOrder = getOrderedTerminalIds({
+      activeConnection,
+      activeTerminalOrder,
+    });
+    const orderIndex = (id) => {
+      const idx = terminalOrder.indexOf(id);
+      return idx < 0 ? terminalOrder.length : idx;
+    };
+
+    const list = terminalOrder.map((key) => ({
+      id: key,
+      ...activeConnection[key],
+    }));
 
     if (list.length < 1)
       return (
@@ -427,14 +504,7 @@ const ConnectionSelectorView = () => {
         </div>
       );
 
-    // Build a per-hostname counter to generate default names like "hostname-1", "hostname-2".
-    const countByHostname = {};
-    const nameMap = {};
-    list.forEach((conn) => {
-      const h = conn.hostname || conn.ip || 'Unknown';
-      countByHostname[h] = (countByHostname[h] || 0) + 1;
-      nameMap[conn.id] = `${h}-${countByHostname[h]}`;
-    });
+    const nameMap = buildDefaultTerminalNameMap(list);
 
     const byHostname = {};
     list.forEach((conn) => {
@@ -442,9 +512,14 @@ const ConnectionSelectorView = () => {
       if (!byHostname[h]) byHostname[h] = [];
       byHostname[h].push(conn);
     });
-    const hostnames = Object.keys(byHostname).sort((a, b) =>
-      a.localeCompare(b),
-    );
+    Object.values(byHostname).forEach((conns) => {
+      conns.sort((a, b) => orderIndex(a.id) - orderIndex(b.id));
+    });
+    const hostnames = Object.keys(byHostname).sort((a, b) => {
+      const minOrder = (hostname) =>
+        Math.min(...byHostname[hostname].map((c) => orderIndex(c.id)));
+      return minOrder(a) - minOrder(b);
+    });
 
     return (
       <div
@@ -525,26 +600,49 @@ const ConnectionSelectorView = () => {
                   {conns.map((conn) => {
                     const simpleName = nameMap[conn.id];
                     const tId = getTIdFromConnId(conn.id);
+                    const isDragging = draggedTerminalId === conn.id;
+                    const isDropTarget = dropTargetTerminalId === conn.id;
                     return (
                       <div
                         key={conn.id}
+                        onPointerEnter={handleRowPointerEnter(conn.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '8px 10px',
-                          backgroundColor: 'white',
-                          border: '1px solid #e2e8f0',
+                          backgroundColor: isDropTarget ? '#eff6ff' : 'white',
+                          border: isDropTarget
+                            ? '2px dashed #2563eb'
+                            : '1px solid #e2e8f0',
                           borderRadius: '6px',
                           gap: '8px',
+                          opacity: isDragging ? 0.45 : 1,
+                          userSelect: draggedTerminalId ? 'none' : undefined,
                         }}
                       >
+                        <span
+                          title="Drag to reorder terminals"
+                          onPointerDown={handleGripPointerDown(conn.id)}
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            color: '#94a3b8',
+                            cursor:
+                              draggedTerminalId === conn.id ? 'grabbing' : 'grab',
+                            touchAction: 'none',
+                          }}
+                        >
+                          <FaGripVertical size={12} />
+                        </span>
                         <div
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '6px',
                             minWidth: 0,
+                            flex: 1,
                           }}
                         >
                           {editingTerminalId === conn.id ? (
@@ -984,7 +1082,7 @@ const ConnectionSelectorView = () => {
                 >
                   Active Terminals
                   <span style={{ color: 'grey' }}>
-                    {` (${Object.entries(activeTerminals || {}).length})`}
+                    {` (${Object.keys(activeConnection || {}).length})`}
                   </span>
                 </button>
               </div>
@@ -1002,7 +1100,7 @@ const ConnectionSelectorView = () => {
               >
                 {connectionsTab === 'all'
                   ? displayChosenList(sortedConns)
-                  : displayActiveTerminalsTree(activeTerminals)}
+                  : displayActiveTerminalsTree()}
               </div>
             </div>
           )}
