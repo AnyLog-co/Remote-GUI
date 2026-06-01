@@ -207,8 +207,6 @@ const Dashboard = () => {
     }
   };
 
-
-
   return (
     <div className="dashboard-container">
       <TopBar
@@ -304,6 +302,7 @@ const Dashboard = () => {
                 ))}
 
             {/* Default view - Use first enabled feature or Client */}
+            
             <Route
               path="*"
               element={(() => {
@@ -323,14 +322,6 @@ const Dashboard = () => {
                   </div>
                 );
               })()}
-                  const firstEnabled = featureRoutes.find(r => enabledFeatures.has(r.featureKey));
-                  if (firstEnabled) {
-                    const Component = firstEnabled.component;
-                    return <Component node={selectedNode} />;
-                  }
-                  return <div>No features enabled. Please check feature configuration. The backend is not running/connected to the frontend, please check whether the environemnt vairables are properly set or if the backend is running.</div>;
-                })()
-              } 
             />
           </Routes>
         </div>

@@ -29,6 +29,9 @@ window._env_ = {
 };
 CONF
 
+# Ensure log directory exists
+mkdir -p /app/CLI/local-cli-backend/logs
+
 # Start backend
 $VIRTUAL_ENV/bin/uvicorn CLI.local-cli-backend.main:app --host 0.0.0.0 --port ${REMOTE_GUI_BE} &
 

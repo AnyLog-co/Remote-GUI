@@ -79,6 +79,8 @@ ENV CLI_IP=0.0.0.0
 ARG EXPOSE_PORT=8080
 ENV CLI_PORT=${EXPOSE_PORT}
 
+RUN touch /var/log/syslog
+
 # Install minimal runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends xsel && \
     apt-get install -y --only-upgrade openssl && \
