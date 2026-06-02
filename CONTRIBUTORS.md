@@ -17,7 +17,7 @@ If you have contributed to this project, add your name and email below.
 |          Name           |            Email            |
 | :---------------------: | :-------------------------: |
 |       Ori Shadmon       |     ori@anylog.network      |
-	Roy Shadmon	  |     roy@anylog.network      |
+|	Roy Shadmon	  |     roy@anylog.network      |
 | Pranav Purathepparambil |    pranav.purathe@gmail.com |
 |   Massimiliano Pinto    |   massimiliano@anylog.co    |
 |      Pouria Rezaei      | rezaeizadehpouria@gmail.com |
