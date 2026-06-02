@@ -21,6 +21,7 @@ const UNSPage = ({ node }) => {
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
   const [timeColumn, setTimeColumn] = useState('insert_timestamp'); // Time column: insert_timestamp or timestamp
   const [sqlData, setSqlData] = useState(null); // SQL query results
+  const [sqlColumns, setSqlColumns] = useState([]); // SQL table columns
   const [sqlLoading, setSqlLoading] = useState(false); // SQL query loading state
   const [sqlError, setSqlError] = useState(null); // SQL query error
   const [chartYKey, setChartYKey] = useState(null); // Selected value column for line chart
@@ -682,9 +683,12 @@ const UNSPage = ({ node }) => {
         console.log(
           `UNS: Setting ${result.data ? result.data.length : 0} rows in state`,
         );
-        setSqlData(result.data);
+        setSqlData(Array.isArray(result.data) ? result.data : []);
+        setSqlColumns(Array.isArray(result.columns) ? result.columns : []);
         if (silent) setSqlError(null);
       } else {
+        setSqlData(Array.isArray(result.data) ? result.data : []);
+        setSqlColumns(Array.isArray(result.columns) ? result.columns : []);
         setSqlError(result.error || 'Failed to fetch table data');
       }
     } catch (err) {
@@ -767,26 +771,21 @@ const UNSPage = ({ node }) => {
       setIsSidePanelOpen(false);
       setSelectedItem(null);
       setSqlData(null);
+      setSqlColumns([]);
       setSqlError(null);
     } else {
       // Otherwise, open/update the side panel with this item
       setSelectedItem(item);
       setIsSidePanelOpen(true);
       setSqlData(null);
+      setSqlColumns([]);
       setSqlError(null);
       setChartYKey(null); // Reset so chart defaults to policy column for new item
       setTimeColumn('insert_timestamp'); // Reset time column when opening new item
 
-      // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
       const hasTableMeta = itemData && itemData.dbms && itemData.table;
-      const tableCacheKey = hasTableMeta
-        ? `${itemData.dbms}:${itemData.table}`
-        : null;
-      const hasDataAtLocation = tableCacheKey
-        ? itemsWithData.get(tableCacheKey) === true
-        : false;
-      if (hasDataAtLocation) {
+      if (hasTableMeta) {
         fetchSqlData(
           itemData.dbms,
           itemData.table,
@@ -866,8 +865,8 @@ const UNSPage = ({ node }) => {
 
     const isSelected = selectedItem && getItemId(selectedItem) === itemId;
 
-    // Add data indicator class ONLY if item definitively has data (true)
-    // Don't add any class if hasData is false or null (no data or not checked)
+    // Add table indicator class only if the table schema is available.
+    // Don't add any class if hasData is false or null (no table or not checked)
     const dataIndicatorClass = hasData === true ? 'has-data' : '';
     const checkingClass = isCheckingData ? 'checking-data' : '';
 
@@ -886,10 +885,10 @@ const UNSPage = ({ node }) => {
         <div className="uns-item-icon">{icon}</div>
         <div className="uns-item-name">
           {itemName}
-          {/* Only show data indicator if we have a definitive result (true = has data) */}
-          {/* Don't show anything if hasData is false or null (no data or not checked yet) */}
+          {/* Only show table indicator if we have a definitive result (true = table available) */}
+          {/* Don't show anything if hasData is false or null (no table or not checked yet) */}
           {hasTable && hasData === true && (
-            <span className="uns-item-data-indicator" title="Table has data">
+            <span className="uns-item-data-indicator" title="Table available">
               {' '}
               💾
             </span>
@@ -897,7 +896,7 @@ const UNSPage = ({ node }) => {
           {hasTable && isCheckingData && (
             <span
               className="uns-item-data-indicator checking"
-              title="Checking for data..."
+              title="Checking table..."
             >
               {' '}
               ⏳
@@ -1068,9 +1067,9 @@ const UNSPage = ({ node }) => {
         <UNSSidePanel
           isOpen={isSidePanelOpen}
           selectedItem={selectedItem}
-          itemsWithData={itemsWithData}
           conn={node}
           sqlData={sqlData}
+          sqlColumns={sqlColumns}
           sqlLoading={sqlLoading}
           sqlError={sqlError}
           timeRangeValue={timeRangeValue}
@@ -1081,6 +1080,7 @@ const UNSPage = ({ node }) => {
             setIsSidePanelOpen(false);
             setSelectedItem(null);
             setSqlData(null);
+            setSqlColumns([]);
             setSqlError(null);
           }}
           onTimeRangeValueChange={setTimeRangeValue}

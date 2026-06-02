@@ -11,7 +11,7 @@ function isColumnNumerical(sqlData, columnName) {
   let checked = 0;
   for (let i = 0; i < Math.min(sqlData.length, 20); i++) {
     const row = sqlData[i];
-    if (row && columnName in row) {
+    if (row && typeof row === 'object' && !Array.isArray(row) && columnName in row) {
       const v = row[columnName];
       if (v != null && v !== '') {
         checked++;

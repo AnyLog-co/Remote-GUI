@@ -135,11 +135,15 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   }
 
   const firstRow = sqlData[0];
+  if (!firstRow || typeof firstRow !== 'object' || Array.isArray(firstRow)) {
+    return null;
+  }
+
   const desiredTimeKey = timeColumnKey || 'insert_timestamp';
-  const timeKey = firstRow && (desiredTimeKey in firstRow)
+  const timeKey = desiredTimeKey in firstRow
     ? desiredTimeKey
-    : firstRow && Object.keys(firstRow).find((k) => k.toLowerCase() === (desiredTimeKey || '').toLowerCase());
-  if (!firstRow || !timeKey) {
+    : Object.keys(firstRow).find((k) => k.toLowerCase() === (desiredTimeKey || '').toLowerCase());
+  if (!timeKey) {
     return null;
   }
 
