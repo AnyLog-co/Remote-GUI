@@ -1,4 +1,6 @@
-const API_BASE_URL = (window._env_?.VITE_API_URL || "http://localhost:8080") + "/policycreator";
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
+
+const API_BASE_URL = `${getApiBaseUrl()}/policycreator`;
 
 export async function submitCustomPolicy(nodeAddress, policyType, policyData) {
   if (!nodeAddress || !policyType) {
