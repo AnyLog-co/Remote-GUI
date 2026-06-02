@@ -1,9 +1,12 @@
 import asyncio
 import io
+import json
+import os
 
 import paramiko
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import logging
+from logging.handlers import SysLogHandler
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -17,7 +20,8 @@ class JSONFormatter(logging.Formatter):
 logger = logging.getLogger("SSH_Client")
 logger.setLevel(logging.INFO)
 
-handler = logging.FileHandler("/var/log/syslog")
+syslog_address = "/var/run/syslog" if os.path.exists("/var/run/syslog") else "/dev/log"
+handler = SysLogHandler(address=syslog_address)
 handler.setFormatter(JSONFormatter())
 logger.addHandler(handler)
 
