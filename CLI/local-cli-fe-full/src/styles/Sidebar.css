@@ -15,7 +15,9 @@
   font-size: 16px;
   padding: 8px 12px;
   border-radius: 8px;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
   display: block;
 }
 
@@ -69,4 +71,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.installed-plugin-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #4e4e6a;
+}
+
+.installed-plugin-section a {
+  margin-bottom: 12px;
 }
