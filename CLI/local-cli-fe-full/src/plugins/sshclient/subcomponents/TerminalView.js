@@ -22,7 +22,6 @@ const TerminalView = ({
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
   const API_URL = getApiBaseUrl();
-  var strippedURL = (strippedURL = API_URL.replace('http://', ''));
   const [isReady, setIsReady] = useState(false);
 
   const isConnected = cliState(
@@ -121,7 +120,9 @@ const TerminalView = ({
           data: credential,
         };
       }
-      const ws = new WebSocket(`ws://${strippedURL}/sshclient/ws`);
+      const wsUrl = new URL('/sshclient/ws', API_URL);
+      wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(wsUrl.toString());
       wsRef.current = ws;
 
       ws.onopen = () => {

@@ -5,6 +5,16 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { hiddenStorage } from '../storage/session';
 
+/** Terminal ids in sidebar / panel order (ids may be absent from activeConnection). */
+export const getOrderedTerminalIds = (state) => {
+  const { activeConnection, activeTerminalOrder } = state;
+  const order = activeTerminalOrder.filter((id) => activeConnection[id]);
+  const missing = Object.keys(activeConnection).filter(
+    (id) => !order.includes(id),
+  );
+  return [...order, ...missing];
+};
+
 export const cliState = create(
   persist(
     (set, get) => ({
@@ -12,6 +22,7 @@ export const cliState = create(
       secretsCache: {},
       modalView: null,
       activeConnection: {},
+      activeTerminalOrder: [],
       connectionsList: [],
       focusedTerminalId: null,
       terminalLoading: false,
@@ -55,14 +66,30 @@ export const cliState = create(
             ...state.activeConnection,
             [id]: conn,
           },
+          activeTerminalOrder: state.activeConnection[id]
+            ? state.activeTerminalOrder
+            : [...state.activeTerminalOrder, id],
         })),
 
       removeActiveConnection: (id) =>
         set((state) => {
           const updatedConnections = { ...state.activeConnection };
           delete updatedConnections[id];
-          return { activeConnection: updatedConnections };
+          return {
+            activeConnection: updatedConnections,
+            activeTerminalOrder: state.activeTerminalOrder.filter(
+              (terminalId) => terminalId !== id,
+            ),
+          };
         }),
+
+      /** Reorder active terminals; `orderedIds` is the full list of connection ids in display order. */
+      reorderActiveConnections: (orderedIds) =>
+        set((state) => ({
+          activeTerminalOrder: orderedIds.filter(
+            (id) => state.activeConnection[id],
+          ),
+        })),
 
       setIsConnected: (id, connState) =>
         set((state) => {
@@ -81,6 +108,7 @@ export const cliState = create(
           credLocked: true,
           secretsCache: {},
           activeConnection: {},
+          activeTerminalOrder: [],
           modalView: null,
         });
         sessionStorage.removeItem('cli-session-state');

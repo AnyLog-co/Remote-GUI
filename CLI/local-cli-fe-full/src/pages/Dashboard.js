@@ -254,8 +254,6 @@ const Dashboard = () => {
     }
   };
 
-
-
   return (
     <div className="dashboard-container">
       <TopBar
@@ -351,6 +349,7 @@ const Dashboard = () => {
                 ))}
 
             {/* Default view - Use first enabled feature or Client */}
+            
             <Route
               path="*"
               element={(() => {
