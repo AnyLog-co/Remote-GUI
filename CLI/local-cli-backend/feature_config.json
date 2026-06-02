@@ -63,7 +63,7 @@
     },
     "grafana": {
       "slug": "anylog/grafana",
-      "enabled": false,
+      "enabled": true,
       "description": "Grafana Dashboard Plugin"
     },
     "mcpclient": {
@@ -76,7 +76,7 @@
       "enabled": true
     },
     "sshclient": {
-      "enabled": false,
+      "enabled": true,
       "description": "SSH Client Plugin"
     },
     "uns": {
