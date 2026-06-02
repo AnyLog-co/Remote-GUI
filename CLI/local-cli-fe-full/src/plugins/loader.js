@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { isPluginEnabled } from '../services/featureConfig';
+import { getApiBaseUrl } from '../utils/runtimeConfig';
 
 // Cache for plugin order from backend
 let cachedPluginOrder = null;
@@ -20,7 +21,7 @@ const fetchPluginOrder = async () => {
   
   orderFetchPromise = (async () => {
     try {
-      const API_URL = window._env_?.VITE_API_URL || import.meta.env.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/plugins/order`);
       if (response.ok) {
         const data = await response.json();

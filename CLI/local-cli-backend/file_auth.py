@@ -4,10 +4,13 @@ import os
 import uuid
 import shutil
 import platform
+import socket
+from ipaddress import ip_address, ip_network
 from datetime import datetime
 from typing import Dict, List, Optional
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Default user ID for all operations (no authentication needed)
 DEFAULT_USER_ID = "default-user-12345"
@@ -44,10 +47,13 @@ PRESET_GROUPS_FILE = DATA_DIR / "preset_groups.json"
 
 _DEFAULTS: Dict[Path, Dict] = {
     USERS_FILE: {"users": []},
-    BOOKMARKS_FILE: {"bookmarks": {}},
+    BOOKMARKS_FILE: {"bookmarks": []},
     PRESETS_FILE: {"presets": []},
     PRESET_GROUPS_FILE: {"preset_groups": []},
 }
+
+def _default_for(path: Path) -> Dict:
+    return json.loads(json.dumps(_DEFAULTS.get(path, {})))
 
 def _read_json(path: Path) -> Dict:
     try:
@@ -56,7 +62,7 @@ def _read_json(path: Path) -> Dict:
                 return json.load(f)
     except Exception as e:
         print(f"Error loading {path}: {e}")
-    return _DEFAULTS.get(path, {})
+    return _default_for(path)
 
 def _write_json_simple(path: Path, data: Dict):
     """Simple non-atomic file writing as fallback"""
@@ -114,13 +120,126 @@ def load_json_file(filename) -> Dict:
     # filename can be either a string or Path object
     if isinstance(filename, str):
         filename = Path(filename)
-    return _read_json(filename)
+    data = _read_json(filename)
+    if filename == BOOKMARKS_FILE:
+        if not isinstance(data, dict):
+            return _default_for(filename)
+        _ensure_bookmarks_list(data)
+    return data
 
 def save_json_file(filename, data: Dict):
     # filename can be either a string or Path object
     if isinstance(filename, str):
         filename = Path(filename)
     _write_json_atomic(filename, data)
+
+def _ensure_bookmarks_list(bookmarks_data: Dict) -> List[Dict]:
+    """Normalize bookmark storage to the list shape used by the app."""
+    if not isinstance(bookmarks_data, dict):
+        bookmarks_data = {}
+
+    bookmarks = bookmarks_data.get("bookmarks")
+    if isinstance(bookmarks, list):
+        return bookmarks
+
+    bookmarks_data["bookmarks"] = []
+    return bookmarks_data["bookmarks"]
+
+def _host_from_env_value(value: Optional[str]) -> Optional[str]:
+    if not value or not value.strip():
+        return None
+
+    value = value.strip()
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    return parsed.hostname or value.split(":", 1)[0].strip() or None
+
+def _is_local_or_unspecified(host: str) -> bool:
+    lowered = host.lower()
+    if lowered in {"localhost", "0.0.0.0"}:
+        return True
+
+    try:
+        parsed = ip_address(host)
+    except ValueError:
+        return False
+
+    return parsed.is_loopback or parsed.is_unspecified
+
+def _is_docker_private_ip(host: str) -> bool:
+    try:
+        parsed = ip_address(host)
+    except ValueError:
+        return False
+
+    return parsed in ip_network("172.16.0.0/12")
+
+def _is_running_in_docker() -> bool:
+    return Path("/.dockerenv").exists()
+
+def _detect_inet_ip() -> Optional[str]:
+    """Best-effort non-loopback IPv4 detection for the default node bookmark."""
+    explicit_host = _host_from_env_value(
+        os.environ.get("DEFAULT_BOOKMARK_HOST") or os.environ.get("INET_IP")
+    )
+    if explicit_host:
+        return explicit_host
+
+    for env_name in ("REMOTE_GUI_HOST", "FRONTEND_URL", "VITE_API_URL"):
+        host = _host_from_env_value(os.environ.get(env_name))
+        if host and not _is_local_or_unspecified(host):
+            return host
+
+    candidates = []
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            candidates.append(s.getsockname()[0])
+    except OSError as e:
+        print(f"Unable to detect primary inet IP via route lookup: {e}")
+
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            candidates.append(info[4][0])
+    except OSError as e:
+        print(f"Unable to detect inet IP via hostname lookup: {e}")
+
+    for ip in candidates:
+        if not ip or _is_local_or_unspecified(ip):
+            continue
+        if _is_running_in_docker() and _is_docker_private_ip(ip):
+            print(f"Skipping Docker-private IP for default bookmark: {ip}")
+            continue
+        if ip:
+            return ip
+
+    return None
+
+def file_ensure_default_bookmark(default_conn: Optional[str] = None) -> Dict:
+    """Create a default bookmark only when bookmarks.json has no bookmarks."""
+    bookmarks_data = load_json_file(BOOKMARKS_FILE)
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
+
+    if bookmarks:
+        return {"message": "Bookmarks already exist; default bootstrap skipped"}
+
+    if not default_conn:
+        port = os.environ.get("DEFAULT_BOOKMARK_PORT", "32149").strip() or "32149"
+        ip = _detect_inet_ip()
+        if not ip:
+            return {"error": "Could not detect inet IP for default bookmark"}
+        default_conn = f"{ip}:{port}"
+
+    result = file_bookmark_node(default_conn)
+    if "error" in result:
+        return result
+
+    default_result = file_set_default_bookmark(default_conn)
+    if "error" in default_result:
+        return default_result
+
+    return {"message": "Default bookmark bootstrapped", "node": default_conn}
 
 # def load_json_file(filename: str) -> Dict:
 #     """Load data from a JSON file"""
@@ -246,13 +365,10 @@ def file_get_user(user_id: str) -> Optional[Dict]:
 def file_bookmark_node(node: str) -> Dict:
     """Add a bookmark for the default user"""
     bookmarks_data = load_json_file(BOOKMARKS_FILE)
-    
-    # Initialize bookmarks structure if it doesn't exist
-    if "bookmarks" not in bookmarks_data:
-        bookmarks_data["bookmarks"] = []
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
     
     # Check if bookmark already exists
-    for bookmark in bookmarks_data["bookmarks"]:
+    for bookmark in bookmarks:
         if bookmark.get("node", {}).get("conn") == node:
             return {"message": "Bookmark already exists"}
     
@@ -265,7 +381,7 @@ def file_bookmark_node(node: str) -> Dict:
         "is_default": False
     }
     
-    bookmarks_data["bookmarks"].append(new_bookmark)
+    bookmarks.append(new_bookmark)
     save_json_file(BOOKMARKS_FILE, bookmarks_data)
     
     return {"bookmark": {"user_id": DEFAULT_USER_ID, "node": node, "description": "", "created_at": new_bookmark["created_at"]}}
@@ -273,17 +389,17 @@ def file_bookmark_node(node: str) -> Dict:
 def file_get_bookmarked_nodes() -> List[Dict]:
     """Get all bookmarks for the default user"""
     bookmarks_data = load_json_file(BOOKMARKS_FILE)
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
     
     user_bookmarks = []
-    if "bookmarks" in bookmarks_data:
-        for bookmark in bookmarks_data["bookmarks"]:
-            user_bookmarks.append({
-                "user_id": DEFAULT_USER_ID,
-                "node": bookmark.get("node", {}).get("conn", ""),
-                "description": bookmark.get("description", ""),
-                "created_at": bookmark.get("created_at", ""),
-                "is_default": bookmark.get("is_default", False)
-            })
+    for bookmark in bookmarks:
+        user_bookmarks.append({
+            "user_id": DEFAULT_USER_ID,
+            "node": bookmark.get("node", {}).get("conn", ""),
+            "description": bookmark.get("description", ""),
+            "created_at": bookmark.get("created_at", ""),
+            "is_default": bookmark.get("is_default", False)
+        })
     
     return user_bookmarks
 
@@ -291,18 +407,18 @@ def file_delete_bookmarked_node(node: str) -> Dict:
     """Delete a bookmark for the default user"""
     print(f"Attempting to delete bookmark with node: {node}")
     bookmarks_data = load_json_file(BOOKMARKS_FILE)
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
     print(f"Current bookmarks: {bookmarks_data}")
     
-    if "bookmarks" in bookmarks_data:
-        for i, bookmark in enumerate(bookmarks_data["bookmarks"]):
-            bookmark_node = bookmark.get("node", {}).get("conn")
-            print(f"Checking bookmark {i}: {bookmark_node} vs {node}")
-            if bookmark_node == node:
-                print(f"Found bookmark to delete at index {i}")
-                del bookmarks_data["bookmarks"][i]
-                save_json_file(BOOKMARKS_FILE, bookmarks_data)
-                print("Bookmark deleted successfully")
-                return {"message": "Bookmark deleted successfully"}
+    for i, bookmark in enumerate(bookmarks):
+        bookmark_node = bookmark.get("node", {}).get("conn")
+        print(f"Checking bookmark {i}: {bookmark_node} vs {node}")
+        if bookmark_node == node:
+            print(f"Found bookmark to delete at index {i}")
+            del bookmarks[i]
+            save_json_file(BOOKMARKS_FILE, bookmarks_data)
+            print("Bookmark deleted successfully")
+            return {"message": "Bookmark deleted successfully"}
     
     print("Bookmark not found")
     return {"error": "Bookmark not found"}
@@ -310,24 +426,23 @@ def file_delete_bookmarked_node(node: str) -> Dict:
 def file_update_bookmark_description(node: str, description: str) -> Dict:
     """Update bookmark description for the default user"""
     bookmarks_data = load_json_file(BOOKMARKS_FILE)
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
     
-    if "bookmarks" in bookmarks_data:
-        for bookmark in bookmarks_data["bookmarks"]:
-            if bookmark.get("node", {}).get("conn") == node:
-                bookmark["description"] = description
-                save_json_file(BOOKMARKS_FILE, bookmarks_data)
-                return {"message": "Bookmark updated successfully"}
+    for bookmark in bookmarks:
+        if bookmark.get("node", {}).get("conn") == node:
+            bookmark["description"] = description
+            save_json_file(BOOKMARKS_FILE, bookmarks_data)
+            return {"message": "Bookmark updated successfully"}
     
     return {"error": "Bookmark not found"}
 
 def file_set_default_bookmark(node: str) -> Dict:
     """Set a single bookmark as default and unset others"""
     bookmarks_data = load_json_file(BOOKMARKS_FILE)
-    if "bookmarks" not in bookmarks_data:
-        bookmarks_data["bookmarks"] = []
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
 
     found = False
-    for bookmark in bookmarks_data["bookmarks"]:
+    for bookmark in bookmarks:
         if bookmark.get("node", {}).get("conn") == node:
             bookmark["is_default"] = True
             found = True

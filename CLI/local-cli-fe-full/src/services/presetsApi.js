@@ -1,4 +1,8 @@
 
+import { getApiBaseUrl } from '../utils/runtimeConfig';
+
+const API_URL = getApiBaseUrl();
+
 export async function addPresetGroup({ jwt, name }) {
   if (!jwt || !name) {
     alert('Missing required fields Preset Group');
@@ -11,7 +15,7 @@ export async function addPresetGroup({ jwt, name }) {
 
     const requestBody = { token: { jwt: jwt }, group: { group_name: name } };
 
-    const response = await fetch(`http://127.0.0.1:8000/add-preset-group/`, {
+    const response = await fetch(`${API_URL}/add-preset-group/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,7 +56,7 @@ export async function getPresetGroups({ jwt }) {
 
     const requestBody = { jwt: jwt };
 
-    const response = await fetch(`http://127.0.0.1:8000/get-preset-groups/`, {
+    const response = await fetch(`${API_URL}/get-preset-groups/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -91,7 +95,7 @@ export async function addPreset({ jwt, preset }) {
 
     const requestBody = { token: { jwt: jwt }, preset: preset };
 
-    const response = await fetch(`http://127.0.0.1:8000/add-preset/`, {
+    const response = await fetch(`${API_URL}/add-preset/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -131,7 +135,7 @@ export async function getPresetsByGroup({ jwt, groupId }) {
 
     const requestBody = { token: { jwt: jwt }, group_id: { group_id: groupId } };
 
-    const response = await fetch(`http://127.0.0.1:8000/get-presets/`, {
+    const response = await fetch(`${API_URL}/get-presets/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -172,7 +176,7 @@ export async function deletePresetGroup({ jwt, groupId, gname }) {
     const requestBody = { token: { jwt: jwt }, group_id: { group_id: groupId }, group: { group_name: gname } };
 
 
-    const response = await fetch(`http://127.0.0.1:8000/delete-preset-group/`, {
+    const response = await fetch(`${API_URL}/delete-preset-group/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -203,7 +207,7 @@ export async function deletePresetGroup({ jwt, groupId, gname }) {
 export async function getBasePresetPolicy() {
   try {
 
-    const response = await fetch(`http://127.0.0.1:8000/get-preset-policy/`, {
+    const response = await fetch(`${API_URL}/get-preset-policy/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

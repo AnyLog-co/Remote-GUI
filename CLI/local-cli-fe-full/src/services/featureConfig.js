@@ -1,6 +1,8 @@
 // Feature Configuration Service
 // Fetches and caches feature configuration from backend
 
+import { getApiBaseUrl } from '../utils/runtimeConfig';
+
 let cachedFeatureConfig = null;
 let configFetchPromise = null;
 
@@ -19,7 +21,7 @@ export const fetchFeatureConfig = async () => {
 
   configFetchPromise = (async () => {
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/feature-config`);
       if (response.ok) {
         const data = await response.json();

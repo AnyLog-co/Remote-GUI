@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import '../../styles/ReportgeneratorPage.css';
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
 
 // Plugin metadata - used by the plugin loader
 export const pluginMetadata = {
@@ -94,7 +95,7 @@ const ReportgeneratorPage = ({ node }) => {
   const fetchReports = async () => {
     try {
       setLoadingReports(true);
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/list-reports/`, {
         method: 'GET',
         headers: {
@@ -120,7 +121,7 @@ const ReportgeneratorPage = ({ node }) => {
 
     try {
       setLoadingMonitorIds(true);
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/monitor-ids-by-report/`, {
         method: 'POST',
         headers: {
@@ -218,7 +219,7 @@ const ReportgeneratorPage = ({ node }) => {
         page_orientation: pageOrientation
       };
 
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const url = `${API_URL}/reportgenerator/generate-report`;
       
       // Make request to get PDF file
@@ -319,7 +320,7 @@ const ReportgeneratorPage = ({ node }) => {
     setSuccess(null);
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       
       // Step 1: Check for conflicts
       const checkFormData = new FormData();
@@ -402,7 +403,7 @@ const ReportgeneratorPage = ({ node }) => {
     setSuccess(null);
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const formData = new FormData();
       
       // Append all files
@@ -482,7 +483,7 @@ const ReportgeneratorPage = ({ node }) => {
     }
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/export-configs`, {
         method: 'GET',
       });
@@ -852,4 +853,3 @@ const ReportgeneratorPage = ({ node }) => {
 };
 
 export default ReportgeneratorPage;
-

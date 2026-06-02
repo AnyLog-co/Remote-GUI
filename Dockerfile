@@ -19,8 +19,9 @@ RUN npm install --legacy-peer-deps --no-audit --progress=false
 # Copy frontend source (node_modules must be excluded in .dockerignore)
 COPY CLI/local-cli-fe-full ./
 
-# Build-time API URL (passed in by docker-compose, defaults to backend port)
-ARG VITE_API_URL=http://127.0.0.1:8080
+# Runtime config.js supplies the API URL; keep build-time value empty so the
+# compiled bundle does not bake in a Docker-host-specific localhost address.
+ARG VITE_API_URL=
 ENV VITE_API_URL=${VITE_API_URL}
 
 

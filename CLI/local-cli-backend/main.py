@@ -28,7 +28,11 @@ from parsers import parse_response, check_format_table_sql_query
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
-from file_auth import file_bookmark_node, file_set_default_bookmark
+from file_auth import (
+    file_bookmark_node,
+    file_ensure_default_bookmark,
+    file_set_default_bookmark,
+)
 # Import plugin loader
 from plugins.loader import load_plugins, get_plugin_order
 # Import feature config loader
@@ -201,8 +205,9 @@ else:
 # Load plugins (will respect feature config internally)
 load_plugins(app)
 
-# Bootstrap default connection from REST_CONN env var
-REST_CONN = os.getenv("REST_CONN")
+# Bootstrap default connection from REST_CONN env var.
+# REMOTE_CONN is accepted as a legacy/generator alias.
+REST_CONN = os.getenv("REST_CONN") or os.getenv("REMOTE_CONN")
 if REST_CONN:
     REST_CONN = REST_CONN.strip()
     print(f"🔗 REST_CONN detected: {REST_CONN}")
@@ -211,7 +216,9 @@ if REST_CONN:
     result = file_set_default_bookmark(REST_CONN)
     print(f"   Set default result: {result}")
 else:
-    print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
+    print("ℹ️  No REST_CONN env var set — checking empty bookmarks fallback")
+    result = file_ensure_default_bookmark()
+    print(f"   Empty bookmarks fallback result: {result}")
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
@@ -249,6 +256,7 @@ def get_env_config_endpoint():
         ("FRONTEND_URL", "Allowed CORS origin(s)", "* (all origins)"),
         ("ALLOWED_HOSTS", "Allowed hosts", "*"),
         ("REST_CONN", "Default AnyLog node connection", None),
+        ("REMOTE_CONN", "Default AnyLog node connection alias", None),
         ("REMOTE_GUI_FE", "Frontend port", "31800"),
         ("REMOTE_GUI_BE", "Backend port", "8080"),
         ("GRAFANA_URL", "Grafana dashboard URL", "http://23.239.12.151:3100/dashboards/f/ddu0qc65783r4a/smart-city"),
