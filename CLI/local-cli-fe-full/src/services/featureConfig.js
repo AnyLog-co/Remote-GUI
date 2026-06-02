@@ -26,22 +26,22 @@ export const fetchFeatureConfig = async () => {
         cachedFeatureConfig = data;
         return cachedFeatureConfig;
       } else {
-        console.warn('Failed to fetch feature config:', response.status);
+        console.warn("Failed to fetch feature config:", response.status);
         // Return default: all features enabled
         cachedFeatureConfig = {
           features: {},
           plugins: {},
-          version: "1.0.0"
+          version: "1.0.0",
         };
         return cachedFeatureConfig;
       }
     } catch (error) {
-      console.warn('Failed to fetch feature config:', error);
+      console.warn("Failed to fetch feature config:", error);
       // Return default: all features enabled
       cachedFeatureConfig = {
         features: {},
         plugins: {},
-        version: "1.0.0"
+        version: "1.0.0",
       };
       return cachedFeatureConfig;
     }
@@ -59,11 +59,11 @@ export const fetchFeatureConfig = async () => {
 export const isFeatureEnabled = async (featureName) => {
   const config = await fetchFeatureConfig();
   const features = config.features || {};
-  
+
   if (!(featureName in features)) {
     return false;
   }
-  
+
   return features[featureName].enabled !== false;
 };
 
@@ -76,11 +76,11 @@ export const isFeatureEnabled = async (featureName) => {
 export const isPluginEnabled = async (pluginName) => {
   const config = await fetchFeatureConfig();
   const plugins = config.plugins || {};
-  
+
   if (!(pluginName in plugins)) {
     return false;
   }
-  
+
   return plugins[pluginName].enabled !== false;
 };
 
@@ -92,13 +92,13 @@ export const getEnabledFeatures = async () => {
   const config = await fetchFeatureConfig();
   const features = config.features || {};
   const enabled = new Set();
-  
+
   for (const [name, data] of Object.entries(features)) {
     if (data.enabled !== false) {
       enabled.add(name);
     }
   }
-  
+
   return enabled;
 };
 
@@ -110,13 +110,13 @@ export const getEnabledPlugins = async () => {
   const config = await fetchFeatureConfig();
   const plugins = config.plugins || {};
   const enabled = new Set();
-  
+
   for (const [name, data] of Object.entries(plugins)) {
     if (data.enabled !== false) {
       enabled.add(name);
     }
   }
-  
+
   return enabled;
 };
 
@@ -126,4 +126,29 @@ export const getEnabledPlugins = async () => {
  */
 export const initializeFeatureConfig = () => {
   return fetchFeatureConfig();
+};
+
+export const invalidateFeatureConfig = () => {
+  cachedFeatureConfig = null;
+  configFetchPromise = null;
+};
+
+export const setPluginEnabled = async (pluginName, enabled) => {
+  const API_URL = window._env_?.REACT_APP_API_URL || "http://localhost:8000";
+  const response = await fetch(
+    `${API_URL}/feature-config/plugins/${pluginName}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new Error(`Failed to update plugin "${pluginName}": ${detail}`);
+  }
+
+  invalidateFeatureConfig();
+  await fetchFeatureConfig();
 };

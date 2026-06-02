@@ -1,0 +1,76 @@
+// plugin vite.config.js
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { federation } from "@module-federation/vite";
+
+export default defineConfig({
+  plugins: [
+    react({
+      include: "**/*.{js,jsx}",
+      jsxRuntime: "automatic",
+    }),
+    federation({
+      name: "@@PLUGIN@@",
+      filename: "remoteEntry.js",
+      manifest: true,
+      remotes: {},
+      exposes: {
+        "./PluginApp": "@@EXPOSE_PATH@@",
+        "./@@EXPOSE_MODULE@@": "@@EXPOSE_PATH@@",
+      },
+      shared: {
+        react: {
+          singleton: true,
+          requiredVersion: false,
+          eager: false,
+          import: false,
+        },
+        "react-dom": {
+          singleton: true,
+          requiredVersion: false,
+          eager: false,
+          import: false,
+        },
+        "react/jsx-runtime": {
+          singleton: true,
+          requiredVersion: false,
+          eager: false,
+          import: false,
+        },
+        tslib: { singleton: true, requiredVersion: false },
+      },
+    }),
+  ],
+  resolve: {
+    alias: {
+      // Host bridge is emitted as devContext.js (`import host from "host"`).
+      host: "/src/devContext.js",
+    },
+    dedupe: [], // override @vitejs/plugin-react's automatic dedupe
+  },
+  optimizeDeps: {
+    exclude: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ],
+    esbuildOptions: {
+      loader: { ".js": "jsx" },
+    },
+  },
+  esbuild: {
+    loader: "jsx",
+    include: /src\/.*\.js$/,
+    exclude: [],
+  },
+  base: "/official-plugins/dev/@@PLUGIN@@/frontend/dist/",
+  build: {
+    target: "esnext",
+    minify: false,
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: { format: "esm" },
+    },
+  },
+});

@@ -1,18 +1,26 @@
 /* src/styles/Dashboard.css */
 .dashboard-container {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-  }
-  
-  .dashboard-content {
-    display: flex;
-    flex: 1;
-  }
-  
-  .dashboard-main {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-  }
-  
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.dashboard-content {
+  display: flex;
+  flex: 1;
+}
+
+.dashboard-main {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.dashboard-plugin-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  align-self: stretch;
+}

@@ -1,137 +1,199 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
-import TopBar from '../components/TopBar';
-import Client from './Client';
-import Monitor from './Monitor';
-import Policies from './Policies';
-import AddData from './AddData';
-import UserProfile from './UserProfile';
-import ViewFiles from './ViewFiles';
-import Presets from './Presets';
-import Bookmarks from './Bookmarks';
-import SqlQueryGenerator from './SqlQueryGenerator';
-import BlockchainManager from './BlockchainManager';
-import About from './About';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  Suspense,
+} from "react";
+import { Routes, Route } from "react-router-dom";
+import Sidebar from "../components/Sidebar";
+import TopBar from "../components/TopBar";
+import Client from "./Client";
+import Monitor from "./Monitor";
+import Policies from "./Policies";
+import AddData from "./AddData";
+import UserProfile from "./UserProfile";
+import ViewFiles from "./ViewFiles";
+import Presets from "./Presets";
+import Bookmarks from "./Bookmarks";
+import SqlQueryGenerator from "./SqlQueryGenerator";
+import BlockchainManager from "./BlockchainManager";
+import About from "./About";
 
 // Import plugin loader
-import { getPluginPages } from '../plugins/loader';
+import {
+  getPluginPages,
+  refreshPluginPages,
+  initializePluginOrder,
+} from "../plugins/loader";
 // Import feature config
 import {
   initializeFeatureConfig,
   isFeatureEnabled,
   isPluginEnabled,
-} from '../services/featureConfig';
+  invalidateFeatureConfig,
+} from "../services/featureConfig";
 
-import PolicyGeneratorPage from './Security';
+import PolicyGeneratorPage from "./Security";
 // import Presets from './Presets';
-import '../styles/Dashboard.css'; // dashboard-specific styles
-import { getBookmarks } from '../services/file_auth';
+import "../styles/Dashboard.css"; // dashboard-specific styles
+import { getBookmarks } from "../services/file_auth";
+
+import PluginErrorBoundary from "../plugins/marketplace/PluginErrorBoundary";
+
+const PluginMountGate = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+  return children;
+};
+
+const FEATURE_ROUTES = [
+  { path: "client", component: Client, featureKey: "client" },
+  { path: "monitor", component: Monitor, featureKey: "monitor" },
+  { path: "policies", component: Policies, featureKey: "policies" },
+  { path: "adddata", component: AddData, featureKey: "adddata" },
+  { path: "viewfiles", component: ViewFiles, featureKey: "viewfiles" },
+  { path: "sqlquery", component: SqlQueryGenerator, featureKey: "sqlquery" },
+  {
+    path: "blockchain",
+    component: BlockchainManager,
+    featureKey: "blockchain",
+  },
+  { path: "presets", component: Presets, featureKey: "presets" },
+  { path: "bookmarks", component: Bookmarks, featureKey: "bookmarks" },
+  { path: "security", component: PolicyGeneratorPage, featureKey: "security" },
+];
 
 const Dashboard = () => {
   // Load plugin pages
-  const pluginPages = getPluginPages();
+  const [pluginPages, setPluginPages] = useState(() => getPluginPages());
 
   // Feature configuration state
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
   const [configLoaded, setConfigLoaded] = useState(false);
 
+  const isLoadingRef = useRef(false);
+
   // Load initial state from localStorage
   const [nodes, setNodes] = useState(() => {
-    const savedNodes = localStorage.getItem('dashboard-nodes');
+    const savedNodes = localStorage.getItem("dashboard-nodes");
     return savedNodes ? JSON.parse(savedNodes) : [];
   });
 
   const [selectedNode, setSelectedNode] = useState(() => {
-    const savedSelectedNode = localStorage.getItem('dashboard-selected-node');
+    const savedSelectedNode = localStorage.getItem("dashboard-selected-node");
     return savedSelectedNode || null;
   });
 
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
 
-  // Feature configuration mapping
-  const featureRoutes = [
-    { path: 'client', component: Client, featureKey: 'client' },
-    { path: 'monitor', component: Monitor, featureKey: 'monitor' },
-    { path: 'policies', component: Policies, featureKey: 'policies' },
-    { path: 'adddata', component: AddData, featureKey: 'adddata' },
-    { path: 'viewfiles', component: ViewFiles, featureKey: 'viewfiles' },
-    { path: 'sqlquery', component: SqlQueryGenerator, featureKey: 'sqlquery' },
-    {
-      path: 'blockchain',
-      component: BlockchainManager,
-      featureKey: 'blockchain',
-    },
-    { path: 'presets', component: Presets, featureKey: 'presets' },
-    { path: 'bookmarks', component: Bookmarks, featureKey: 'bookmarks' },
-    {
-      path: 'security',
-      component: PolicyGeneratorPage,
-      featureKey: 'security',
-    },
-  ];
+  const loadPluginsAndConfig = useCallback(async () => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
 
-  // Load feature configuration on mount
-  useEffect(() => {
-    const loadConfig = async () => {
+    try {
+      // installs update /feature-config on the server; drop stale cache
+      invalidateFeatureConfig();
+      const freshPages = await refreshPluginPages();
+      console.log("[Dashboard] freshPages:", Object.keys(freshPages));
+      console.log("[Dashboard] pluginEnabled checks:");
+      for (const pluginName of Object.keys(freshPages)) {
+        const enabled = await isPluginEnabled(pluginName);
+        console.log(`  ${pluginName} → ${enabled}`);
+      }
+      setPluginPages((prev) => {
+        const prevKeys = Object.keys(prev).sort().join(",");
+        const nextKeys = Object.keys(freshPages).sort().join(",");
+        return prevKeys === nextKeys ? prev : freshPages;
+      });
+
       await initializeFeatureConfig();
 
-      // Check which features are enabled
       const enabled = new Set();
-      for (const feature of featureRoutes) {
-        if (await isFeatureEnabled(feature.featureKey)) {
-          enabled.add(feature.featureKey);
+      for (const route of FEATURE_ROUTES) {
+        if (await isFeatureEnabled(route.featureKey)) {
+          enabled.add(route.featureKey);
         }
       }
       setEnabledFeatures(enabled);
 
-      // Check which plugins are enabled
+      const { getEnabledPlugins } = await import("../services/featureConfig");
+      const enabledInConfig = await getEnabledPlugins();
+
       const enabledPluginSet = new Set();
-      for (const [pluginName] of Object.entries(pluginPages)) {
-        if (await isPluginEnabled(pluginName)) {
+      for (const [pluginName, plugin] of Object.entries(freshPages)) {
+        const slug = plugin._raw?.slug;
+        const id = plugin._raw?.id;
+
+        if (
+          enabledInConfig.has(pluginName) ||
+          enabledInConfig.has(slug) ||
+          enabledInConfig.has(id)
+        ) {
           enabledPluginSet.add(pluginName);
         }
       }
+
       setEnabledPlugins(enabledPluginSet);
       setConfigLoaded(true);
-    };
-
-    loadConfig();
+    } finally {
+      isLoadingRef.current = false;
+    }
   }, []);
 
   // Debug logging
-  console.log('Dashboard - selectedNode:', selectedNode);
-  console.log('Dashboard - nodes:', nodes);
+  console.log("Dashboard - selectedNode:", selectedNode);
+  console.log("Dashboard - nodes:", nodes);
   console.log(
-    'Dashboard - localStorage nodes:',
-    localStorage.getItem('dashboard-nodes'),
+    "Dashboard - localStorage nodes:",
+    localStorage.getItem("dashboard-nodes"),
   );
   console.log(
-    'Dashboard - localStorage selectedNode:',
-    localStorage.getItem('dashboard-selected-node'),
+    "Dashboard - localStorage selectedNode:",
+    localStorage.getItem("dashboard-selected-node"),
   );
+
+  useEffect(() => {
+    initializePluginOrder();
+    loadPluginsAndConfig();
+  }, [loadPluginsAndConfig]);
+
+  useEffect(() => {
+    window.addEventListener("anylog:plugins-changed", loadPluginsAndConfig);
+    return () =>
+      window.removeEventListener(
+        "anylog:plugins-changed",
+        loadPluginsAndConfig,
+      );
+  }, [loadPluginsAndConfig]);
 
   // Save nodes to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('dashboard-nodes', JSON.stringify(nodes));
+    localStorage.setItem("dashboard-nodes", JSON.stringify(nodes));
   }, [nodes]);
 
   // Save selectedNode to localStorage whenever it changes
   useEffect(() => {
     if (selectedNode) {
-      localStorage.setItem('dashboard-selected-node', selectedNode);
-      console.log('Saved selectedNode to localStorage:', selectedNode);
+      localStorage.setItem("dashboard-selected-node", selectedNode);
+      console.log("Saved selectedNode to localStorage:", selectedNode);
     } else {
-      localStorage.removeItem('dashboard-selected-node');
-      console.log('Removed selectedNode from localStorage');
+      localStorage.removeItem("dashboard-selected-node");
+      console.log("Removed selectedNode from localStorage");
     }
   }, [selectedNode]);
 
   // Ensure selectedNode is in nodes list if it exists
   useEffect(() => {
     if (selectedNode && !nodes.includes(selectedNode)) {
-      console.log('Selected node not in nodes list, adding it:', selectedNode);
+      console.log("Selected node not in nodes list, adding it:", selectedNode);
       setNodes((prevNodes) => [...prevNodes, selectedNode]);
     }
   }, [selectedNode, nodes]);
@@ -139,8 +201,8 @@ const Dashboard = () => {
   // Show restoration message if data was loaded from localStorage
   useEffect(() => {
     const hasStoredData =
-      localStorage.getItem('dashboard-nodes') ||
-      localStorage.getItem('dashboard-selected-node');
+      localStorage.getItem("dashboard-nodes") ||
+      localStorage.getItem("dashboard-selected-node");
     if (hasStoredData) {
       setRestoredFromStorage(true);
       // Auto-hide the message after 3 seconds
@@ -176,11 +238,11 @@ const Dashboard = () => {
 
   // Utility function to clear all stored data
   const clearStoredData = () => {
-    localStorage.removeItem('dashboard-nodes');
-    localStorage.removeItem('dashboard-selected-node');
+    localStorage.removeItem("dashboard-nodes");
+    localStorage.removeItem("dashboard-selected-node");
     setNodes([]);
     setSelectedNode(null);
-    console.log('Cleared all stored dashboard data');
+    console.log("Cleared all stored dashboard data");
   };
 
   // Adds a new node (if valid and not already in the list)
@@ -207,8 +269,6 @@ const Dashboard = () => {
     }
   };
 
-
-
   return (
     <div className="dashboard-container">
       <TopBar
@@ -226,41 +286,41 @@ const Dashboard = () => {
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}
-            {featureRoutes
-              .filter((route) => enabledFeatures.has(route.featureKey))
-              .map((route) => {
-                if (route.path === 'bookmarks') {
-                  return (
-                    <Route
-                      key={route.path}
-                      path={route.path}
-                      element={
-                        <route.component
-                          node={selectedNode}
-                          onSelectNode={(node) => {
-                            console.log('Selecting node from bookmarks:', node);
-                            // Add node to nodes list if not already present
-                            if (node && !nodes.includes(node)) {
-                              console.log('Adding new node to list:', node);
-                              setNodes((prevNodes) => [...prevNodes, node]);
-                            }
-                            // Set as selected node
-                            setSelectedNode(node);
-                            console.log('Selected node set to:', node);
-                          }}
-                        />
-                      }
-                    />
-                  );
-                }
+            {FEATURE_ROUTES.filter((route) =>
+              enabledFeatures.has(route.featureKey),
+            ).map((route) => {
+              if (route.path === "bookmarks") {
                 return (
                   <Route
                     key={route.path}
                     path={route.path}
-                    element={<route.component node={selectedNode} />}
+                    element={
+                      <route.component
+                        node={selectedNode}
+                        onSelectNode={(node) => {
+                          console.log("Selecting node from bookmarks:", node);
+                          // Add node to nodes list if not already present
+                          if (node && !nodes.includes(node)) {
+                            console.log("Adding new node to list:", node);
+                            setNodes((prevNodes) => [...prevNodes, node]);
+                          }
+                          // Set as selected node
+                          setSelectedNode(node);
+                          console.log("Selected node set to:", node);
+                        }}
+                      />
+                    }
                   />
                 );
-              })}
+              }
+              return (
+                <Route
+                  key={route.path}
+                  path={route.path}
+                  element={<route.component node={selectedNode} />}
+                />
+              );
+            })}
 
             {/* User Profile - Always available */}
             <Route
@@ -275,10 +335,10 @@ const Dashboard = () => {
                 <About
                   key={
                     selectedNode
-                      ? typeof selectedNode === 'string'
+                      ? typeof selectedNode === "string"
                         ? selectedNode
                         : JSON.stringify(selectedNode)
-                      : 'no-node'
+                      : "no-node"
                   }
                   node={selectedNode}
                 />
@@ -288,17 +348,27 @@ const Dashboard = () => {
             {/* Plugin Routes - Auto-loaded and filtered by feature config */}
             {configLoaded &&
               Object.entries(pluginPages)
-                .filter(([pluginName]) => enabledPlugins.has(pluginName))
+                .filter(([name]) => enabledPlugins.has(name))
                 .map(([key, plugin]) => (
                   <Route
                     key={key}
                     path={plugin.path}
                     element={
-                      <React.Suspense
-                        fallback={<div>Loading {plugin.name}...</div>}
-                      >
-                        <plugin.component node={selectedNode} />
-                      </React.Suspense>
+                      <PluginMountGate key={location.pathname}>
+                        <PluginErrorBoundary>
+                          <div className="dashboard-plugin-frame">
+                            <Suspense
+                              fallback={
+                                <div style={{ padding: 32 }}>
+                                  Loading {plugin.name}…
+                                </div>
+                              }
+                            >
+                              <plugin.component node={selectedNode} />
+                            </Suspense>
+                          </div>
+                        </PluginErrorBoundary>
+                      </PluginMountGate>
                     }
                   />
                 ))}
@@ -307,10 +377,10 @@ const Dashboard = () => {
             <Route
               path="*"
               element={(() => {
-                if (enabledFeatures.has('client')) {
+                if (enabledFeatures.has("client")) {
                   return <Client node={selectedNode} />;
                 }
-                const firstEnabled = featureRoutes.find((r) =>
+                const firstEnabled = FEATURE_ROUTES.find((r) =>
                   enabledFeatures.has(r.featureKey),
                 );
                 if (firstEnabled) {
