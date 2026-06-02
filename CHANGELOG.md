@@ -11,7 +11,15 @@ layout: page
 
 <<<<<<< HEAD
 =======
-<!-- last-processed: bc97784 -->
+<!-- last-processed: d1b7449 -->
+
+<!-- os-dev: d1b7449 (2026-06-02) -->
+
+* **royshadmon** (2026-06-02)
+  * Dependencies: Bump version from 1.1.0 to 1.2.0
+* **Pranav Purathepparambil** (2026-04-27)
+  * Docker: add rotating file logging for backend service
+  * General: add rotating file logging for backend service
 
 <!-- os-dev: bc97784 (2026-05-15) -->
 
@@ -65,7 +73,7 @@ layout: page
 >>>>>>> e86ea640e2de169d24723250778480affe6d531d
 The Remote GUI is a browser-based interface for interacting with AnyLog networks — querying data, managing policies, monitoring nodes, and exploring the Unified Namespace. Version 1.0.0 marks the first stable production release of the rewritten GUI.
 
-<!-- last-processed: bc97784 -->
+<!-- last-processed: d1b7449 -->
 
 ---
 
