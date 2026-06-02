@@ -1,0 +1,219 @@
+# Remote GUI Production Build
+
+This file documents the production Docker image publishing flow for
+`anylogco/remote-gui`. The commands below build the repository Dockerfile,
+publish the resulting image to Docker Hub, tag the matching Git commit, and
+show how to pull a published image for deployment or verification.
+
+## What The Production Image Contains
+
+The production image is built from `Dockerfile` using a multi-stage build:
+
+- The frontend stage uses `node:18-slim`, installs the React dependencies in
+  `CLI/local-cli-fe-full`, and runs `npm run build`.
+- The backend stage uses `python:3.13.12-slim`, creates a Python virtual
+  environment, installs `requirements.txt`, clones `AnyLog-API` from GitHub,
+  builds it, and installs it into the virtual environment.
+- The final runtime stage copies the backend, templates, startup script,
+  Python virtual environment, and built frontend into a slimmer Python image.
+- The container starts `/app/start.sh`, which launches the backend with
+  `uvicorn` and serves the built frontend as a single-page app.
+
+At runtime, `start.sh` defaults to:
+
+- Backend host: `0.0.0.0`
+- Backend port: `8080`, controlled by `REMOTE_GUI_BE`
+- Frontend port: `31800`, controlled by `REMOTE_GUI_FE`
+- Browser API URL: `VITE_API_URL`, defaulting to `http://localhost:8080`
+
+## Prerequisites
+
+Before running the production build commands, make sure:
+
+- Docker Desktop or Docker Engine is running.
+- Docker Buildx is available.
+- You are logged in to Docker Hub with permission to push
+  `anylogco/remote-gui`.
+- The working tree is on the commit you want to release.
+- The tag value is chosen before starting. Replace `[tag]` with the real
+  release tag, for example `ova-demo`, `1.2.0`, or `1.2.0-amd64`.
+
+Login example:
+
+```bash
+docker login
+```
+
+Optional Buildx builder setup:
+
+```bash
+docker buildx create --use --name remote-gui-builder
+docker buildx inspect --bootstrap
+```
+
+## Build And Push One Platform
+
+The commands you provided build and push one CPU architecture at a time.
+
+### ARM64 Image
+
+```bash
+docker buildx build \
+  --platform linux/arm64 \
+  -t anylogco/remote-gui:[tag] \
+  --push .
+```
+
+What this does:
+
+- `docker buildx build` starts a Buildx build, which supports cross-platform
+  image builds.
+- `--platform linux/arm64` builds an image for ARM64 Linux machines, such as
+  Apple Silicon hosts, ARM servers, and many cloud ARM instances.
+- `-t anylogco/remote-gui:[tag]` names the image and assigns the Docker tag.
+  The tag is what users later pull or run.
+- `--push` uploads the result directly to Docker Hub instead of only storing it
+  in your local Docker image cache.
+- `.` uses the current repository directory as the Docker build context.
+
+### AMD64 Image
+
+```bash
+docker buildx build \
+  --platform linux/amd64 \
+  -t anylogco/remote-gui:[tag] \
+  --push .
+```
+
+What this does:
+
+- Builds the same production Dockerfile for AMD64 Linux machines.
+- AMD64 is the common architecture for Intel and AMD servers, many cloud VMs,
+  and most traditional x86_64 deployments.
+- Pushes the image to Docker Hub using the supplied tag.
+- Important: you can use the same tag for each unique build. i.e., you don't need an architecture specific tag, Docker will pull the tag for the host-machine's respective architecture, but you do need to build for both architecture.
+
+
+This creates and pushes a multi-platform manifest. When a user runs:
+
+```bash
+docker pull anylogco/remote-gui:[tag]
+```
+
+Docker automatically selects the correct image for the user's machine
+architecture.
+
+## Git Tag The Matching Source Commit
+
+```bash
+git tag -f [tag]
+git push origin -f [tag]
+```
+
+What this does:
+
+- `git tag -f [tag]` creates or updates a local Git tag with that name at the
+  current commit.
+- `git push origin -f [tag]` pushes that tag to the remote named `origin`.
+- The `-f` flag force-updates the tag if it already exists.
+
+Use the same `[tag]` as the Docker image tag when the Docker image should be
+traceable back to this exact repository commit.
+
+Force-moving tags should be done carefully. It is useful for demo tags such as
+`ova-demo`, but immutable release tags such as `1.2.0` should normally be
+created once and not moved after users may have consumed them.
+
+## Pull A Published Image
+
+```bash
+docker pull anylogco/remote-gui:ova-demo
+```
+
+What this does:
+
+- Downloads the `ova-demo` image from Docker Hub.
+- Verifies that the tag exists and can be fetched by deployment hosts.
+- Stores the image locally so it can be run with `docker run` or referenced by
+  Docker Compose.
+
+Pulling an image does not start the application. It only downloads the image.
+
+## Example End-To-End Demo Tag Flow
+
+Use this when updating a movable demo tag:
+
+```bash
+TAG=ova-demo
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t anylogco/remote-gui:${TAG} \
+  --push .
+
+git tag -f ${TAG}
+git push origin -f ${TAG}
+
+docker pull anylogco/remote-gui:${TAG}
+```
+
+This builds and pushes a multi-platform Docker image, moves the Git tag to the
+same commit, pushes the Git tag, and confirms the image can be pulled.
+
+## Run The Pulled Image
+
+After pulling, run the image by publishing the backend and frontend ports:
+
+```bash
+docker run --rm -it \
+  --name remote-gui \
+  -p 8080:8080 \
+  -p 31800:31800 \
+  -e VITE_API_URL=http://localhost:8080 \
+  anylogco/remote-gui:ova-demo
+```
+
+For a remote host, replace `localhost` with the hostname or IP address users
+will open in their browser:
+
+```bash
+docker run -d \
+  --name remote-gui \
+  -p 8080:8080 \
+  -p 31800:31800 \
+  -e VITE_API_URL=http://YOUR_HOST_OR_IP:8080 \
+  anylogco/remote-gui:ova-demo
+```
+
+Then open:
+
+```text
+http://YOUR_HOST_OR_IP:31800
+```
+
+## Verification Commands
+
+Inspect the published image tag:
+
+```bash
+docker buildx imagetools inspect anylogco/remote-gui:[tag]
+```
+
+Confirm the local container starts:
+
+```bash
+docker run --rm -it \
+  -p 8080:8080 \
+  -p 31800:31800 \
+  anylogco/remote-gui:[tag]
+```
+
+Confirm the Git tag points at the expected commit:
+
+```bash
+git rev-parse [tag]
+git rev-parse HEAD
+```
+
+The two Git commit hashes should match when the tag represents the current
+source release.

@@ -4,6 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { cliState } from '../state/state';
 import '../styles/TerminalView.css';
+import { getApiBaseUrl } from '../../../utils/runtimeConfig';
 
 const TerminalView = ({
   id,
@@ -20,8 +21,7 @@ const TerminalView = ({
   const wsRef = useRef(null);
   const fitRef = useRef(null);
   const { setIsConnected, removeActiveConnection } = cliState();
-  const API_URL = window._env_?.VITE_API_URL || 'http://localhost:8080';
-  var strippedURL = (strippedURL = API_URL.replace('http://', ''));
+  const API_URL = getApiBaseUrl();
   const [isReady, setIsReady] = useState(false);
 
   const isConnected = cliState(
@@ -120,7 +120,9 @@ const TerminalView = ({
           data: credential,
         };
       }
-      const ws = new WebSocket(`ws://${strippedURL}/sshclient/ws`);
+      const wsUrl = new URL('/sshclient/ws', API_URL);
+      wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(wsUrl.toString());
       wsRef.current = ws;
 
       ws.onopen = () => {
