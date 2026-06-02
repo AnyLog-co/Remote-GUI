@@ -647,14 +647,22 @@ const UNSPage = ({ node }) => {
     setHoveredItem(null);
   };
 
-  const fetchMetadata = async (dbms, table, whereClause, column) => {
+  const fetchSqlData = async (
+    dbms,
+    table,
+    whereClause,
+    column,
+    { silent = false } = {},
+  ) => {
     if (!node || !dbms || !table) return;
 
-    setMetadataLoading(true);
-    setMetadataError(null);
+    if (!silent) {
+      setSqlLoading(true);
+      setSqlError(null);
+    }
 
     try {
-      const result = await queryMetadata(node, {
+      const result = await queryTable(node, {
         dbms,
         table,
         time_value: timeRangeValue,
@@ -664,497 +672,450 @@ const UNSPage = ({ node }) => {
         time_column: timeColumn,
       });
 
-      console.log('UNS: Metadata query result:', {
+      console.log('UNS: SQL query result:', {
         success: result.success,
-        dataType: typeof result.data,
-        raw: result,
+        dataLength: result.data ? result.data.length : 0,
+        dataType: Array.isArray(result.data) ? 'array' : typeof result.data,
       });
 
       if (result.success) {
-        setMetadata(result.data);
+        console.log(
+          `UNS: Setting ${result.data ? result.data.length : 0} rows in state`,
+        );
+        setSqlData(result.data);
+        if (silent) setSqlError(null);
       } else {
-        setMetadataError(result.error || 'Failed to fetch metadata');
+        setSqlError(result.error || 'Failed to fetch table data');
       }
     } catch (err) {
-      console.error('Error fetching metadata:', err);
-      setMetadataError(err.message || 'Failed to fetch metadata');
+      console.error('Error fetching SQL data:', err);
+      if (!silent) {
+        setSqlError(err.message || 'Failed to fetch table data');
+      }
     } finally {
-      setMetadataLoading(false);
+      if (!silent) {
+        setSqlLoading(false);
+      }
     }
   };
 
-  const fetchSqlData = async (dbms, table, whereClause, column) => {
-    const fetchSqlData = async (
-      dbms,
-      table,
-      whereClause,
-      column,
-      { silent = false } = {},
-    ) => {
-      if (!node || !dbms || !table) return;
+  const checkTableData = async (dbms, table) => {
+    if (!node || !dbms || !table) return false;
 
-      if (!silent) {
-        setSqlLoading(true);
-        setSqlError(null);
-      }
+    // Create a cache key
+    const cacheKey = `${dbms}:${table}`;
 
-      try {
-        const result = await queryTable(node, {
-          dbms,
-          table,
-          time_value: timeRangeValue,
-          time_unit: timeRangeUnit,
-          where: whereClause,
-          column,
-          time_column: timeColumn,
-        });
+    // If already cached, return cached value
+    if (itemsWithData.has(cacheKey)) {
+      return itemsWithData.get(cacheKey);
+    }
 
-        console.log('UNS: SQL query result:', {
-          success: result.success,
-          dataLength: result.data ? result.data.length : 0,
-          dataType: Array.isArray(result.data) ? 'array' : typeof result.data,
-        });
+    // If currently checking, return null (don't check again)
+    if (checkingData.has(cacheKey)) {
+      return null;
+    }
 
-        if (result.success) {
-          console.log(
-            `UNS: Setting ${result.data ? result.data.length : 0} rows in state`,
-          );
-          setSqlData(result.data);
-          if (silent) setSqlError(null);
-        } else {
-          setSqlError(result.error || 'Failed to fetch table data');
-        }
-      } catch (err) {
-        console.error('Error fetching SQL data:', err);
-        if (!silent) {
-          setSqlError(err.message || 'Failed to fetch table data');
-        }
-      } finally {
-        if (!silent) {
-          setSqlLoading(false);
-        }
-      }
-    };
+    // Mark as checking
+    setCheckingData((prev) => new Set(prev).add(cacheKey));
 
-    const checkTableData = async (dbms, table) => {
-      if (!node || !dbms || !table) return false;
+    try {
+      const result = await checkTable(node, { dbms, table });
 
-      // Create a cache key
-      const cacheKey = `${dbms}:${table}`;
+      // Only consider it has_data if success is True AND has_data is True
+      // If success is False or has_data is False, treat as no data
+      const hasData = result.success === true && result.has_data === true;
 
-      // If already cached, return cached value
-      if (itemsWithData.has(cacheKey)) {
-        return itemsWithData.get(cacheKey);
-      }
-
-      // If currently checking, return null (don't check again)
-      if (checkingData.has(cacheKey)) {
-        return null;
-      }
-
-      // Mark as checking
-      setCheckingData((prev) => new Set(prev).add(cacheKey));
-
-      try {
-        const result = await checkTable(node, { dbms, table });
-
-        // Only consider it has_data if success is True AND has_data is True
-        // If success is False or has_data is False, treat as no data
-        const hasData = result.success === true && result.has_data === true;
-
-        // Only cache if we got a definitive result (true or false)
-        // Don't cache errors or undefined states
-        if (result.success !== undefined) {
-          setItemsWithData((prev) => {
-            const newMap = new Map(prev);
-            // Only cache true values - false means no data, don't cache false to allow re-checking
-            // Actually, let's cache false too so we don't keep re-checking failed tables
-            newMap.set(cacheKey, hasData);
-            return newMap;
-          });
-        }
-
-        return hasData;
-      } catch (err) {
-        console.error('Error checking table data:', err);
-        // On any error (network, parsing, etc.), assume no data and cache that
+      // Only cache if we got a definitive result (true or false)
+      // Don't cache errors or undefined states
+      if (result.success !== undefined) {
         setItemsWithData((prev) => {
           const newMap = new Map(prev);
-          newMap.set(cacheKey, false);
+          // Only cache true values - false means no data, don't cache false to allow re-checking
+          // Actually, let's cache false too so we don't keep re-checking failed tables
+          newMap.set(cacheKey, hasData);
           return newMap;
         });
-        return false;
-      } finally {
-        // Remove from checking set
-        setCheckingData((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(cacheKey);
-          return newSet;
-        });
       }
-    };
 
-    const toggleSidePanel = (item) => {
-      const itemId = getItemId(item);
-      const isCurrentlySelected =
-        selectedItem && getItemId(selectedItem) === itemId;
+      return hasData;
+    } catch (err) {
+      console.error('Error checking table data:', err);
+      // On any error (network, parsing, etc.), assume no data and cache that
+      setItemsWithData((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(cacheKey, false);
+        return newMap;
+      });
+      return false;
+    } finally {
+      // Remove from checking set
+      setCheckingData((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(cacheKey);
+        return newSet;
+      });
+    }
+  };
 
-      // If clicking on the already selected item and panel is open, close it
-      if (isCurrentlySelected && isSidePanelOpen) {
-        setIsSidePanelOpen(false);
-        setSelectedItem(null);
-        setSqlData(null);
-        setSqlError(null);
-      } else {
-        // Otherwise, open/update the side panel with this item
-        setSelectedItem(item);
-        setIsSidePanelOpen(true);
-        setSqlData(null);
-        setSqlError(null);
-        setChartYKey(null); // Reset so chart defaults to policy column for new item
-        setTimeColumn('insert_timestamp'); // Reset time column when opening new item
+  const toggleSidePanel = (item) => {
+    const itemId = getItemId(item);
+    const isCurrentlySelected =
+      selectedItem && getItemId(selectedItem) === itemId;
 
-        // Only fetch SQL data if get data nodes confirmed there is a table at this location
-        const itemData = getItemData(item);
-        const hasTableMeta = itemData && itemData.dbms && itemData.table;
-        const tableCacheKey = hasTableMeta
-          ? `${itemData.dbms}:${itemData.table}`
-          : null;
-        const hasDataAtLocation = tableCacheKey
-          ? itemsWithData.get(tableCacheKey) === true
-          : false;
-        if (hasDataAtLocation) {
-          fetchSqlData(
-            itemData.dbms,
-            itemData.table,
-            itemData.where,
-            itemData.column,
-          );
-        }
-      }
-    };
+    // If clicking on the already selected item and panel is open, close it
+    if (isCurrentlySelected && isSidePanelOpen) {
+      setIsSidePanelOpen(false);
+      setSelectedItem(null);
+      setSqlData(null);
+      setSqlError(null);
+    } else {
+      // Otherwise, open/update the side panel with this item
+      setSelectedItem(item);
+      setIsSidePanelOpen(true);
+      setSqlData(null);
+      setSqlError(null);
+      setChartYKey(null); // Reset so chart defaults to policy column for new item
+      setTimeColumn('insert_timestamp'); // Reset time column when opening new item
 
-    const renderItem = (item, layerIndex, itemIndex) => {
-      const itemId = getItemId(item);
-      const itemName = getItemName(item);
-      const itemType = getItemType(item);
+      // Only fetch SQL data if get data nodes confirmed there is a table at this location
       const itemData = getItemData(item);
-      const expandedKey = `${layerIndex}-${itemId}`;
-      const itemKey = `${layerIndex}-${itemId}`;
-      const isExpanded = expandedItems.has(expandedKey);
-
-      // Check if this item has children
-      // If we've already checked and it has no children, it's a leaf
-      const hasNoChildren = itemsWithoutChildren.has(itemKey);
-      // If we've already checked and it has children, or if it's expanded (meaning we loaded children), it has children
-      const hasChildren = itemsWithChildren.has(itemKey) || isExpanded;
-      // Check if currently checking for children
-      const isCheckingChildren = checkingChildren.has(itemId);
-
-      // Check if item has table data (for visual indicator)
-      const hasTable = itemData && itemData.dbms && itemData.table;
-      const tableCacheKey = hasTable
+      const hasTableMeta = itemData && itemData.dbms && itemData.table;
+      const tableCacheKey = hasTableMeta
         ? `${itemData.dbms}:${itemData.table}`
         : null;
-      const hasData = tableCacheKey
-        ? (itemsWithData.get(tableCacheKey) ?? null)
-        : null;
-      const isCheckingData = tableCacheKey
-        ? checkingData.has(tableCacheKey)
+      const hasDataAtLocation = tableCacheKey
+        ? itemsWithData.get(tableCacheKey) === true
         : false;
-
-      // Determine icon based on whether item has children
-      let icon = '📄'; // Default file icon
-      if (hasChildren) {
-        icon = isExpanded ? '📂' : '📁'; // Folder icons (open/closed)
-      } else if (hasNoChildren) {
-        // Item confirmed to have no children - use file icon
-        icon = '📄';
-      } else if (isCheckingChildren) {
-        // Still checking - show folder icon as placeholder (will update when check completes)
-        icon = '📁';
-      } else {
-        // Not checked yet - show folder icon as default (will be updated when background check completes)
-        icon = '📁';
+      if (hasDataAtLocation) {
+        fetchSqlData(
+          itemData.dbms,
+          itemData.table,
+          itemData.where,
+          itemData.column,
+        );
       }
+    }
+  };
 
-      const handleItemClick = (e) => {
-        // Left click: only expand/collapse if item has children or might have children
-        // Don't expand if clicking on the info button
-        if (
-          (hasChildren || !hasNoChildren) &&
-          !e.target.closest('.uns-item-info-btn')
-        ) {
-          expandItem(item, layerIndex);
-        }
-      };
+  const renderItem = (item, layerIndex, itemIndex) => {
+    const itemId = getItemId(item);
+    const itemName = getItemName(item);
+    const itemType = getItemType(item);
+    const itemData = getItemData(item);
+    const expandedKey = `${layerIndex}-${itemId}`;
+    const itemKey = `${layerIndex}-${itemId}`;
+    const isExpanded = expandedItems.has(expandedKey);
 
-      const handleItemRightClick = (e) => {
-        // Right click: toggle side panel with item details
-        e.preventDefault(); // Prevent default browser context menu
-        toggleSidePanel(item);
-      };
+    // Check if this item has children
+    // If we've already checked and it has no children, it's a leaf
+    const hasNoChildren = itemsWithoutChildren.has(itemKey);
+    // If we've already checked and it has children, or if it's expanded (meaning we loaded children), it has children
+    const hasChildren = itemsWithChildren.has(itemKey) || isExpanded;
+    // Check if currently checking for children
+    const isCheckingChildren = checkingChildren.has(itemId);
 
-      const handleInfoButtonClick = (e) => {
-        // Info button click: toggle side panel with item details
-        e.stopPropagation(); // Prevent triggering the item click
-        toggleSidePanel(item);
-      };
+    // Check if item has table data (for visual indicator)
+    const hasTable = itemData && itemData.dbms && itemData.table;
+    const tableCacheKey = hasTable
+      ? `${itemData.dbms}:${itemData.table}`
+      : null;
+    const hasData = tableCacheKey
+      ? (itemsWithData.get(tableCacheKey) ?? null)
+      : null;
+    const isCheckingData = tableCacheKey
+      ? checkingData.has(tableCacheKey)
+      : false;
 
-      const isSelected = selectedItem && getItemId(selectedItem) === itemId;
+    // Determine icon based on whether item has children
+    let icon = '📄'; // Default file icon
+    if (hasChildren) {
+      icon = isExpanded ? '📂' : '📁'; // Folder icons (open/closed)
+    } else if (hasNoChildren) {
+      // Item confirmed to have no children - use file icon
+      icon = '📄';
+    } else if (isCheckingChildren) {
+      // Still checking - show folder icon as placeholder (will update when check completes)
+      icon = '📁';
+    } else {
+      // Not checked yet - show folder icon as default (will be updated when background check completes)
+      icon = '📁';
+    }
 
-      // Add data indicator class ONLY if item definitively has data (true)
-      // Don't add any class if hasData is false or null (no data or not checked)
-      const dataIndicatorClass = hasData === true ? 'has-data' : '';
-      const checkingClass = isCheckingData ? 'checking-data' : '';
-
-      return (
-        <div
-          key={`${layerIndex}-${itemIndex}-${itemId}`}
-          className={`uns-item ${isExpanded ? 'expanded' : ''} ${isSelected ? 'selected' : ''} ${dataIndicatorClass} ${checkingClass}`}
-          onMouseEnter={(e) => handleItemHover(e, item)}
-          onMouseLeave={handleItemLeave}
-          onClick={handleItemClick}
-          onContextMenu={handleItemRightClick}
-          style={{
-            cursor: hasChildren || !hasNoChildren ? 'pointer' : 'default',
-          }}
-        >
-          <div className="uns-item-icon">{icon}</div>
-          <div className="uns-item-name">
-            {itemName}
-            {/* Only show data indicator if we have a definitive result (true = has data) */}
-            {/* Don't show anything if hasData is false or null (no data or not checked yet) */}
-            {hasTable && hasData === true && (
-              <span className="uns-item-data-indicator" title="Table has data">
-                {' '}
-                💾
-              </span>
-            )}
-            {hasTable && isCheckingData && (
-              <span
-                className="uns-item-data-indicator checking"
-                title="Checking for data..."
-              >
-                {' '}
-                ⏳
-              </span>
-            )}
-          </div>
-          <div className="uns-item-actions">
-            <button
-              className="uns-item-info-btn"
-              onClick={handleInfoButtonClick}
-              title="View item details"
-              aria-label="View item details"
-            >
-              ℹ️
-            </button>
-            {(hasChildren || !hasNoChildren) && (
-              <div className="uns-item-expand">{isExpanded ? '▼' : '▶'}</div>
-            )}
-          </div>
-        </div>
-      );
-    };
-
-    const navigateToRoot = () => {
-      // Reset to root
-      if (layers.length > 0) {
-        setLayers([layers[0]]);
-        setCurrentPath([]);
-        setExpandedItems(new Set());
-        // Clear children cache when going to root (optional - you might want to keep it)
-        // setItemsWithChildren(new Set());
-        // setItemsWithoutChildren(new Set());
+    const handleItemClick = (e) => {
+      // Left click: only expand/collapse if item has children or might have children
+      // Don't expand if clicking on the info button
+      if (
+        (hasChildren || !hasNoChildren) &&
+        !e.target.closest('.uns-item-info-btn')
+      ) {
+        expandItem(item, layerIndex);
       }
-      // Scroll to top when going to root
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const renderBreadcrumb = () => {
-      if (currentPath.length === 0) return null;
-
-      return (
-        <div className="uns-breadcrumb">
-          <button className="uns-breadcrumb-item" onClick={navigateToRoot}>
-            🏠 Root
-          </button>
-          {currentPath.map((pathItem, index) => {
-            // The breadcrumb index corresponds to layer index + 1
-            // path[0] shows layer 1, path[1] shows layer 2, etc.
-            const targetLayerIndex = index + 1;
-            const isCurrentLayer = targetLayerIndex === layers.length - 1;
-
-            return (
-              <React.Fragment key={index}>
-                <span className="uns-breadcrumb-separator">/</span>
-                <button
-                  className={`uns-breadcrumb-item ${isCurrentLayer ? 'uns-breadcrumb-current' : ''}`}
-                  onClick={() => {
-                    // If clicking on the current layer, do nothing (or could scroll to top)
-                    if (!isCurrentLayer) {
-                      navigateToLayer(targetLayerIndex);
-                    } else {
-                      // Already on this layer, just scroll to top
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }}
-                  style={{
-                    cursor: isCurrentLayer ? 'default' : 'pointer',
-                    fontWeight: isCurrentLayer ? 'bold' : 'normal',
-                  }}
-                >
-                  {pathItem.name}
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </div>
-      );
+    const handleItemRightClick = (e) => {
+      // Right click: toggle side panel with item details
+      e.preventDefault(); // Prevent default browser context menu
+      toggleSidePanel(item);
     };
+
+    const handleInfoButtonClick = (e) => {
+      // Info button click: toggle side panel with item details
+      e.stopPropagation(); // Prevent triggering the item click
+      toggleSidePanel(item);
+    };
+
+    const isSelected = selectedItem && getItemId(selectedItem) === itemId;
+
+    // Add data indicator class ONLY if item definitively has data (true)
+    // Don't add any class if hasData is false or null (no data or not checked)
+    const dataIndicatorClass = hasData === true ? 'has-data' : '';
+    const checkingClass = isCheckingData ? 'checking-data' : '';
 
     return (
-      <div className="uns-container">
-        <div className="uns-header">
-          <h1>Unified Namespace (UNS)</h1>
-          <div className="uns-header-controls">
-            <div className="uns-query-input-group">
-              <label htmlFor="root-query" className="uns-query-label">
-                Root Query:
-              </label>
-              <input
-                id="root-query"
-                type="text"
-                value={rootQuery}
-                onChange={(e) => setRootQuery(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !loading && node) {
-                    loadRootItems();
-                  }
-                }}
-                placeholder="blockchain get *"
-                className="uns-query-input"
-                disabled={loading}
-              />
-            </div>
-            <button
-              onClick={loadRootItems}
-              disabled={loading || !node || !rootQuery.trim()}
-              className="uns-refresh-btn"
-            >
-              🔄 Refresh
-            </button>
-          </div>
-        </div>
-
-        {!node && (
-          <div className="uns-error">
-            ⚠️ No node selected. Please select a node first.
-          </div>
-        )}
-
-        {error && (
-          <div className="uns-error">
-            <span className="error-dismiss" onClick={() => setError(null)}>
-              ×
+      <div
+        key={`${layerIndex}-${itemIndex}-${itemId}`}
+        className={`uns-item ${isExpanded ? 'expanded' : ''} ${isSelected ? 'selected' : ''} ${dataIndicatorClass} ${checkingClass}`}
+        onMouseEnter={(e) => handleItemHover(e, item)}
+        onMouseLeave={handleItemLeave}
+        onClick={handleItemClick}
+        onContextMenu={handleItemRightClick}
+        style={{
+          cursor: hasChildren || !hasNoChildren ? 'pointer' : 'default',
+        }}
+      >
+        <div className="uns-item-icon">{icon}</div>
+        <div className="uns-item-name">
+          {itemName}
+          {/* Only show data indicator if we have a definitive result (true = has data) */}
+          {/* Don't show anything if hasData is false or null (no data or not checked yet) */}
+          {hasTable && hasData === true && (
+            <span className="uns-item-data-indicator" title="Table has data">
+              {' '}
+              💾
             </span>
-            ❌ Error: {error}
-          </div>
-        )}
-
-        <div
-          className={`uns-main-content ${isSidePanelOpen ? 'uns-panel-open' : ''}`}
-        >
-          <div className="uns-main-content-wrapper">
-            {renderBreadcrumb()}
-
-            <div className="uns-layers">
-              {layers.length > 0 &&
-                (() => {
-                  // Only show the current layer (the last one)
-                  const currentLayerIndex = layers.length - 1;
-                  const currentLayer = layers[currentLayerIndex];
-                  const layerName =
-                    currentLayerIndex === 0
-                      ? 'Root'
-                      : currentPath[currentLayerIndex - 1]?.name ||
-                        `Layer ${currentLayerIndex}`;
-
-                  return (
-                    <div key={currentLayerIndex} className="uns-layer">
-                      <div className="uns-layer-header">{layerName}</div>
-                      <div className="uns-layer-content">
-                        {loading ? (
-                          <div className="uns-loading">Loading...</div>
-                        ) : currentLayer.length === 0 ? (
-                          <div className="uns-empty">No items found</div>
-                        ) : (
-                          currentLayer.map((item, itemIndex) =>
-                            renderItem(item, currentLayerIndex, itemIndex),
-                          )
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-            </div>
-          </div>
-
-          {/* Side Panel for detailed view */}
-          <UNSSidePanel
-            isOpen={isSidePanelOpen}
-            selectedItem={selectedItem}
-            itemsWithData={itemsWithData}
-            conn={node}
-            sqlData={sqlData}
-            sqlLoading={sqlLoading}
-            sqlError={sqlError}
-            timeRangeValue={timeRangeValue}
-            timeRangeUnit={timeRangeUnit}
-            timeColumn={timeColumn}
-            onTimeColumnChange={setTimeColumn}
-            onClose={() => {
-              setIsSidePanelOpen(false);
-              setSelectedItem(null);
-              setSqlData(null);
-              setSqlError(null);
-            }}
-            onTimeRangeValueChange={setTimeRangeValue}
-            onTimeRangeUnitChange={setTimeRangeUnit}
-            onFetchTimeRange={fetchMetadata}
-            onFetchTimeRange={fetchSqlData}
-            getItemName={getItemName}
-            getItemType={getItemType}
-            getItemId={getItemId}
-            getItemData={getItemData}
-            chartYKey={chartYKey}
-            onChartYKeyChange={setChartYKey}
-          />
+          )}
+          {hasTable && isCheckingData && (
+            <span
+              className="uns-item-data-indicator checking"
+              title="Checking for data..."
+            >
+              {' '}
+              ⏳
+            </span>
+          )}
         </div>
-
-        {hoveredItem && (
-          <div
-            className="uns-tooltip"
-            style={{
-              left: `${hoverPosition.x + 10}px`,
-              top: `${hoverPosition.y + 10}px`,
-            }}
+        <div className="uns-item-actions">
+          <button
+            className="uns-item-info-btn"
+            onClick={handleInfoButtonClick}
+            title="View item details"
+            aria-label="View item details"
           >
-            <div className="uns-tooltip-header">
-              <strong>{getItemName(hoveredItem)}</strong>
-              <span className="uns-tooltip-type">
-                ({getItemType(hoveredItem)})
-              </span>
-            </div>
-            <div className="uns-tooltip-content">
-              <pre>{JSON.stringify(getItemData(hoveredItem), null, 2)}</pre>
-            </div>
-          </div>
-        )}
+            ℹ️
+          </button>
+          {(hasChildren || !hasNoChildren) && (
+            <div className="uns-item-expand">{isExpanded ? '▼' : '▶'}</div>
+          )}
+        </div>
       </div>
     );
   };
+
+  const navigateToRoot = () => {
+    // Reset to root
+    if (layers.length > 0) {
+      setLayers([layers[0]]);
+      setCurrentPath([]);
+      setExpandedItems(new Set());
+      // Clear children cache when going to root (optional - you might want to keep it)
+      // setItemsWithChildren(new Set());
+      // setItemsWithoutChildren(new Set());
+    }
+    // Scroll to top when going to root
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderBreadcrumb = () => {
+    if (currentPath.length === 0) return null;
+
+    return (
+      <div className="uns-breadcrumb">
+        <button className="uns-breadcrumb-item" onClick={navigateToRoot}>
+          🏠 Root
+        </button>
+        {currentPath.map((pathItem, index) => {
+          // The breadcrumb index corresponds to layer index + 1
+          // path[0] shows layer 1, path[1] shows layer 2, etc.
+          const targetLayerIndex = index + 1;
+          const isCurrentLayer = targetLayerIndex === layers.length - 1;
+
+          return (
+            <React.Fragment key={index}>
+              <span className="uns-breadcrumb-separator">/</span>
+              <button
+                className={`uns-breadcrumb-item ${isCurrentLayer ? 'uns-breadcrumb-current' : ''}`}
+                onClick={() => {
+                  // If clicking on the current layer, do nothing (or could scroll to top)
+                  if (!isCurrentLayer) {
+                    navigateToLayer(targetLayerIndex);
+                  } else {
+                    // Already on this layer, just scroll to top
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                style={{
+                  cursor: isCurrentLayer ? 'default' : 'pointer',
+                  fontWeight: isCurrentLayer ? 'bold' : 'normal',
+                }}
+              >
+                {pathItem.name}
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="uns-container">
+      <div className="uns-header">
+        <h1>Unified Namespace (UNS)</h1>
+        <div className="uns-header-controls">
+          <div className="uns-query-input-group">
+            <label htmlFor="root-query" className="uns-query-label">
+              Root Query:
+            </label>
+            <input
+              id="root-query"
+              type="text"
+              value={rootQuery}
+              onChange={(e) => setRootQuery(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !loading && node) {
+                  loadRootItems();
+                }
+              }}
+              placeholder="blockchain get *"
+              className="uns-query-input"
+              disabled={loading}
+            />
+          </div>
+          <button
+            onClick={loadRootItems}
+            disabled={loading || !node || !rootQuery.trim()}
+            className="uns-refresh-btn"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
+
+      {!node && (
+        <div className="uns-error">
+          ⚠️ No node selected. Please select a node first.
+        </div>
+      )}
+
+      {error && (
+        <div className="uns-error">
+          <span className="error-dismiss" onClick={() => setError(null)}>
+            ×
+          </span>
+          ❌ Error: {error}
+        </div>
+      )}
+
+      <div
+        className={`uns-main-content ${isSidePanelOpen ? 'uns-panel-open' : ''}`}
+      >
+        <div className="uns-main-content-wrapper">
+          {renderBreadcrumb()}
+
+          <div className="uns-layers">
+            {layers.length > 0 &&
+              (() => {
+                // Only show the current layer (the last one)
+                const currentLayerIndex = layers.length - 1;
+                const currentLayer = layers[currentLayerIndex];
+                const layerName =
+                  currentLayerIndex === 0
+                    ? 'Root'
+                    : currentPath[currentLayerIndex - 1]?.name ||
+                      `Layer ${currentLayerIndex}`;
+
+                return (
+                  <div key={currentLayerIndex} className="uns-layer">
+                    <div className="uns-layer-header">{layerName}</div>
+                    <div className="uns-layer-content">
+                      {loading ? (
+                        <div className="uns-loading">Loading...</div>
+                      ) : currentLayer.length === 0 ? (
+                        <div className="uns-empty">No items found</div>
+                      ) : (
+                        currentLayer.map((item, itemIndex) =>
+                          renderItem(item, currentLayerIndex, itemIndex),
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+          </div>
+        </div>
+
+        {/* Side Panel for detailed view */}
+        <UNSSidePanel
+          isOpen={isSidePanelOpen}
+          selectedItem={selectedItem}
+          itemsWithData={itemsWithData}
+          conn={node}
+          sqlData={sqlData}
+          sqlLoading={sqlLoading}
+          sqlError={sqlError}
+          timeRangeValue={timeRangeValue}
+          timeRangeUnit={timeRangeUnit}
+          timeColumn={timeColumn}
+          onTimeColumnChange={setTimeColumn}
+          onClose={() => {
+            setIsSidePanelOpen(false);
+            setSelectedItem(null);
+            setSqlData(null);
+            setSqlError(null);
+          }}
+          onTimeRangeValueChange={setTimeRangeValue}
+          onTimeRangeUnitChange={setTimeRangeUnit}
+          onFetchTimeRange={fetchSqlData}
+          getItemName={getItemName}
+          getItemType={getItemType}
+          getItemId={getItemId}
+          getItemData={getItemData}
+          chartYKey={chartYKey}
+          onChartYKeyChange={setChartYKey}
+        />
+      </div>
+
+      {hoveredItem && (
+        <div
+          className="uns-tooltip"
+          style={{
+            left: `${hoverPosition.x + 10}px`,
+            top: `${hoverPosition.y + 10}px`,
+          }}
+        >
+          <div className="uns-tooltip-header">
+            <strong>{getItemName(hoveredItem)}</strong>
+            <span className="uns-tooltip-type">
+              ({getItemType(hoveredItem)})
+            </span>
+          </div>
+          <div className="uns-tooltip-content">
+            <pre>{JSON.stringify(getItemData(hoveredItem), null, 2)}</pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Plugin metadata
