@@ -8,9 +8,9 @@ import { getDataNodes } from './uns_api';
 const UNSSidePanel = ({
   isOpen,
   selectedItem,
-  itemsWithData,
   conn,
   sqlData,
+  sqlColumns,
   sqlLoading,
   sqlError,
   timeRangeValue,
@@ -30,9 +30,7 @@ const UNSSidePanel = ({
 }) => {
   const itemData = selectedItem ? getItemData(selectedItem) : null;
   const hasTableMeta = itemData && itemData.dbms && itemData.table;
-  const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
-  const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
-  const showTableSection = hasTableMeta && hasDataAtLocation;
+  const showTableSection = hasTableMeta;
   const chartRef = useRef(null);
 
   const [dataNodes, setDataNodes] = useState(null);
@@ -106,9 +104,11 @@ const UNSSidePanel = ({
   const sanitizeForFilename = (s) => (s != null ? String(s).replace(/[/\\:*?"<>|]/g, '-').trim() : '');
 
   /** Get table columns in order: selected time column first (if present), then others. Only show one time column. */
-  const getOrderedTableColumns = (firstRow) => {
-    if (!firstRow || typeof firstRow !== 'object') return [];
-    const keys = Object.keys(firstRow);
+  const getOrderedTableColumns = (source) => {
+    const keys = Array.isArray(source)
+      ? source
+      : (source && typeof source === 'object' ? Object.keys(source) : []);
+    if (keys.length === 0) return [];
     const keyMatches = (k, target) => k === target || (k && target && String(k).toLowerCase() === String(target).toLowerCase());
     const timeCols = ['insert_timestamp', 'timestamp'];
     const selectedTimeKey = keys.find((k) => keyMatches(k, timeColumn));
@@ -121,6 +121,12 @@ const UNSSidePanel = ({
     }
     return keys;
   };
+
+  const tableColumns = Array.isArray(sqlData) && sqlData[0] && typeof sqlData[0] === 'object'
+    ? getOrderedTableColumns(sqlData[0])
+    : (Array.isArray(sqlColumns) && sqlColumns.length > 0
+      ? getOrderedTableColumns(sqlColumns)
+      : []);
 
   const getExportFilename = () => {
     const parts = [
@@ -291,19 +297,21 @@ const UNSSidePanel = ({
                           <span className="uns-live-dot" /> LIVE — {refreshRate}s
                         </span>
                       )}
-                      {sqlData && sqlData.length > 0 && (
+                      {Array.isArray(sqlData) && (
                         <>
                           <span className="uns-sql-row-count">
                             ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
                           </span>
-                          <div className="uns-sql-export-btns">
-                            <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
-                              Export CSV
-                            </button>
-                            <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
-                              Export PDF
-                            </button>
-                          </div>
+                          {sqlData.length > 0 && (
+                            <div className="uns-sql-export-btns">
+                              <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
+                                Export CSV
+                              </button>
+                              <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
+                                Export PDF
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -325,28 +333,25 @@ const UNSSidePanel = ({
                     {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
-                          {sqlData.length === 0 ? (
+                          {tableColumns.length === 0 && sqlData.length === 0 ? (
                             <div className="uns-sql-empty">
-                              No data found for the specified time range.
+                              No columns found for this table.
                             </div>
                           ) : (
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {sqlData[0] && getOrderedTableColumns(sqlData[0]).map((key) => (
+                                  {tableColumns.map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
                                 {sqlData.map((row, index) => {
-                                  const orderedKeys = sqlData[0] && typeof sqlData[0] === 'object'
-                                    ? getOrderedTableColumns(sqlData[0])
-                                    : (row && typeof row === 'object' ? Object.keys(row) : []);
                                   return (
                                     <tr key={index}>
                                       {row && typeof row === 'object'
-                                        ? orderedKeys.map((key) => (
+                                        ? tableColumns.map((key) => (
                                             <td key={key}>
                                               {key in row
                                                 ? (typeof row[key] === 'object' && row[key] !== null
@@ -355,7 +360,7 @@ const UNSSidePanel = ({
                                                 : ''}
                                             </td>
                                           ))
-                                        : <td>{String(row ?? '')}</td>}
+                                        : <td colSpan={Math.max(tableColumns.length, 1)}>{String(row ?? '')}</td>}
                                     </tr>
                                   );
                                 })}
@@ -446,4 +451,3 @@ const UNSSidePanel = ({
 };
 
 export default UNSSidePanel;
-
