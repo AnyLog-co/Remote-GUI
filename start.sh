@@ -89,7 +89,7 @@ $VIRTUAL_ENV/bin/uvicorn CLI.local-cli-backend.main:app --host 0.0.0.0 --port ${
 # Serve frontend with SPA fallback (serves index.html for all unknown routes)
 python3 - <<PYEOF
 import os, sys
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 BUILD_DIR = "/app/CLI/local-cli-fe-full/build"
 PORT = int(os.environ.get("REMOTE_GUI_FE", 31800))
@@ -98,16 +98,25 @@ class SPAHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BUILD_DIR, **kwargs)
 
+    def handle(self):
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
+
     def do_GET(self):
-        # If file exists, serve it normally; otherwise serve index.html
-        path = BUILD_DIR + self.path.split("?")[0]
-        if not os.path.exists(path) or os.path.isdir(path) and not os.path.exists(path + "/index.html"):
-            self.path = "/index.html"
-        return super().do_GET()
+        try:
+            # If file exists, serve it normally; otherwise serve index.html
+            path = BUILD_DIR + self.path.split("?")[0]
+            if not os.path.exists(path) or os.path.isdir(path) and not os.path.exists(path + "/index.html"):
+                self.path = "/index.html"
+            return super().do_GET()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
 
     def log_message(self, format, *args):
         pass  # suppress per-request logs
 
 print(f"Serving frontend on port {PORT}", flush=True)
-HTTPServer(("0.0.0.0", PORT), SPAHandler).serve_forever()
+ThreadingHTTPServer(("0.0.0.0", PORT), SPAHandler).serve_forever()
 PYEOF

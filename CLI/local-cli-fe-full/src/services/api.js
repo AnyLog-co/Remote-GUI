@@ -79,7 +79,7 @@ export async function checkNodeReachable(connectInfo, { signal } = {}) {
       conn: { conn: connectInfo },
     };
 
-    const response = await fetch(`${API_URL}/send-command`, {
+    const response = await fetch(`${API_URL}/send-command/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -125,7 +125,7 @@ export async function sendCommand({ connectInfo, method, command, rawText }) {
 
     // Example: a POST request using fetch
     // The URL here might be constructed using connectInfo or some known base URL
-    const response = await fetch(`${API_URL}/send-command`, {
+    const response = await fetch(`${API_URL}/send-command/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -160,6 +160,7 @@ async def feature_check_middleware(request: Request, call_next):
     
     # Check main endpoints
     endpoint_feature_map = {
+        "/send-command": "client",
         "/send-command/": "client",
         "/get-network-nodes/": "client",
         "/monitor/": "monitor",
@@ -348,6 +349,7 @@ def should_force_raw_text(command_text: str) -> bool:
 
 # NODE API ENDPOINTS
 
+@app.post("/send-command", include_in_schema=False)
 @app.post("/send-command/")
 def send_command(conn: Connection, command: Command):
     # Feature check (also handled by middleware, but double-check for safety)
