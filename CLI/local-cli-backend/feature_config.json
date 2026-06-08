@@ -46,6 +46,10 @@
     }
   },
   "plugins": {
+    "monitoring": {
+      "enabled": true,
+      "description": "Monitoring Plugin"
+    },
     "reportgenerator": {
       "enabled": true,
       "description": "Report Generator Plugin"

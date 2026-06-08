@@ -236,7 +236,7 @@ python3 -m pip install $HOME/AnyLog-API/dist/anylog_api-0.0.0-py2.py3-none-any.w
 ---
 
 ## Usage
-
+    
 You can connect to a node in two ways:
 
 - **Local node (via Docker Compose):** use the IP and port from the container (usually `127.0.0.1:32049`).  
