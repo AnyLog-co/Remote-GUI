@@ -27,7 +27,8 @@ jobs:
 
       - name: Get setup.cfg
         run: |
-          git checkout origin/os-dev -- setup.cfg
+          git fetch origin os-dev
+          git checkout FETCH_HEAD -- setup.cfg
 
       - name: Run version update script
         run: python .github/scripts/generate_git_id.py
