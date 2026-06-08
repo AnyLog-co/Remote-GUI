@@ -27,8 +27,13 @@ jobs:
 
       - name: Get setup.cfg
         run: |
-          git fetch origin os-dev
-          git checkout FETCH_HEAD -- setup.cfg
+          # os-dev holds the canonical version on the upstream repo.
+          # On forks without os-dev, fall back to the already-checked-out setup.cfg.
+          if git fetch origin os-dev 2>/dev/null; then
+            git checkout FETCH_HEAD -- setup.cfg
+          else
+            echo "origin/os-dev not found; using setup.cfg from the current branch"
+          fi
 
       - name: Run version update script
         run: python .github/scripts/generate_git_id.py
