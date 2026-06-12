@@ -159,29 +159,15 @@ const Client = ({ node }) => {
 
       // Handle error responses with detailed information
       if (result.type === 'error') {
-        let errorMessage = result.data || 'Unknown error occurred';
-        
-        // Include detailed error information if available
-        if (result.error_details) {
-          errorMessage += `\n\n=== DETAILED ERROR INFORMATION ===\n`;
-          errorMessage += `Error Type: ${result.error_details.error_type || 'Unknown'}\n`;
-          errorMessage += `Command: ${result.error_details.command || command}\n`;
-          errorMessage += `Connection: ${result.error_details.connection || node}\n`;
-          errorMessage += `Location: ${result.error_details.location || 'Unknown'}\n`;
-          
-          if (result.error_details.error_message) {
-            errorMessage += `\nFull Error Message:\n${result.error_details.error_message}`;
-          }
-          
-          // Add any additional error details
-          Object.keys(result.error_details).forEach(key => {
-            if (!['error_type', 'command', 'connection', 'location', 'error_message'].includes(key)) {
-              errorMessage += `\n${key}: ${result.error_details[key]}`;
-            }
-          });
-        }
-        
-        setError(errorMessage);
+        const details = result.error_details || {};
+        setError({
+          title: 'Command could not be completed',
+          message: result.data || details.error_message || 'The node returned an error for this command.',
+          details,
+          command: details.command || command,
+          connection: details.connection || node,
+          type: details.error_type,
+        });
         setResponseData(null);
         setResultType('');
         return;
@@ -234,14 +220,11 @@ const Client = ({ node }) => {
       console.log("Error name:", err.name);
       console.log("=== END FRONTEND ERROR ===");
       
-      let errorMessage = err.message || 'Unknown error occurred';
-      
-      // Add additional error details if available
-      if (err.stack) {
-        errorMessage += `\n\nStack trace:\n${err.stack}`;
-      }
-      
-      setError(errorMessage);
+      setError({
+        title: 'Request could not be sent',
+        message: err.message || 'The browser could not complete the request.',
+        details: err.stack ? { stack: err.stack } : null,
+      });
       setExecutionTime(null);
       setLastExecutedCommand(null);
       setExecutionTimestamp(null);
@@ -425,6 +408,81 @@ const Client = ({ node }) => {
     } else {
       return `${Math.floor(ms / 60000)}m ${((ms % 60000) / 1000).toFixed(1)}s`;
     }
+  };
+
+  const normalizeError = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      return {
+        title: 'Something needs attention',
+        message: value,
+        details: null,
+      };
+    }
+
+    return {
+      title: value.title || 'Something needs attention',
+      message: value.message || 'An unexpected error occurred.',
+      details: value.details || null,
+      command: value.command,
+      connection: value.connection,
+      type: value.type,
+    };
+  };
+
+  const formatTechnicalDetails = (errorInfo) => {
+    const details = errorInfo?.details;
+    const rows = [];
+
+    if (errorInfo?.type) rows.push(['Type', errorInfo.type]);
+    if (errorInfo?.command) rows.push(['Command', errorInfo.command]);
+    if (errorInfo?.connection) rows.push(['Connection', errorInfo.connection]);
+
+    if (details && typeof details === 'object') {
+      Object.entries(details).forEach(([key, value]) => {
+        if (['error_type', 'command', 'connection'].includes(key)) return;
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+        const formattedValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+        rows.push([label, formattedValue]);
+      });
+    }
+
+    return rows;
+  };
+
+  const renderErrorPanel = () => {
+    const errorInfo = normalizeError(error);
+    if (!errorInfo) return null;
+
+    const technicalDetails = formatTechnicalDetails(errorInfo);
+
+    return (
+      <div className="command-error-panel" role="alert">
+        <button
+          type="button"
+          className="command-error-dismiss"
+          onClick={() => setError(null)}
+          aria-label="Dismiss error"
+        >
+          ×
+        </button>
+        <div className="command-error-heading">{errorInfo.title}</div>
+        <div className="command-error-body">{errorInfo.message}</div>
+        {technicalDetails.length > 0 && (
+          <details className="command-error-details">
+            <summary>Technical details</summary>
+            <dl>
+              {technicalDetails.map(([label, value]) => (
+                <React.Fragment key={`${label}-${value}`}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </React.Fragment>
+              ))}
+            </dl>
+          </details>
+        )}
+      </div>
+    );
   };
 
   const handleCreateNewGroup = async () => {
@@ -622,12 +680,7 @@ const Client = ({ node }) => {
         </button>
       </form>
 
-      {error && (
-        <div className="error-message">
-          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+      {renderErrorPanel()}
 
       {(resultType === 'blobs' || resultType === 'streaming') && (
         <div className="selected-blobs">
