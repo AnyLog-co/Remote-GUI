@@ -1,1267 +1,1952 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  getMCPStatus,
+  FaCheckCircle,
+  FaCode,
+  FaCog,
+  FaDownload,
+  FaExclamationTriangle,
+  FaFilePdf,
+  FaInfoCircle,
+  FaPaperPlane,
+  FaPlug,
+  FaPlus,
+  FaPowerOff,
+  FaServer,
+  FaStop,
+  FaSyncAlt,
+  FaTrash,
+} from 'react-icons/fa';
+import {
+  askMCP,
+  askMCPStream,
   connectMCP,
   disconnectMCP,
+  getMCPStatus,
   listMCPTools,
-  askMCP,
   listModels,
 } from './mcpclient_api';
 import MarkdownRenderer from './MarkdownRenderer';
 
-// Plugin metadata - used by the plugin loader
 export const pluginMetadata = {
   name: 'MCP Client',
   icon: null
 };
 
+const DEFAULT_MCP_PATH = '/mcp/sse';
+const PREFERRED_MODEL = 'qwen3:8b';
+const HISTORY_STORAGE_KEY = 'mcpclient_chat_history';
+const CONFIG_STORAGE_KEY = 'mcpclient_config';
+const CHAT_SESSIONS_STORAGE_KEY = 'mcpclient_chats_v2';
+const ACTIVE_CHAT_STORAGE_KEY = 'mcpclient_active_chat_id';
+const DEFAULT_ASSISTANT_NAME = 'Assistant';
+
+const getModelName = (model, index = 0) => (
+  model?.name || model?.model || model?.model_name || model?.digest || `model-${index + 1}`
+);
+
+const normalizeEndpoint = (value) => {
+  const trimmed = (value || '').trim();
+  return trimmed || null;
+};
+
+const getNodeValue = (node) => {
+  if (!node) return '';
+  if (typeof node === 'string') return node.trim();
+  if (typeof node === 'object') return (node.node || node.value || node.address || '').trim();
+  return '';
+};
+
+const mcpUrlFromNode = (node) => {
+  const nodeValue = getNodeValue(node);
+  if (!nodeValue) return '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(nodeValue)) {
+    try {
+      const url = new URL(nodeValue);
+      url.pathname = DEFAULT_MCP_PATH;
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/$/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+  return `http://${nodeValue}${DEFAULT_MCP_PATH}`;
+};
+
+const downloadTextFile = (filename, content, mimeType) => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const stripMarkdown = (content) => (content || '')
+  .replace(/```[\w+#.-]*\n?([\s\S]*?)```/g, '$1')
+  .replace(/`([^`]+)`/g, '$1')
+  .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+  .replace(/\*\*([^*]+)\*\*/g, '$1')
+  .replace(/\*([^*]+)\*/g, '$1')
+  .replace(/^#+\s+/gm, '')
+  .replace(/^---$/gm, '');
+
+const extractArtifacts = (content) => {
+  const blocks = [];
+  const regex = /```([a-zA-Z0-9+#.-]*)\s*\n([\s\S]*?)```/g;
+  let match;
+
+  while ((match = regex.exec(content || '')) !== null) {
+    const language = (match[1] || 'txt').toLowerCase();
+    blocks.push({
+      language,
+      code: match[2].trim(),
+    });
+  }
+
+  const htmlBlocks = blocks.filter((block) => ['html', 'htm'].includes(block.language));
+  const cssBlocks = blocks.filter((block) => block.language === 'css');
+  const jsBlocks = blocks.filter((block) => ['js', 'javascript'].includes(block.language));
+  const hasPreview = htmlBlocks.length > 0 || (cssBlocks.length > 0 && jsBlocks.length > 0);
+
+  const html = htmlBlocks[0]?.code || '';
+  const css = cssBlocks.map((block) => block.code).join('\n\n');
+  const js = jsBlocks.map((block) => block.code).join('\n\n');
+  const srcDoc = html || `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>${css}</style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script>${js}</script>
+  </body>
+</html>`;
+
+  return { blocks, hasPreview, srcDoc, html, css, js };
+};
+
+const fileMetaForLanguage = (language) => {
+  if (['html', 'htm'].includes(language)) return { ext: 'html', mime: 'text/html' };
+  if (language === 'css') return { ext: 'css', mime: 'text/css' };
+  if (['js', 'javascript'].includes(language)) return { ext: 'js', mime: 'text/javascript' };
+  if (language === 'json') return { ext: 'json', mime: 'application/json' };
+  return { ext: 'txt', mime: 'text/plain' };
+};
+
+const formatDuration = (ms) => {
+  if (typeof ms !== 'number' || Number.isNaN(ms)) return '0 ms';
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
+};
+
+const stringifyPayload = (payload) => {
+  try {
+    return JSON.stringify(payload ?? {}, null, 2);
+  } catch (_) {
+    return String(payload ?? '');
+  }
+};
+
+const createChatId = () => `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const normalizeToolList = (tools = []) => (
+  Array.isArray(tools)
+    ? tools.map((tool) => (
+      typeof tool === 'string'
+        ? { name: tool }
+        : {
+          name: tool?.name || '',
+          description: tool?.description || '',
+          inputSchema: tool?.inputSchema || tool?.input_schema || {},
+        }
+    )).filter((tool) => tool.name)
+    : []
+);
+
+const normalizeMessages = (messages = []) => (
+  Array.isArray(messages)
+    ? messages.map((message, index) => ({
+      ...message,
+      id: message.id || `saved-${index}-${message.type || 'message'}`,
+      observations: message.type === 'assistant' ? (message.observations || []) : message.observations,
+      showObservations: Boolean(message.showObservations),
+    }))
+    : []
+);
+
+const deriveChatTitle = (messages = [], fallback = 'New chat') => {
+  const firstUserMessage = messages.find((message) => message.type === 'user' && message.content);
+  if (!firstUserMessage) return fallback;
+  const compact = firstUserMessage.content.replace(/\s+/g, ' ').trim();
+  return compact.length > 44 ? `${compact.slice(0, 44)}...` : compact || fallback;
+};
+
+const createChatSession = ({
+  title = 'New chat',
+  messages = [],
+  anylogUrl = '',
+  ollamaModel = PREFERRED_MODEL,
+  ollamaEndpoint = '',
+  assistantName = DEFAULT_ASSISTANT_NAME,
+  instructions = '',
+  mcpTools = [],
+} = {}) => {
+  const now = Date.now();
+  return {
+    id: createChatId(),
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: normalizeMessages(messages),
+    config: {
+      anylogUrl,
+      ollamaModel,
+      ollamaEndpoint,
+      assistantName,
+      instructions,
+      mcpTools: normalizeToolList(mcpTools),
+    },
+  };
+};
+
+const normalizeChatSession = (chat, fallbackConfig = {}) => ({
+  id: chat.id || createChatId(),
+  title: chat.title || deriveChatTitle(chat.messages, 'New chat'),
+  createdAt: chat.createdAt || Date.now(),
+  updatedAt: chat.updatedAt || chat.createdAt || Date.now(),
+  messages: normalizeMessages(chat.messages),
+  config: {
+    anylogUrl: chat.config?.anylogUrl || fallbackConfig.anylogUrl || '',
+    ollamaModel: chat.config?.ollamaModel || fallbackConfig.ollamaModel || PREFERRED_MODEL,
+    ollamaEndpoint: chat.config?.ollamaEndpoint || fallbackConfig.ollamaEndpoint || '',
+    assistantName: chat.config?.assistantName || fallbackConfig.assistantName || DEFAULT_ASSISTANT_NAME,
+    instructions: chat.config?.instructions || fallbackConfig.instructions || '',
+    mcpTools: normalizeToolList(chat.config?.mcpTools || fallbackConfig.mcpTools || []),
+  },
+});
+
+const ObservationPanel = ({ observations = [], totalElapsedMs }) => (
+  <div className="observation-panel">
+    <div className="observation-summary">
+      <span>MCP observation log</span>
+      <strong>Total {formatDuration(totalElapsedMs || 0)}</strong>
+    </div>
+    {observations.length === 0 ? (
+      <div className="observation-empty">Waiting for MCP sub-requests.</div>
+    ) : (
+      <div className="observation-list">
+        {observations.map((item, index) => (
+          <div className={`observation-item ${item.status || 'pending'}`} key={item.id || index}>
+            <div className="observation-meta">
+              <strong>{item.toolName || item.tool_name || 'MCP request'}</strong>
+              <span>{item.status || 'pending'}</span>
+              {typeof item.elapsedMs === 'number' && <span>{formatDuration(item.elapsedMs)}</span>}
+              {typeof item.totalElapsedMs === 'number' && <span>at {formatDuration(item.totalElapsedMs)}</span>}
+            </div>
+            <details open={item.status === 'pending' || item.status === 'error'}>
+              <summary>Request</summary>
+              <pre>{stringifyPayload(item.arguments)}</pre>
+            </details>
+            {item.status === 'complete' && (
+              <details>
+                <summary>Response</summary>
+                <pre>{stringifyPayload(item.response)}</pre>
+              </details>
+            )}
+            {item.status === 'error' && (
+              <details open>
+                <summary>Error</summary>
+                <pre>{item.error}</pre>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const ArtifactPanel = ({ content, messageIndex }) => {
+  const artifacts = useMemo(() => extractArtifacts(content), [content]);
+
+  if (artifacts.blocks.length === 0) return null;
+
+  return (
+    <div className="artifact-panel">
+      <div className="artifact-header">
+        <div className="artifact-title">
+          <FaCode />
+          <span>Generated artifacts</span>
+        </div>
+        {artifacts.hasPreview && (
+          <button
+            className="icon-action"
+            type="button"
+            title="Download preview HTML"
+            aria-label="Download preview HTML"
+            onClick={() => downloadTextFile(`mcp-artifact-${messageIndex + 1}.html`, artifacts.srcDoc, 'text/html')}
+          >
+            <FaDownload />
+            HTML
+          </button>
+        )}
+      </div>
+
+      {artifacts.hasPreview && (
+        <iframe
+          title={`MCP generated preview ${messageIndex + 1}`}
+          className="artifact-preview"
+          sandbox="allow-scripts allow-forms allow-modals"
+          srcDoc={artifacts.srcDoc}
+        />
+      )}
+
+      <div className="artifact-files">
+        {artifacts.blocks.map((block, index) => {
+          const meta = fileMetaForLanguage(block.language);
+          return (
+            <button
+              key={`${block.language}-${index}`}
+              type="button"
+              className="artifact-file"
+              onClick={() => downloadTextFile(`mcp-output-${messageIndex + 1}-${index + 1}.${meta.ext}`, block.code, meta.mime)}
+            >
+              <FaDownload />
+              <span>{block.language || 'text'}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const McpclientPage = ({ node }) => {
+  const nodeMcpUrl = useMemo(() => mcpUrlFromNode(node), [node]);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
   const [tools, setTools] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [answers, setAnswers] = useState([]);
-  const [asking, setAsking] = useState(false);
-  const abortControllerRef = useRef(null);
-  const [anylogUrl, setAnylogUrl] = useState('http://50.116.13.109:32349/mcp/sse');
-  const [ollamaModel, setOllamaModel] = useState('');
-  const [llmEndpoint, setLlmEndpoint] = useState(''); // Docker container endpoint (e.g., "http://localhost:11434")
-  const [useDocker, setUseDocker] = useState(false); // Toggle between Docker and Local LLM
-  const [dockerModels, setDockerModels] = useState([]); // Models available from Docker container
-  const [loadingDockerModels, setLoadingDockerModels] = useState(false);
-  
-  // Handle toggle between Docker and Local
-  const handleToggleLLM = async (newUseDocker) => {
-    setUseDocker(newUseDocker);
-    
-    if (newUseDocker) {
-      // Switching to Docker - keep endpoint if it exists
-      // Models will load automatically via useEffect
-    } else {
-      // Switching to Local - clear endpoint and disconnect if connected
-      setLlmEndpoint('');
-      setDockerModels([]);
-      setOllamaModel(''); // Clear model selection
-      
-      // Disconnect and reconnect if currently connected
-      if (connected) {
-        try {
-          setLoading(true);
-          await disconnectMCP();
-          setConnected(false);
-          // Reload models for local
-          await loadModels(null);
-        } catch (err) {
-          console.error('Failed to disconnect when switching to local:', err);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        // Just reload models for local
-        await loadModels(null);
-      }
-    }
-  };
-  const [showConfig, setShowConfig] = useState(false);
-  const messagesEndRef = useRef(null);
-  const previousModelRef = useRef(ollamaModel);
-  const isInitialMountRef = useRef(true);
-  const HISTORY_STORAGE_KEY = 'mcpclient_chat_history';
-  const PENDING_REQUEST_KEY = 'mcpclient_pending_request';
-  const requestStartTimeRef = useRef(null);
-  const answersRef = useRef([]); // Track current answers for synchronous access
+  const [runningChatIds, setRunningChatIds] = useState([]);
+  const [anylogUrl, setAnylogUrl] = useState(nodeMcpUrl);
+  const [ollamaModel, setOllamaModel] = useState(PREFERRED_MODEL);
+  const [ollamaEndpoint, setOllamaEndpoint] = useState('');
+  const [models, setModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [showConfig, setShowConfig] = useState(true);
+  const [streamNote, setStreamNote] = useState('');
+  const [modelSource, setModelSource] = useState('local');
+  const [assistantName, setAssistantName] = useState(DEFAULT_ASSISTANT_NAME);
+  const [instructions, setInstructions] = useState('');
+  const [instructionsSaved, setInstructionsSaved] = useState(false);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [activeChatId, setActiveChatId] = useState('');
 
-  // Load conversation history from localStorage on mount
+  const abortControllersRef = useRef({});
+  const messagesEndRef = useRef(null);
+  const answersRef = useRef([]);
+  const activeChatIdRef = useRef('');
+  const userEditedAnylogUrlRef = useRef(false);
+  const previousNodeMcpUrlRef = useRef(nodeMcpUrl);
+  const applyingChatRef = useRef(false);
+
+  const applyChatSession = (chat) => {
+    if (!chat) return;
+    applyingChatRef.current = true;
+    const config = chat.config || {};
+    setAnswers(normalizeMessages(chat.messages));
+    answersRef.current = normalizeMessages(chat.messages);
+    setAnylogUrl(config.anylogUrl || nodeMcpUrl || '');
+    setOllamaModel(config.ollamaModel || PREFERRED_MODEL);
+    setOllamaEndpoint(config.ollamaEndpoint || '');
+    setAssistantName(config.assistantName || DEFAULT_ASSISTANT_NAME);
+    setInstructions(config.instructions || '');
+    setInstructionsSaved(false);
+    const chatTools = normalizeToolList(config.mcpTools || []);
+    setConnected(false);
+    setTools(chatTools);
+    setStatus((prev) => ({ ...(prev || {}), connected: false, available_tools: chatTools.map((tool) => tool.name) }));
+    setTimeout(() => {
+      applyingChatRef.current = false;
+    }, 0);
+  };
+
   useEffect(() => {
+    let initialAnylogUrl = nodeMcpUrl;
+    let initialModel = PREFERRED_MODEL;
+    let initialEndpoint = '';
+    let initialAssistantName = DEFAULT_ASSISTANT_NAME;
+    let initialInstructions = '';
+    let initialMessages = [];
+    let initialChats = [];
+
     try {
-      const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
-      if (savedHistory) {
-        try {
-          const parsed = JSON.parse(savedHistory);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAnswers(parsed);
-            answersRef.current = parsed;
-            
-            // If last message is a response, ensure asking is false
-            const lastMessage = parsed[parsed.length - 1];
-            if (lastMessage && (lastMessage.type === 'assistant' || lastMessage.type === 'error')) {
-              setAsking(false);
-            }
-          }
-        } catch (parseErr) {
-          console.warn('Failed to parse saved history:', parseErr);
-        }
+      const savedConfig = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || '{}');
+      initialAnylogUrl = nodeMcpUrl || savedConfig.anylogUrl || '';
+      initialModel = savedConfig.ollamaModel || PREFERRED_MODEL;
+      initialEndpoint = savedConfig.ollamaEndpoint || '';
+      initialAssistantName = savedConfig.assistantName || DEFAULT_ASSISTANT_NAME;
+      initialInstructions = savedConfig.instructions || '';
+      const initialTools = normalizeToolList(savedConfig.mcpTools || []);
+
+      const savedHistory = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '[]');
+      if (Array.isArray(savedHistory)) {
+        initialMessages = normalizeMessages(savedHistory);
       }
-    } catch (err) {
-      console.warn('Failed to load chat history:', err);
+
+      const savedChats = JSON.parse(localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY) || '[]');
+      if (Array.isArray(savedChats) && savedChats.length > 0) {
+        initialChats = savedChats.map((chat) => normalizeChatSession(chat, {
+          anylogUrl: initialAnylogUrl,
+          ollamaModel: initialModel,
+          ollamaEndpoint: initialEndpoint,
+          assistantName: initialAssistantName,
+          instructions: initialInstructions,
+          mcpTools: initialTools,
+        }));
+      }
+
+      if (initialChats.length === 0) {
+        initialChats = [createChatSession({
+          title: deriveChatTitle(initialMessages, 'New chat'),
+          messages: initialMessages,
+          anylogUrl: initialAnylogUrl,
+          ollamaModel: initialModel,
+          ollamaEndpoint: initialEndpoint,
+          assistantName: initialAssistantName,
+          instructions: initialInstructions,
+          mcpTools: initialTools,
+        })];
+      }
+
+      const savedActiveId = localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
+      const activeChat = initialChats.find((chat) => chat.id === savedActiveId) || initialChats[0];
+
+      setChatSessions(initialChats);
+      setActiveChatId(activeChat.id);
+      activeChatIdRef.current = activeChat.id;
+      setAnswers(activeChat.messages);
+      answersRef.current = activeChat.messages;
+      setAnylogUrl(activeChat.config.anylogUrl || nodeMcpUrl || '');
+      setOllamaModel(activeChat.config.ollamaModel || PREFERRED_MODEL);
+      setOllamaEndpoint(activeChat.config.ollamaEndpoint || '');
+      setAssistantName(activeChat.config.assistantName || DEFAULT_ASSISTANT_NAME);
+      setInstructions(activeChat.config.instructions || '');
+      setTools(normalizeToolList(activeChat.config.mcpTools || []));
+
+      initialAnylogUrl = activeChat.config.anylogUrl || nodeMcpUrl || '';
+      initialModel = activeChat.config.ollamaModel || PREFERRED_MODEL;
+      initialEndpoint = activeChat.config.ollamaEndpoint || '';
+    } catch (storageError) {
+      console.warn('Failed to load MCP client storage:', storageError);
+      const fallbackChat = createChatSession({
+        anylogUrl: nodeMcpUrl || '',
+        ollamaModel: PREFERRED_MODEL,
+      });
+      initialChats = [fallbackChat];
+      setChatSessions(initialChats);
+      setActiveChatId(fallbackChat.id);
+      activeChatIdRef.current = fallbackChat.id;
+      initialAnylogUrl = fallbackChat.config.anylogUrl;
     }
-    loadStatus();
+
+    loadStatus({ initialAnylogUrl, initialEndpoint, initialModel });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update ref whenever answers change
+  useEffect(() => {
+    if (!nodeMcpUrl || previousNodeMcpUrlRef.current === nodeMcpUrl) return;
+
+    const previousNodeUrl = previousNodeMcpUrlRef.current;
+    previousNodeMcpUrlRef.current = nodeMcpUrl;
+
+    if (!userEditedAnylogUrlRef.current || !anylogUrl || anylogUrl === previousNodeUrl) {
+      setAnylogUrl(nodeMcpUrl);
+      if (connected) {
+        setConnected(false);
+        setTools([]);
+        setStatus((prev) => ({ ...(prev || {}), connected: false, available_tools: [] }));
+      }
+    }
+  }, [anylogUrl, connected, nodeMcpUrl]);
+
   useEffect(() => {
     answersRef.current = answers;
-  }, [answers]);
+    if (!activeChatId || applyingChatRef.current) return;
 
-  // Load models when endpoint changes, useDocker toggles, or on mount
-  useEffect(() => {
-    if (useDocker && llmEndpoint && llmEndpoint.trim()) {
-      // Basic URL validation: must start with http(s):// and have a valid host:port
-      const trimmed = llmEndpoint.trim();
-      try {
-        const url = new URL(trimmed);
-        if (!url.hostname || url.hostname.endsWith('.') || url.hostname.startsWith('.')) return;
-        // Reject incomplete IPs (e.g. "192.168" or "192.168.210")
-        const parts = url.hostname.split('.');
-        if (parts.every(p => /^\d+$/.test(p)) && parts.length !== 4) return;
-      } catch {
-        return; // not a valid URL yet, skip
-      }
-      // Debounce valid endpoint changes
-      const timeoutId = setTimeout(() => {
-        loadModels(trimmed);
-      }, 800);
-      return () => clearTimeout(timeoutId);
-    } else if (!useDocker) {
-      // Load local models immediately when not using Docker
-      loadModels(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [llmEndpoint, useDocker]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [answers]);
-
-  // Auto-reconnect when model changes (if already connected)
-  useEffect(() => {
-    // Skip on initial mount
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      previousModelRef.current = ollamaModel;
-      return;
-    }
-
-    // Only reconnect if model changed and we're currently connected
-    if (previousModelRef.current !== ollamaModel && connected) {
-      console.log(`Model changed from ${previousModelRef.current} to ${ollamaModel}. Reconnecting...`);
-      const oldModel = previousModelRef.current;
-      previousModelRef.current = ollamaModel;
-      
-      // Auto-reconnect with new model
-      const reconnect = async () => {
-        try {
-          setError(null);
-          setLoading(true);
-          // Disconnect first
-          await disconnectMCP();
-          // Then connect with new model
-          const endpoint = (useDocker && llmEndpoint && llmEndpoint.trim()) ? llmEndpoint : null;
-          const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint);
-          setConnected(true);
-          // Update status with fresh data
-          const freshStatus = await getMCPStatus();
-          setStatus(freshStatus);
-          await loadTools();
-        } catch (err) {
-          console.error('Failed to reconnect with new model:', err);
-          setError(`Failed to reconnect with new model: ${err.message}`);
-          setConnected(false);
-          // Revert model on error
-          previousModelRef.current = oldModel;
-          setOllamaModel(oldModel);
-        } finally {
-          setLoading(false);
-        }
+    const persistent = answers.filter((msg) => msg.type === 'user' || msg.type === 'assistant');
+    setChatSessions((prev) => prev.map((chat) => {
+      if (chat.id !== activeChatId) return chat;
+      const existingTitle = chat.title || 'New chat';
+      const shouldAutoTitle = existingTitle === 'New chat' || existingTitle.startsWith('Chat ');
+      return {
+        ...chat,
+        title: shouldAutoTitle ? deriveChatTitle(persistent, existingTitle) : existingTitle,
+        updatedAt: Date.now(),
+        messages: persistent,
+        config: {
+          anylogUrl,
+          ollamaModel,
+          ollamaEndpoint,
+          assistantName,
+          instructions,
+          mcpTools: tools,
+        },
       };
-      
-      reconnect();
-    } else if (previousModelRef.current !== ollamaModel) {
-      // Model changed but not connected - just update the ref
-      previousModelRef.current = ollamaModel;
+    }));
+
+    try {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(persistent.slice(-40)));
+    } catch (storageError) {
+      console.warn('Failed to persist MCP chat history:', storageError);
     }
+  }, [activeChatId, answers, anylogUrl, ollamaModel, ollamaEndpoint, assistantName, instructions, tools]);
+
+  useEffect(() => {
+    if (!chatSessions.length) return;
+    try {
+      localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(chatSessions));
+    } catch (storageError) {
+      console.warn('Failed to persist MCP chat sessions:', storageError);
+    }
+  }, [chatSessions]);
+
+  useEffect(() => {
+    if (activeChatId) {
+      activeChatIdRef.current = activeChatId;
+      localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, activeChatId);
+    }
+  }, [activeChatId]);
+
+  useEffect(() => {
+    const handleStorageCleared = () => {
+      const replacement = createChatSession({
+        anylogUrl: nodeMcpUrl || '',
+        ollamaModel: PREFERRED_MODEL,
+      });
+      setChatSessions([replacement]);
+      setActiveChatId(replacement.id);
+      activeChatIdRef.current = replacement.id;
+      userEditedAnylogUrlRef.current = false;
+      applyChatSession(replacement);
+      setPrompt('');
+      setError(null);
+    };
+
+    window.addEventListener('mcpclient-storage-cleared', handleStorageCleared);
+    return () => window.removeEventListener('mcpclient-storage-cleared', handleStorageCleared);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ollamaModel, connected, anylogUrl]);
+  }, [nodeMcpUrl]);
 
-  const scrollToBottom = () => {
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [answers, streamNote]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify({
+        anylogUrl,
+        ollamaModel,
+        ollamaEndpoint,
+        assistantName,
+        instructions,
+        mcpTools: tools,
+      }));
+    } catch (storageError) {
+      console.warn('Failed to persist MCP config:', storageError);
+    }
+  }, [anylogUrl, ollamaModel, ollamaEndpoint, assistantName, instructions, tools]);
+
+  const chooseModel = (availableModels, currentModel) => {
+    const names = availableModels.map(getModelName);
+    if (currentModel && names.includes(currentModel)) return currentModel;
+    if (names.includes(PREFERRED_MODEL)) return PREFERRED_MODEL;
+    return currentModel || names[0] || PREFERRED_MODEL;
   };
 
-  const loadModels = async (endpoint = null) => {
-    try {
-      setLoadingDockerModels(true);
-      setError(null);
-      const result = await listModels(endpoint ? endpoint.trim() : null);
-      console.log('📋 Models API response:', result);
-      if (result.success && result.models) {
-        console.log('📋 Models received:', result.models);
-        setDockerModels(result.models);
-        // Auto-select first model if available and no model is selected
-        if (result.models.length > 0 && !ollamaModel) {
-          const firstModelName = result.models[0].name || result.models[0].model;
-          console.log('📋 Auto-selecting first model:', firstModelName);
-          setOllamaModel(firstModelName);
+  const updateChatConfig = (chatId, patch) => {
+    if (!chatId) return;
+    setChatSessions((prev) => prev.map((chat) => (
+      chat.id === chatId
+        ? {
+          ...chat,
+          updatedAt: Date.now(),
+          config: {
+            ...(chat.config || {}),
+            ...patch,
+          },
         }
-      } else {
-        console.warn('📋 No models in response or success=false');
-        setDockerModels([]);
-      }
-    } catch (err) {
-      console.error('Failed to load models:', err);
-      setDockerModels([]);
-      // Don't show error for model loading - it's optional
+        : chat
+    )));
+  };
+
+  const setChatTools = (chatId, nextTools) => {
+    const normalizedTools = normalizeToolList(nextTools);
+    if (activeChatIdRef.current === chatId) {
+      setTools(normalizedTools);
+      setStatus((prev) => ({ ...(prev || {}), available_tools: normalizedTools.map((tool) => tool.name) }));
+    }
+    updateChatConfig(chatId, { mcpTools: normalizedTools });
+    return normalizedTools;
+  };
+
+  const loadModels = async (endpointOverride = ollamaEndpoint) => {
+    const endpoint = normalizeEndpoint(endpointOverride);
+    setLoadingModels(true);
+    try {
+      const result = await listModels(endpoint);
+      const availableModels = result.models || [];
+      const selected = chooseModel(availableModels, ollamaModel);
+      setModels(availableModels);
+      setModelSource(result.source || (endpoint ? 'remote' : 'local'));
+      if (selected) setOllamaModel(selected);
+      return { models: availableModels, selected };
+    } catch (modelError) {
+      setModels([]);
+      setModelSource(endpoint ? 'remote' : 'local');
+      setError(`Could not load Ollama models: ${modelError.message}`);
+      return { models: [], selected: ollamaModel || PREFERRED_MODEL };
     } finally {
-      setLoadingDockerModels(false);
+      setLoadingModels(false);
     }
   };
 
-  const loadStatus = async () => {
+  const loadStatus = async ({
+    initialAnylogUrl = anylogUrl,
+    initialEndpoint = ollamaEndpoint,
+    initialModel = ollamaModel,
+  } = {}) => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      // Fast status check (uses cached tools, no network calls)
       const statusData = await getMCPStatus();
+      const defaultNodeUrl = nodeMcpUrl || initialAnylogUrl || '';
+      const nextAnylogUrl = statusData.connected
+        ? (statusData.anylog_url || defaultNodeUrl)
+        : defaultNodeUrl;
+      const nextEndpoint = statusData.llm_endpoint || initialEndpoint || '';
+      const nextModel = statusData.current_model || initialModel || PREFERRED_MODEL;
+
       setStatus(statusData);
-      setConnected(statusData.connected);
-      
-      // Set URL and model from status if available
-      if (statusData.anylog_url) {
-        setAnylogUrl(statusData.anylog_url);
+      setConnected(Boolean(statusData.connected));
+      setAnylogUrl(nextAnylogUrl);
+      setOllamaEndpoint(nextEndpoint);
+      setOllamaModel(nextModel);
+
+      const loaded = await loadModels(nextEndpoint);
+      const selectedModel = loaded.selected || nextModel;
+
+      if (statusData.available_tools?.length) {
+        setChatTools(activeChatIdRef.current, statusData.available_tools);
       }
-      if (statusData.current_model) {
-        setOllamaModel(statusData.current_model);
-        // Update ref to prevent unnecessary reconnection
-        previousModelRef.current = statusData.current_model;
-      }
-      if (statusData.llm_endpoint) {
-        setLlmEndpoint(statusData.llm_endpoint);
-        // Load models if endpoint is set
-        await loadModels(statusData.llm_endpoint);
-      } else {
-        // Load local models if no Docker endpoint
-        await loadModels(null);
-      }
-      
-      // Set tools from status (already cached, no extra API call needed)
-      if (statusData.available_tools && statusData.available_tools.length > 0) {
-        setTools(statusData.available_tools.map(name => ({ name })));
-      }
-      
-      // Stop loading here - show page immediately
-      setLoading(false);
-      
-      // Auto-connect in background if not connected (non-blocking)
-      if (!statusData.connected) {
-        const defaultUrl = 'http://50.116.13.109:32349/mcp/sse';
-        const defaultModel = 'qwen2.5:7b-instruct';
-        // Connect in background without blocking UI
-        connectMCP(defaultUrl, defaultModel)
-          .then((result) => {
-            setConnected(true);
-            setStatus({
-              ...statusData,
-              connected: true,
-              available_tools: result.available_tools || [],
-            });
-            setAnylogUrl(defaultUrl);
-            setOllamaModel(defaultModel);
-            // Tools already returned from connect, no need for separate loadTools() call
-            if (result.available_tools && result.available_tools.length > 0) {
-              setTools(result.available_tools.map(name => ({ name })));
-            }
-          })
-          .catch((connectErr) => {
-            console.error('Auto-connect failed:', connectErr);
-            // Show error but allow manual retry
-            setError(`Auto-connect failed: ${connectErr.message}. Please try connecting manually.`);
-          });
-      } else {
-        // Already connected - load full tool details if needed (but don't block)
-        // Tools are already in status, but we might want full details
-        loadTools().catch(err => {
-          console.warn('Failed to load tool details:', err);
-          // Non-critical, don't show error
-        });
-      }
-    } catch (err) {
-      console.error('Failed to load status:', err);
-      setLoading(false);
-      // Try auto-connect in background anyway
-      const defaultUrl = 'http://50.116.13.109:32349/mcp/sse';
-      const defaultModel = 'qwen2.5:7b-instruct';
-      connectMCP(defaultUrl, defaultModel)
-        .then((result) => {
+
+      if (!statusData.connected && selectedModel && nextAnylogUrl) {
+        try {
+          setConnecting(true);
+          const result = await connectMCP(nextAnylogUrl, selectedModel, normalizeEndpoint(nextEndpoint));
           setConnected(true);
-          setStatus({
-            connected: true,
-            available_tools: result.available_tools || [],
-            ollama_available: true,
-            mcp_available: true,
-            current_model: defaultModel,
-            anylog_url: defaultUrl
-          });
-          setAnylogUrl(defaultUrl);
-          setOllamaModel(defaultModel);
-          if (result.available_tools && result.available_tools.length > 0) {
-            setTools(result.available_tools.map(name => ({ name })));
-          }
-        })
-        .catch((connectErr) => {
-          console.error('Auto-connect failed:', connectErr);
-          setError(`Auto-connect failed: ${connectErr.message}. Please try connecting manually.`);
-        });
+          setStatus({ ...statusData, connected: true, available_tools: result.available_tools || [] });
+          setChatTools(activeChatIdRef.current, result.available_tools || []);
+        } catch (connectError) {
+          setConnected(false);
+          setError(`Auto-connect failed for ${nextAnylogUrl}: ${connectError.message}`);
+        } finally {
+          setConnecting(false);
+        }
+      }
+    } catch (statusError) {
+      setError(`Failed to load MCP status: ${statusError.message}`);
+      await loadModels(initialEndpoint);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadTools = async () => {
     try {
       const toolsData = await listMCPTools();
-      setTools(toolsData.tools || []);
-    } catch (err) {
-      console.error('Failed to load tools:', err);
+      setChatTools(activeChatIdRef.current, toolsData.tools || []);
+    } catch (toolsError) {
+      console.warn('Failed to load MCP tools:', toolsError);
     }
   };
 
   const handleConnect = async () => {
+    setConnecting(true);
+    setError(null);
     try {
-      setError(null);
-      setLoading(true);
-      // Use endpoint only if Docker toggle is on and endpoint is provided
-      const endpoint = (useDocker && llmEndpoint && llmEndpoint.trim()) ? llmEndpoint : null;
+      const endpoint = normalizeEndpoint(ollamaEndpoint);
       const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint);
       setConnected(true);
       setStatus({
-        ...status,
+        ...(status || {}),
         connected: true,
+        current_model: ollamaModel,
+        anylog_url: anylogUrl,
+        llm_endpoint: endpoint,
         available_tools: result.available_tools || [],
       });
-      // Tools already returned from connect, no need for separate loadTools() call
-      if (result.available_tools && result.available_tools.length > 0) {
-        setTools(result.available_tools.map(name => ({ name })));
-      } else {
-        // Only load full tool details if not provided
-        await loadTools();
-      }
+      setChatTools(activeChatIdRef.current, result.available_tools || []);
+      if (!result.available_tools?.length) await loadTools();
       setShowConfig(false);
-      // Clear any previous errors on successful connection
-      setError(null);
-    } catch (err) {
-      console.error('Failed to connect:', err);
-      const errorMessage = err.message || err.toString() || 'Unknown error occurred';
-      console.error('Error details:', {
-        message: errorMessage,
-        error: err,
-        stack: err.stack
-      });
-      setError(errorMessage);
-      // Keep error visible - don't clear it
+    } catch (connectError) {
+      setConnected(false);
+      setError(connectError.message || 'Failed to connect to MCP.');
     } finally {
-      setLoading(false);
+      setConnecting(false);
     }
   };
 
   const handleDisconnect = async () => {
+    setConnecting(true);
+    setError(null);
     try {
-      setError(null);
-      setLoading(true);
       await disconnectMCP();
       setConnected(false);
-      setStatus({
-        ...status,
-        connected: false,
-        available_tools: [],
-      });
-      setTools([]);
-      setAnswers([]);
-    } catch (err) {
-      console.error('Failed to disconnect:', err);
-      setError(err.message);
+      setChatTools(activeChatIdRef.current, []);
+      setStatus({ ...(status || {}), connected: false, available_tools: [] });
+    } catch (disconnectError) {
+      setError(disconnectError.message || 'Failed to disconnect.');
     } finally {
-      setLoading(false);
+      setConnecting(false);
     }
+  };
+
+  const handleRefreshModels = async () => {
+    setError(null);
+    await loadModels(ollamaEndpoint);
+  };
+
+  const updateChatMessages = (chatId, updater) => {
+    const isActiveChat = activeChatIdRef.current === chatId;
+    const activeNextMessages = isActiveChat
+      ? updater(normalizeMessages(answersRef.current))
+      : null;
+
+    if (activeNextMessages) {
+      setAnswers(activeNextMessages);
+      answersRef.current = activeNextMessages;
+    }
+
+    setChatSessions((prev) => prev.map((chat) => {
+      if (chat.id !== chatId) return chat;
+      const nextMessages = activeNextMessages || updater(normalizeMessages(chat.messages));
+      return {
+        ...chat,
+        messages: nextMessages,
+        updatedAt: Date.now(),
+        title: chat.title === 'New chat' || chat.title?.startsWith('Chat ')
+          ? deriveChatTitle(nextMessages, chat.title || 'New chat')
+        : chat.title,
+      };
+    }));
+  };
+
+  const updateAssistantMessage = (chatId, id, updater) => {
+    updateChatMessages(chatId, (messages) => messages.map((msg) => (
+      msg.id === id ? { ...msg, ...updater(msg) } : msg
+    )));
+  };
+
+  const updateObservation = (chatId, assistantId, event) => {
+    updateAssistantMessage(chatId, assistantId, (msg) => {
+      const observations = msg.observations || [];
+      const requestId = event.request_id || event.requestId || `${event.tool_name || 'mcp'}-${observations.length}`;
+      const existingIndex = observations.findIndex((item) => item.id === requestId);
+      const existing = existingIndex >= 0 ? observations[existingIndex] : {};
+      const nextObservation = {
+        ...existing,
+        id: requestId,
+        toolName: event.tool_name || event.toolName || existing.toolName,
+        arguments: event.arguments ?? existing.arguments,
+        response: event.response ?? existing.response,
+        error: event.error ?? existing.error,
+        elapsedMs: event.elapsed_ms ?? event.elapsedMs ?? existing.elapsedMs,
+        totalElapsedMs: event.total_elapsed_ms ?? event.totalElapsedMs ?? existing.totalElapsedMs,
+        iteration: event.iteration ?? existing.iteration,
+        status: event.type === 'mcp_request' ? 'pending' : event.type === 'mcp_error' ? 'error' : 'complete',
+      };
+
+      const nextObservations = existingIndex >= 0
+        ? observations.map((item, index) => (index === existingIndex ? nextObservation : item))
+        : [...observations, nextObservation];
+
+      return {
+        observations: nextObservations,
+        totalElapsedMs: event.total_elapsed_ms ?? event.elapsed_ms ?? msg.totalElapsedMs,
+      };
+    });
+  };
+
+  const toggleObservations = (assistantId) => {
+    updateAssistantMessage(activeChatIdRef.current, assistantId, (msg) => ({
+      showObservations: !msg.showObservations,
+    }));
   };
 
   const handleAsk = async (retryPrompt = null) => {
     const userPrompt = retryPrompt || prompt.trim();
-    if (!userPrompt || asking) return;
-    
-    // Don't allow asking if no model is selected
-    if (!ollamaModel || !ollamaModel.trim()) {
-      setError('Please select a model before asking a question.');
+    const requestChatId = activeChatIdRef.current;
+    if (!userPrompt || !requestChatId || runningChatIds.includes(requestChatId)) return;
+    if (!ollamaModel.trim()) {
+      setError('Select or enter an Ollama model before asking.');
       return;
     }
 
-    if (!retryPrompt) {
-      setPrompt('');
-    }
-    
-    // Create new AbortController for this request
-    abortControllerRef.current = new AbortController();
-    setAsking(true);
+    const requestChat = chatSessions.find((chat) => chat.id === requestChatId);
+    const requestMessages = normalizeMessages(requestChat?.messages || answersRef.current);
+    const requestConfig = {
+      anylogUrl,
+      ollamaModel,
+      ollamaEndpoint,
+      instructions,
+    };
+    const promptForModel = requestConfig.instructions?.trim()
+      ? `Instructions:\n${requestConfig.instructions.trim()}\n\nUser request:\n${userPrompt}`
+      : userPrompt;
+
+    const conversationHistory = requestMessages
+      .filter((msg) => msg.type === 'user' || msg.type === 'assistant')
+      .map((msg) => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.content,
+      }));
+
+    if (!retryPrompt) setPrompt('');
+    setRunningChatIds((prev) => (prev.includes(requestChatId) ? prev : [...prev, requestChatId]));
     setError(null);
+    setStreamNote('Preparing request');
 
-    // Add user message to chat immediately
-    setAnswers(prev => {
-      const newAnswers = [...prev, { type: 'user', content: userPrompt }];
-      answersRef.current = newAnswers;
-      return newAnswers;
-    });
+    const assistantId = `assistant-${Date.now()}`;
+    const userMessage = { type: 'user', content: userPrompt, id: `user-${Date.now()}` };
+    const assistantMessage = {
+      type: 'assistant',
+      content: '',
+      id: assistantId,
+      streaming: true,
+      observations: [],
+      showObservations: false,
+      totalElapsedMs: 0,
+    };
+    updateChatMessages(requestChatId, (messages) => [...messages, userMessage, assistantMessage]);
 
-    // Add thinking message
-    setAnswers(prev => {
-      const withThinking = [...prev, { type: 'thinking', content: 'Thinking...' }];
-      answersRef.current = withThinking;
-      return withThinking;
-    });
+    const abortController = new AbortController();
+    abortControllersRef.current[requestChatId] = abortController;
+    let streamError = '';
 
     try {
-      // Build conversation history from current answers (excluding thinking and errors)
-      const currentAnswers = answersRef.current;
-      const conversationHistory = currentAnswers
-        .filter(msg => msg.type === 'user' || msg.type === 'assistant')
-        .map(msg => ({
-          role: msg.type === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }));
+      const endpoint = normalizeEndpoint(requestConfig.ollamaEndpoint);
+      const streamResult = await askMCPStream({
+        prompt: promptForModel,
+        anylogSseUrl: requestConfig.anylogUrl || null,
+        ollamaModel: requestConfig.ollamaModel || null,
+        conversationHistory: conversationHistory.length ? conversationHistory : null,
+        llmEndpoint: endpoint,
+        abortSignal: abortController.signal,
+        onEvent: (event) => {
+          if (event.type === 'status') {
+            setStreamNote(event.message || '');
+          }
+          if (event.type === 'tools') {
+            setChatTools(requestChatId, event.tools || []);
+          }
+          if (event.type === 'command_start') {
+            updateAssistantMessage(requestChatId, assistantId, () => ({
+              totalElapsedMs: 0,
+            }));
+          }
+          if (event.type === 'mcp_request' || event.type === 'mcp_response' || event.type === 'mcp_error') {
+            updateObservation(requestChatId, assistantId, event);
+          }
+          if (event.type === 'command_done') {
+            updateAssistantMessage(requestChatId, assistantId, () => ({
+              totalElapsedMs: event.elapsed_ms || 0,
+            }));
+          }
+          if (event.type === 'delta') {
+            updateAssistantMessage(requestChatId, assistantId, (msg) => ({
+              content: `${msg.content || ''}${event.content || ''}`,
+              streaming: true,
+            }));
+          }
+          if (event.type === 'done') {
+            updateAssistantMessage(requestChatId, assistantId, () => ({
+              content: event.answer || '',
+              streaming: false,
+              totalElapsedMs: event.elapsed_ms || undefined,
+            }));
+            setStreamNote('');
+          }
+          if (event.type === 'error') {
+            streamError = event.message || 'Streaming request failed.';
+          }
+        },
+      });
 
-      // Use endpoint only if Docker toggle is on and endpoint is provided
-      const endpoint = (useDocker && llmEndpoint && llmEndpoint.trim()) ? llmEndpoint : null;
-      
-      // Call API with abort signal
-      const result = await askMCP(
-        userPrompt, 
-        anylogUrl || null, 
-        ollamaModel || null,
-        conversationHistory.length > 0 ? conversationHistory : null,
-        endpoint,
-        abortControllerRef.current?.signal
-      );
-      
-      // Validate response
-      if (!result || (!result.answer && !result.content)) {
-        throw new Error('Invalid response from server: missing answer field');
-      }
-      
-      const responseContent = result.answer || result.content || 'No response received';
-      
-      // Update state: remove thinking, add assistant response
-      setAnswers(prev => {
-        const withoutThinking = prev.filter(msg => msg.type !== 'thinking');
-        const updated = [...withoutThinking, { type: 'assistant', content: responseContent }];
-        answersRef.current = updated;
-        
-        // Save to localStorage immediately
+      if (streamError) throw new Error(streamError);
+      updateAssistantMessage(requestChatId, assistantId, (msg) => ({
+        content: msg.content || streamResult.answer || '',
+        streaming: false,
+      }));
+    } catch (askError) {
+      if (askError.name === 'AbortError' || askError.message?.includes('aborted')) {
+        updateChatMessages(requestChatId, (messages) => messages.filter((msg) => msg.id !== assistantId));
+        setStreamNote('');
+      } else {
         try {
-          const persistent = updated.filter(msg => msg.type !== 'thinking');
-          if (persistent.length > 0) {
-            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(persistent.slice(-20)));
-          }
-        } catch (e) {
-          console.error('Failed to save to localStorage:', e);
+          const fallback = await askMCP(
+            promptForModel,
+            requestConfig.anylogUrl || null,
+            requestConfig.ollamaModel || null,
+            conversationHistory.length ? conversationHistory : null,
+            normalizeEndpoint(requestConfig.ollamaEndpoint),
+            abortController.signal
+          );
+          updateAssistantMessage(requestChatId, assistantId, () => ({
+            content: fallback.answer || fallback.content || '',
+            streaming: false,
+          }));
+        } catch (fallbackError) {
+          setError(fallbackError.message || askError.message || 'Failed to process question.');
+          updateChatMessages(requestChatId, (messages) => messages.map((msg) => (
+            msg.id === assistantId
+              ? { type: 'error', content: fallbackError.message || askError.message, failedPrompt: userPrompt, id: assistantId }
+              : msg
+          )));
         }
-        
-        return updated;
-      });
-      
-      setAsking(false);
-      abortControllerRef.current = null;
-      
-    } catch (err) {
-      // Check if request was aborted
-      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-        console.log('Request was cancelled by user');
-        // Remove thinking message and restore state
-        setAnswers(prev => {
-          const withoutThinking = prev.filter(msg => msg.type !== 'thinking');
-          answersRef.current = withoutThinking;
-          return withoutThinking;
-        });
-        setAsking(false);
-        abortControllerRef.current = null;
-        return;
       }
-      
-      console.error('Failed to ask question:', err);
-      setError(err.message);
-      
-      // Update state: remove thinking, add error
-      setAnswers(prev => {
-        const withoutThinking = prev.filter(msg => msg.type !== 'thinking');
-        const errorMsg = {
-          type: 'error',
-          content: err.message,
-          failedPrompt: userPrompt
-        };
-        const updated = [...withoutThinking, errorMsg];
-        answersRef.current = updated;
-        
-        // Save to localStorage immediately
-        try {
-          const persistent = updated.filter(msg => msg.type !== 'thinking');
-          if (persistent.length > 0) {
-            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(persistent.slice(-20)));
-          }
-        } catch (e) {
-          console.error('Failed to save to localStorage:', e);
-        }
-        
-        return updated;
-      });
-      
-      setAsking(false);
-      abortControllerRef.current = null;
+    } finally {
+      setRunningChatIds((prev) => prev.filter((chatId) => chatId !== requestChatId));
+      setStreamNote('');
+      delete abortControllersRef.current[requestChatId];
     }
   };
 
-  const handleCancel = () => {
-    if (abortControllerRef.current) {
-      console.log('Cancelling request...');
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      
-      // Remove thinking message
-      setAnswers(prev => {
-        const withoutThinking = prev.filter(msg => msg.type !== 'thinking');
-        answersRef.current = withoutThinking;
-        return withoutThinking;
-      });
-      
-      setAsking(false);
-      setError('Request cancelled by user.');
-    }
+  const handleCancel = (chatId = activeChatIdRef.current) => {
+    abortControllersRef.current[chatId]?.abort();
+    delete abortControllersRef.current[chatId];
+    setRunningChatIds((prev) => prev.filter((runningChatId) => runningChatId !== chatId));
+    setStreamNote('');
   };
 
+  const handleSelectChat = (chatId) => {
+    const chat = chatSessions.find((item) => item.id === chatId);
+    if (!chat) return;
+    setActiveChatId(chat.id);
+    activeChatIdRef.current = chat.id;
+    userEditedAnylogUrlRef.current = Boolean(chat.config?.anylogUrl && chat.config.anylogUrl !== nodeMcpUrl);
+    applyChatSession(chat);
+    setError(null);
+  };
 
-  const handleRetry = (failedPrompt) => {
-    if (failedPrompt) {
-      handleAsk(failedPrompt);
+  const handleNewChat = () => {
+    const sessionNumber = chatSessions.length + 1;
+    const newChat = createChatSession({
+      title: `Chat ${sessionNumber}`,
+      anylogUrl: nodeMcpUrl || anylogUrl || '',
+      ollamaModel: ollamaModel || PREFERRED_MODEL,
+      ollamaEndpoint,
+      assistantName: assistantName || DEFAULT_ASSISTANT_NAME,
+      instructions,
+      mcpTools: tools,
+    });
+
+    setChatSessions((prev) => [...prev, newChat]);
+    setActiveChatId(newChat.id);
+    activeChatIdRef.current = newChat.id;
+    userEditedAnylogUrlRef.current = Boolean(newChat.config.anylogUrl && newChat.config.anylogUrl !== nodeMcpUrl);
+    applyChatSession(newChat);
+    setPrompt('');
+    setError(null);
+  };
+
+  const handleDeleteChat = (chatId = activeChatId) => {
+    if (runningChatIds.includes(chatId)) {
+      setError('Stop the running request before deleting this chat.');
+      return;
+    }
+    const chat = chatSessions.find((item) => item.id === chatId);
+    if (!chat) return;
+    if (!window.confirm(`Delete "${chat.title || 'this chat'}"? This cannot be undone.`)) return;
+
+    const remaining = chatSessions.filter((item) => item.id !== chatId);
+    if (remaining.length === 0) {
+      const replacement = createChatSession({
+        anylogUrl: nodeMcpUrl || '',
+        ollamaModel: PREFERRED_MODEL,
+      });
+      setChatSessions([replacement]);
+      setActiveChatId(replacement.id);
+      activeChatIdRef.current = replacement.id;
+      userEditedAnylogUrlRef.current = false;
+      applyChatSession(replacement);
+      return;
+    }
+
+    setChatSessions(remaining);
+    if (chatId === activeChatId) {
+      const nextChat = remaining[0];
+      setActiveChatId(nextChat.id);
+      activeChatIdRef.current = nextChat.id;
+      userEditedAnylogUrlRef.current = Boolean(nextChat.config?.anylogUrl && nextChat.config.anylogUrl !== nodeMcpUrl);
+      applyChatSession(nextChat);
     }
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Clear chat history? This cannot be undone.')) {
-      setAnswers([]);
-      localStorage.removeItem(HISTORY_STORAGE_KEY);
+    if (runningChatIds.includes(activeChatId)) {
+      setError('Stop the running request before clearing this chat.');
+      return;
     }
+    if (!window.confirm('Clear this chat history?')) return;
+    setAnswers([]);
+    localStorage.removeItem(HISTORY_STORAGE_KEY);
+  };
+
+  const handleRenameActiveChat = (title) => {
+    setChatSessions((prev) => prev.map((chat) => (
+      chat.id === activeChatId
+        ? { ...chat, title: title || 'New chat', updatedAt: Date.now() }
+        : chat
+    )));
+  };
+
+  const handleSaveInstructions = () => {
+    setChatSessions((prev) => prev.map((chat) => (
+      chat.id === activeChatId
+        ? {
+          ...chat,
+          updatedAt: Date.now(),
+          config: {
+            ...(chat.config || {}),
+            instructions,
+          },
+        }
+        : chat
+    )));
+    setInstructionsSaved(true);
+    setTimeout(() => setInstructionsSaved(false), 1800);
   };
 
   const handleExportToPDF = async () => {
-    if (answers.length === 0) {
+    if (!answers.length) {
       setError('No chat history to export.');
       return;
     }
 
     try {
-      // Dynamic import of jsPDF to avoid loading it if not needed
       const { default: jsPDF } = await import('jspdf');
-      
       const doc = new jsPDF();
+      const margin = 18;
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      const maxWidth = pageWidth - (margin * 2);
-      let yPosition = margin;
-      const lineHeight = 7;
-      const spacing = 8;
+      const maxWidth = pageWidth - margin * 2;
+      let y = margin;
 
-      // Add title
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      doc.text('MCP Client Chat History', margin, yPosition);
-      yPosition += lineHeight * 2;
-
-      // Add metadata
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const timestamp = new Date().toLocaleString();
-      doc.text(`Exported: ${timestamp}`, margin, yPosition);
-      yPosition += lineHeight;
-      
-      // Add connection info if available
-      if (anylogUrl) {
-        doc.text(`AnyLog URL: ${anylogUrl}`, margin, yPosition);
-        yPosition += lineHeight;
-      }
-      if (ollamaModel) {
-        doc.text(`Model: ${ollamaModel}`, margin, yPosition);
-        yPosition += lineHeight;
-      }
-      if (llmEndpoint) {
-        doc.text(`LLM Endpoint: ${llmEndpoint}`, margin, yPosition);
-        yPosition += lineHeight;
-      }
-      
-      yPosition += lineHeight;
-
-      // Process each message (filter out thinking messages)
-      const messagesToExport = answers.filter(msg => msg.type !== 'thinking');
-      
-      messagesToExport.forEach((answer, index) => {
-        // Check if we need a new page
-        if (yPosition > pageHeight - margin - lineHeight * 8) {
-          doc.addPage();
-          yPosition = margin;
-        }
-
-        // Add message header with background color indicator
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        
-        // Set color based on message type
-        if (answer.type === 'user') {
-          doc.setTextColor(0, 123, 255); // Blue
-        } else if (answer.type === 'error') {
-          doc.setTextColor(220, 53, 69); // Red
-        } else {
-          doc.setTextColor(40, 167, 69); // Green
-        }
-        
-        const role = answer.type === 'user' ? 'You' : answer.type === 'error' ? 'Error' : 'Assistant';
-        doc.text(role, margin, yPosition);
-        yPosition += lineHeight * 1.2;
-
-        // Add message content
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(0, 0, 0); // Black for content
-        
-        // Convert markdown-like content to plain text (simple conversion)
-        let content = answer.content || '';
-        // Remove markdown code blocks but preserve content
-        content = content.replace(/```[\w]*\n?([\s\S]*?)```/g, (match, code) => {
-          return `[Code Block]\n${code.trim()}`;
-        });
-        // Remove markdown inline code
-        content = content.replace(/`([^`]+)`/g, '$1');
-        // Remove markdown links but keep text
-        content = content.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-        // Remove markdown bold/italic but keep text
-        content = content.replace(/\*\*([^\*]+)\*\*/g, '$1');
-        content = content.replace(/\*([^\*]+)\*/g, '$1');
-        // Remove markdown headers but keep text
-        content = content.replace(/^#+\s+/gm, '');
-        // Remove markdown list markers
-        content = content.replace(/^[\s]*[-*+]\s+/gm, '• ');
-        // Remove markdown horizontal rules
-        content = content.replace(/^---$/gm, '');
-        
-        // Split content into lines and wrap text
-        const lines = doc.splitTextToSize(content, maxWidth);
-        
+      const writeWrapped = (text, size = 9, style = 'normal') => {
+        doc.setFont('helvetica', style);
+        doc.setFontSize(size);
+        const lines = doc.splitTextToSize(text, maxWidth);
         lines.forEach((line) => {
-          if (yPosition > pageHeight - margin - lineHeight) {
+          if (y > pageHeight - margin) {
             doc.addPage();
-            yPosition = margin;
+            y = margin;
           }
-          doc.text(line, margin, yPosition);
-          yPosition += lineHeight;
+          doc.text(line, margin, y);
+          y += size * 0.45 + 3;
+        });
+      };
+
+      writeWrapped('MCP Client Chat Export', 18, 'bold');
+      writeWrapped(`Exported: ${new Date().toLocaleString()}`, 9);
+      writeWrapped(`Model: ${ollamaModel || 'Not selected'}`, 9);
+      writeWrapped(`Ollama endpoint: ${normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama'}`, 9);
+      y += 4;
+
+      answers
+        .filter((msg) => msg.type !== 'thinking')
+        .forEach((msg) => {
+          const role = msg.type === 'user' ? 'You' : msg.type === 'error' ? 'Error' : 'Assistant';
+          if (y > pageHeight - margin - 20) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.setTextColor(msg.type === 'error' ? 180 : 30, msg.type === 'user' ? 90 : 30, msg.type === 'assistant' ? 90 : 30);
+          writeWrapped(role, 11, 'bold');
+          doc.setTextColor(0, 0, 0);
+          writeWrapped(stripMarkdown(msg.content), 9);
+          y += 5;
         });
 
-        // Add spacing between messages
-        yPosition += spacing;
-      });
-
-      // Save the PDF
-      const filename = `mcp-chat-${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(filename);
-      
-      // Show success message
-      setError(null);
-    } catch (error) {
-      console.error('Failed to export PDF:', error);
-      setError('Failed to export PDF: ' + error.message);
+      doc.save(`mcp-chat-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (pdfError) {
+      setError(`Failed to export PDF: ${pdfError.message}`);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAsk();
-    }
-  };
-
-  if (loading && !status) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        padding: '20px'
-      }}>
-        <p>Loading MCP Client...</p>
-      </div>
-    );
-  }
+  const canConnect = Boolean(anylogUrl.trim() && ollamaModel.trim() && !connecting);
+  const endpointLabel = normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama';
+  const activeChatRunning = runningChatIds.includes(activeChatId);
+  const activeChat = chatSessions.find((chat) => chat.id === activeChatId);
+  const canSendPrompt = Boolean(anylogUrl.trim() && ollamaModel.trim() && !activeChatRunning);
 
   return (
-    <div style={{
-      width: '100%',
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '0',
-      overflow: 'hidden',
-      backgroundColor: '#f8f9fa'
-    }}>
+    <div className="mcp-page">
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
+        .mcp-page {
+          height: 100vh;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          background: #eef2f6;
+          color: #172033;
+          overflow: hidden;
+        }
+        .mcp-topbar {
+          min-height: 72px;
+          padding: 14px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 16px;
+          background: #101828;
+          color: #ffffff;
+          border-bottom: 1px solid #24324a;
+        }
+        .mcp-title {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 0;
+        }
+        .mcp-title h2 {
+          margin: 0;
+          font-size: 20px;
+          line-height: 1.2;
+          letter-spacing: 0;
+        }
+        .mcp-title p {
+          margin: 3px 0 0;
+          color: #b8c3d8;
+          font-size: 13px;
+        }
+        .mcp-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .mcp-layout {
+          flex: 1;
+          min-height: 0;
+          display: grid;
+          grid-template-columns: 330px minmax(0, 1fr);
+        }
+        .mcp-sidebar {
+          min-height: 0;
+          overflow: auto;
+          padding: 18px;
+          background: #ffffff;
+          border-right: 1px solid #d7dde8;
+        }
+        .mcp-workspace {
+          min-width: 0;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          padding: 18px;
+          gap: 14px;
+        }
+        .panel {
+          background: #ffffff;
+          border: 1px solid #d7dde8;
+          border-radius: 8px;
+          box-shadow: 0 10px 28px rgba(16, 24, 40, 0.06);
+        }
+        .panel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 13px 14px;
+          border-bottom: 1px solid #e5e9f1;
+          font-weight: 700;
+          font-size: 14px;
+        }
+        .panel-body {
+          padding: 14px;
+        }
+        .field {
+          margin-bottom: 14px;
+        }
+        .field label {
+          display: block;
+          font-size: 12px;
+          color: #46556e;
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+        .field input,
+        .field textarea {
+          width: 100%;
+          box-sizing: border-box;
+          border: 1px solid #c8d1df;
+          border-radius: 6px;
+          padding: 10px 11px;
+          font: inherit;
+          color: #172033;
+          background: #fbfcfe;
+        }
+        .field input:focus,
+        .chat-input textarea:focus {
+          outline: 2px solid #89b4ff;
+          outline-offset: 1px;
+          border-color: #3b82f6;
+        }
+        .hint {
+          margin-top: 6px;
+          color: #66748b;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .status-grid {
+          display: grid;
+          gap: 8px;
+          margin-bottom: 14px;
+        }
+        .chat-session-list {
+          display: grid;
+          gap: 8px;
+          max-height: 220px;
+          overflow: auto;
+          margin-bottom: 12px;
+        }
+        .chat-session-button {
+          width: 100%;
+          border: 1px solid #d7dde8;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #172033;
+          padding: 9px 10px;
+          text-align: left;
+          cursor: pointer;
+        }
+        .chat-session-button.active {
+          border-color: #2563eb;
+          background: #eff6ff;
+        }
+        .chat-session-title {
+          display: block;
+          font-size: 13px;
+          font-weight: 800;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .chat-session-meta {
+          display: block;
+          margin-top: 3px;
+          color: #66748b;
+          font-size: 11px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .chat-session-actions {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 8px;
+        }
+        .status-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          color: #46556e;
+          font-size: 13px;
+        }
+        .status-row strong {
+          color: #172033;
+          text-align: right;
+          word-break: break-word;
+        }
+        .tools-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          max-height: 146px;
+          overflow: auto;
+        }
+        .tool-chip,
+        .status-pill {
+          border-radius: 999px;
+          padding: 6px 9px;
+          font-size: 12px;
+          font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          white-space: nowrap;
+        }
+        .tool-chip {
+          background: #edf2f7;
+          color: #344054;
+        }
+        .status-pill.connected {
+          color: #0f5132;
+          background: #d1fae5;
+        }
+        .status-pill.disconnected {
+          color: #842029;
+          background: #fde2e2;
+        }
+        .primary-button,
+        .secondary-button,
+        .danger-button,
+        .icon-action {
+          border: 0;
+          border-radius: 6px;
+          min-height: 38px;
+          padding: 9px 12px;
+          font: inherit;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+        .primary-button {
+          color: #ffffff;
+          background: #2563eb;
+        }
+        .secondary-button {
+          color: #172033;
+          background: #e8eef7;
+        }
+        .danger-button {
+          color: #ffffff;
+          background: #dc2626;
+        }
+        .icon-action {
+          color: #24324a;
+          background: #f1f5f9;
+          border: 1px solid #d7dde8;
+        }
+        button:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+        .error-banner {
+          padding: 12px 14px;
+          color: #842029;
+          background: #fff1f2;
+          border: 1px solid #fecdd3;
+          border-radius: 8px;
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+          font-size: 13px;
+        }
+        .chat-panel {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .messages {
+          flex: 1;
+          min-height: 0;
+          overflow: auto;
+          padding: 18px;
+        }
+        .empty-state {
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #66748b;
+          text-align: center;
+        }
+        .message {
+          margin-bottom: 14px;
+          border-radius: 8px;
+          border: 1px solid #dfe5ee;
+          overflow: hidden;
+          background: #ffffff;
+        }
+        .message-wrap {
+          display: grid;
+          grid-template-columns: 38px minmax(0, 1fr);
+          gap: 10px;
+          align-items: start;
+          margin-bottom: 14px;
+        }
+        .message-wrap .message {
+          margin-bottom: 0;
+        }
+        .message-info-button {
+          width: 34px;
+          height: 34px;
+          margin-top: 8px;
+          border-radius: 999px;
+          border: 1px solid #c8d1df;
+          background: #ffffff;
+          color: #2563eb;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+        .message-info-button.active {
+          background: #2563eb;
+          color: #ffffff;
+          border-color: #2563eb;
+        }
+        .message.user {
+          border-color: #bfdbfe;
+          background: #f8fbff;
+        }
+        .message.error {
+          border-color: #fecdd3;
+          background: #fff8f8;
+        }
+        .message-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          background: #f8fafc;
+          color: #344054;
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+        .message-body {
+          padding: 13px 14px;
+          line-height: 1.6;
+          overflow-wrap: anywhere;
+        }
+        .stream-cursor {
+          display: inline-block;
+          width: 8px;
+          height: 16px;
+          margin-left: 2px;
+          vertical-align: text-bottom;
+          background: #2563eb;
+          animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+          50% { opacity: 0; }
+        }
+        .stream-note {
+          color: #66748b;
+          font-size: 12px;
+          margin-top: 8px;
+        }
+        .observation-panel {
+          margin-top: 12px;
+          border: 1px solid #c8d1df;
+          border-radius: 8px;
+          background: #f8fafc;
+          overflow: hidden;
+        }
+        .observation-summary {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 10px 12px;
+          border-bottom: 1px solid #dfe5ee;
+          font-size: 13px;
+          font-weight: 800;
+          color: #24324a;
+        }
+        .observation-empty {
+          padding: 12px;
+          color: #66748b;
+          font-size: 13px;
+        }
+        .observation-list {
+          display: grid;
+          gap: 10px;
+          padding: 10px;
+          max-height: 420px;
+          overflow: auto;
+        }
+        .observation-item {
+          border: 1px solid #d7dde8;
+          border-left: 4px solid #94a3b8;
+          border-radius: 6px;
+          background: #ffffff;
+          padding: 10px;
+        }
+        .observation-item.complete {
+          border-left-color: #16a34a;
+        }
+        .observation-item.error {
+          border-left-color: #dc2626;
+        }
+        .observation-meta {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          color: #46556e;
+          font-size: 12px;
+          margin-bottom: 8px;
+        }
+        .observation-meta strong {
+          color: #172033;
+          font-size: 13px;
+        }
+        .observation-item details {
+          margin-top: 8px;
+        }
+        .observation-item summary {
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 800;
+          color: #344054;
+        }
+        .observation-item pre {
+          margin: 8px 0 0;
+          padding: 10px;
+          max-height: 260px;
+          overflow: auto;
+          border-radius: 6px;
+          background: #0f172a;
+          color: #dbeafe;
+          font-size: 12px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .chat-input {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          padding: 14px;
+          border-top: 1px solid #e5e9f1;
+        }
+        .chat-input textarea {
+          min-height: 64px;
+          max-height: 180px;
+          resize: vertical;
+          box-sizing: border-box;
+          border: 1px solid #c8d1df;
+          border-radius: 6px;
+          padding: 11px;
+          font: inherit;
+        }
+        .artifact-panel {
+          margin-top: 12px;
+          border: 1px solid #d7dde8;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #fbfcfe;
+        }
+        .artifact-header,
+        .artifact-title,
+        .artifact-files,
+        .artifact-file {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .artifact-header {
+          justify-content: space-between;
+          padding: 10px 12px;
+          border-bottom: 1px solid #e5e9f1;
+        }
+        .artifact-title {
+          font-weight: 800;
+          font-size: 13px;
+        }
+        .artifact-preview {
+          display: block;
+          width: 100%;
+          height: 360px;
+          border: 0;
+          background: #ffffff;
+        }
+        .artifact-files {
+          flex-wrap: wrap;
+          padding: 10px 12px;
+          border-top: 1px solid #e5e9f1;
+        }
+        .artifact-file {
+          border: 1px solid #c8d1df;
+          background: #ffffff;
+          color: #24324a;
+          border-radius: 6px;
+          padding: 7px 9px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        @media (max-width: 980px) {
+          .mcp-layout {
+            grid-template-columns: 1fr;
+          }
+          .mcp-sidebar {
+            max-height: 42vh;
+            border-right: 0;
+            border-bottom: 1px solid #d7dde8;
+          }
+        }
+        @media (max-width: 680px) {
+          .mcp-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .mcp-actions {
+            justify-content: flex-start;
+          }
+          .chat-input {
+            grid-template-columns: 1fr;
+          }
+          .message-wrap {
+            grid-template-columns: 1fr;
+          }
+          .message-info-button {
+            margin-top: 0;
+          }
         }
       `}</style>
-      {/* Header */}
-      <div style={{
-        padding: '20px',
-        backgroundColor: '#ffffff',
-        borderBottom: '2px solid #007bff',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexShrink: 0,
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-      }}>
-        <h2 style={{
-          margin: 0,
-          color: '#333',
-          fontSize: '24px',
-          fontWeight: '600',
-          borderBottom: '2px solid #007bff',
-          paddingBottom: '10px',
-          display: 'inline-block'
-        }}>
-          MCP Client
-        </h2>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {status && (
-            <div style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              backgroundColor: connected ? '#d4edda' : '#f8d7da',
-              color: connected ? '#155724' : '#721c24',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}>
-              {connected ? '● Connected' : '○ Disconnected'}
-            </div>
-          )}
-          <button
-            onClick={handleExportToPDF}
-            disabled={answers.length === 0}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              background: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: answers.length === 0 ? 'not-allowed' : 'pointer',
-              fontWeight: '500',
-              opacity: answers.length === 0 ? 0.6 : 1,
-              marginRight: '10px'
-            }}
-          >
-            📄 Export to PDF
+      <header className="mcp-topbar">
+        <div className="mcp-title">
+          <FaServer />
+          <div>
+            <h2>MCP Client</h2>
+            <p>{endpointLabel} | {ollamaModel || 'No model selected'}</p>
+          </div>
+        </div>
+        <div className="mcp-actions">
+          <span className={`status-pill ${connected ? 'connected' : 'disconnected'}`}>
+            {connected ? <FaCheckCircle /> : <FaExclamationTriangle />}
+            {connected ? 'Connected' : 'Disconnected'}
+          </span>
+          <button className="icon-action" type="button" onClick={handleExportToPDF} disabled={!answers.length} title="Export chat to PDF">
+            <FaFilePdf />
+            PDF
           </button>
-          <button
-            onClick={handleClearHistory}
-            disabled={answers.length === 0}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              background: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: answers.length === 0 ? 'not-allowed' : 'pointer',
-              fontWeight: '500',
-              opacity: answers.length === 0 ? 0.6 : 1
-            }}
-          >
-            🗑️ Clear History
+          <button className="icon-action" type="button" onClick={handleClearHistory} disabled={!answers.length} title="Clear chat history">
+            <FaTrash />
+            Clear
           </button>
-          <button
-            onClick={() => setShowConfig(!showConfig)}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              background: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
-          >
-            ⚙️ Config
+          <button className="icon-action" type="button" onClick={() => setShowConfig((value) => !value)} title="Toggle configuration">
+            <FaCog />
+            Config
           </button>
           {connected ? (
-            <button
-              onClick={handleDisconnect}
-              disabled={loading}
-              style={{
-                padding: '10px 20px',
-                fontSize: '14px',
-                background: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontWeight: '500',
-                opacity: loading ? 0.6 : 1
-              }}
-            >
+            <button className="danger-button" type="button" onClick={handleDisconnect} disabled={connecting}>
+              <FaPowerOff />
               Disconnect
             </button>
           ) : (
-            <button
-              onClick={handleConnect}
-              disabled={loading || !anylogUrl.trim() || !ollamaModel.trim()}
-              style={{
-                padding: '10px 20px',
-                fontSize: '14px',
-                background: '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: (loading || !anylogUrl.trim() || !ollamaModel.trim()) ? 'not-allowed' : 'pointer',
-                fontWeight: '500',
-                opacity: (loading || !anylogUrl.trim() || !ollamaModel.trim()) ? 0.6 : 1
-              }}
-            >
-              Connect
+            <button className="primary-button" type="button" onClick={handleConnect} disabled={!canConnect}>
+              <FaPlug />
+              {connecting ? 'Connecting' : 'Connect'}
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Configuration Panel */}
-      {showConfig && (
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#ffffff',
-          borderBottom: '1px solid #dee2e6',
-          flexShrink: 0
-        }}>
-          <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Configuration</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
-                AnyLog MCP SSE URL:
-              </label>
-              <input
-                type="text"
-                value={anylogUrl}
-                onChange={(e) => setAnylogUrl(e.target.value)}
-                placeholder="http://10.0.0.78:7849/mcp/sse"
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ced4da',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
-                LLM Source:
-              </label>
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', alignItems: 'center' }}>
-                <button
-                  onClick={() => handleToggleLLM(false)}
-                  style={{
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    background: !useDocker ? '#28a745' : '#6c757d',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: '500',
-                    opacity: !useDocker ? 1 : 0.6
-                  }}
-                >
-                  💻 Local Ollama
-                </button>
-                <button
-                  onClick={() => handleToggleLLM(true)}
-                  style={{
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    background: useDocker ? '#007bff' : '#6c757d',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: '500',
-                    opacity: useDocker ? 1 : 0.6
-                  }}
-                >
-                  🐳 Docker Ollama
+      <main className="mcp-layout">
+        {showConfig && (
+          <aside className="mcp-sidebar">
+            <section className="panel" style={{ marginBottom: 14 }}>
+              <div className="panel-header">
+                <span>Chats</span>
+                <button className="icon-action" type="button" onClick={handleNewChat} title="New chat">
+                  <FaPlus />
                 </button>
               </div>
-              {useDocker && (
-                <>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
-                    Docker LLM Endpoint:
-                  </label>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={llmEndpoint}
-                      onChange={(e) => setLlmEndpoint(e.target.value)}
-                      placeholder="http://localhost:11434"
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        border: '1px solid #ced4da',
-                        borderRadius: '4px',
-                        fontSize: '14px'
-                      }}
-                    />
+              <div className="panel-body">
+                <div className="chat-session-list">
+                  {chatSessions.map((chat) => (
                     <button
-                      onClick={() => loadModels(llmEndpoint || null)}
-                      disabled={loadingDockerModels || !llmEndpoint || !llmEndpoint.trim()}
-                      style={{
-                        padding: '10px 15px',
-                        fontSize: '14px',
-                        background: '#007bff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: (loadingDockerModels || !llmEndpoint || !llmEndpoint.trim()) ? 'not-allowed' : 'pointer',
-                        fontWeight: '500',
-                        opacity: (loadingDockerModels || !llmEndpoint || !llmEndpoint.trim()) ? 0.6 : 1,
-                        whiteSpace: 'nowrap'
-                      }}
+                      key={chat.id}
+                      className={`chat-session-button ${chat.id === activeChatId ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => handleSelectChat(chat.id)}
+                      title={chat.title}
                     >
-                      {loadingDockerModels ? 'Loading...' : '🔄 Refresh Models'}
+                      <span className="chat-session-title">{chat.title || 'New chat'}</span>
+                      <span className="chat-session-meta">
+                        {runningChatIds.includes(chat.id) ? 'Running | ' : ''}{(chat.config?.assistantName || DEFAULT_ASSISTANT_NAME)} | {(chat.config?.ollamaModel || PREFERRED_MODEL)}
+                      </span>
                     </button>
-                  </div>
-                  <div style={{ marginTop: '5px', fontSize: '12px', color: '#6c757d' }}>
-                    {loadingDockerModels 
-                      ? 'Loading models...' 
-                      : dockerModels.length > 0 
-                        ? `Found ${dockerModels.length} model(s) from Docker` 
-                        : 'No models found or endpoint unreachable'}
-                  </div>
-                </>
-              )}
-              {!useDocker && (
-                <div style={{ marginTop: '5px', fontSize: '12px', color: '#6c757d' }}>
-                  {loadingDockerModels 
-                    ? 'Loading models...' 
-                    : dockerModels.length > 0 
-                      ? `Found ${dockerModels.length} model(s) from local Ollama` 
-                      : 'No local models found. Make sure Ollama is running and install models with: ollama pull <model-name>'}
+                  ))}
                 </div>
-              )}
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
-                Ollama Model:
-              </label>
-              <select
-                value={ollamaModel}
-                onChange={(e) => setOllamaModel(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ced4da',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-              >
-                {dockerModels.length > 0 ? (
-                  // Show models from Docker or local Ollama
-                  dockerModels.map((model, index) => {
-                    // Try multiple possible fields for model name
-                    const modelName = model.name || model.model || model.digest || `model-${index}`;
-                    console.log(`📋 Model ${index}:`, model, '-> name:', modelName);
-                    if (!modelName || modelName === `model-${index}`) {
-                      console.warn(`⚠️ Model ${index} has no name!`, model);
-                    }
-                    return (
-                      <option key={modelName || `model-${index}`} value={modelName || `model-${index}`}>
-                        {modelName || `Unknown Model ${index + 1}`}
-                      </option>
-                    );
-                  })
-                ) : (
-                  // No models available - show empty state
-                  <option value="" disabled>
-                    {loadingDockerModels ? 'Loading models...' : 'No models available'}
-                  </option>
-                )}
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
+                <div className="field">
+                  <label htmlFor="chat-title">Chat name</label>
+                  <input
+                    id="chat-title"
+                    value={activeChat?.title || ''}
+                    onChange={(event) => handleRenameActiveChat(event.target.value)}
+                    placeholder="Chat name"
+                  />
+                </div>
+                <div className="chat-session-actions">
+                  <button className="secondary-button" type="button" onClick={handleNewChat}>
+                    <FaPlus />
+                    New chat
+                  </button>
+                  <button className="danger-button" type="button" onClick={() => handleDeleteChat()} disabled={activeChatRunning || chatSessions.length === 0} title="Delete current chat">
+                    <FaTrash />
+                  </button>
+                </div>
+              </div>
+            </section>
 
-      {/* Error Message */}
-      {error && (
-        <div style={{
-          padding: '15px 20px',
-          backgroundColor: '#f8d7da',
-          border: '2px solid #dc3545',
-          borderRadius: '6px',
-          margin: '20px',
-          color: '#721c24',
-          flexShrink: 0,
-          boxShadow: '0 2px 4px rgba(220, 53, 69, 0.2)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '20px' }}>⚠️</span>
-            <strong style={{ fontSize: '16px' }}>Connection Error</strong>
-          </div>
-          <div style={{ marginLeft: '30px', fontSize: '14px', lineHeight: '1.5' }}>
-            {error}
-          </div>
-          <button
-            onClick={() => setError(null)}
-            style={{
-              marginTop: '10px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              background: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+            <section className="panel">
+              <div className="panel-header">
+                <span>Connection</span>
+                <button className="icon-action" type="button" onClick={loadStatus} disabled={loading || connecting} title="Refresh status">
+                  <FaSyncAlt />
+                </button>
+              </div>
+              <div className="panel-body">
+                <div className="status-grid">
+                  <div className="status-row">
+                    <span>MCP package</span>
+                    <strong>{status?.mcp_available ? 'Available' : 'Unknown'}</strong>
+                  </div>
+                  <div className="status-row">
+                    <span>Ollama client</span>
+                    <strong>{status?.ollama_available ? 'Available' : 'Unknown'}</strong>
+                  </div>
+                  <div className="status-row">
+                    <span>Model source</span>
+                    <strong>{modelSource}</strong>
+                  </div>
+                  <div className="status-row">
+                    <span>Tools</span>
+                    <strong>{tools.length}</strong>
+                  </div>
+                </div>
 
-      {/* Status Info */}
-      {status && (
-        <div style={{
-          padding: '15px 20px',
-          backgroundColor: '#d1ecf1',
-          border: '1px solid #bee5eb',
-          borderRadius: '6px',
-          margin: '20px',
-          flexShrink: 0,
-          fontSize: '14px'
-        }}>
-          <strong>Status:</strong> {status.ollama_available ? '✅ Ollama available' : '❌ Ollama not available'} |{' '}
-          {status.mcp_available ? '✅ MCP available' : '❌ MCP not available'}
-          {connected && status.available_tools && status.available_tools.length > 0 && (
-            <span> | {status.available_tools.length} tool(s) available</span>
+                <div className="field">
+                  <label htmlFor="anylog-url">AnyLog MCP SSE URL</label>
+                  <input
+                    id="anylog-url"
+                    value={anylogUrl}
+                    onChange={(event) => {
+                      userEditedAnylogUrlRef.current = true;
+                      setAnylogUrl(event.target.value);
+                    }}
+                    placeholder="http://host:port/mcp/sse"
+                  />
+                  <div className="hint">
+                    Defaults to the query node selected in the page header: {nodeMcpUrl || 'no node selected'}.
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="ollama-endpoint">Ollama base URL</label>
+                  <input
+                    id="ollama-endpoint"
+                    value={ollamaEndpoint}
+                    onChange={(event) => setOllamaEndpoint(event.target.value)}
+                    placeholder="http://192.168.1.50:11434"
+                  />
+                  <div className="hint">Leave blank to use Ollama on the backend machine. Enter any IP and port where Ollama is running.</div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="ollama-model">Ollama model</label>
+                  <input
+                    id="ollama-model"
+                    list="ollama-model-options"
+                    value={ollamaModel}
+                    onChange={(event) => setOllamaModel(event.target.value)}
+                    placeholder={PREFERRED_MODEL}
+                  />
+                  <datalist id="ollama-model-options">
+                    {models.map((model, index) => {
+                      const name = getModelName(model, index);
+                      return <option key={name} value={name} />;
+                    })}
+                  </datalist>
+                  <div className="hint">
+                    {loadingModels ? 'Loading models...' : `${models.length} model(s) found. You can also type a model name manually.`}
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="assistant-name">Assistant name</label>
+                  <input
+                    id="assistant-name"
+                    value={assistantName}
+                    onChange={(event) => setAssistantName(event.target.value || DEFAULT_ASSISTANT_NAME)}
+                    placeholder={DEFAULT_ASSISTANT_NAME}
+                  />
+                  <div className="hint">Purely cosmetic. Name your agent whatever makes the console feel friendlier.</div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="chat-instructions">Instructions</label>
+                  <textarea
+                    id="chat-instructions"
+                    value={instructions}
+                    onChange={(event) => {
+                      setInstructions(event.target.value);
+                      setInstructionsSaved(false);
+                    }}
+                    placeholder="Add standing instructions that should be included with every request in this chat."
+                    rows={5}
+                  />
+                  <div className="hint">These instructions are prefixed to every request sent from this chat.</div>
+                  <button className="secondary-button" type="button" onClick={handleSaveInstructions}>
+                    Save instructions
+                  </button>
+                  {instructionsSaved && <div className="hint">Instructions saved.</div>}
+                </div>
+
+                <button className="secondary-button" type="button" onClick={handleRefreshModels} disabled={loadingModels}>
+                  <FaSyncAlt />
+                  Refresh models
+                </button>
+              </div>
+            </section>
+
+            <section className="panel" style={{ marginTop: 14 }}>
+              <div className="panel-header">MCP tools</div>
+              <div className="panel-body">
+                <div className="tools-list">
+                  {tools.length ? tools.map((tool, index) => (
+                    <span className="tool-chip" key={`${tool.name || tool}-${index}`}>
+                      {tool.name || tool}
+                    </span>
+                  )) : <span className="hint">No tools loaded yet.</span>}
+                </div>
+              </div>
+            </section>
+          </aside>
+        )}
+
+        <section className="mcp-workspace">
+          {error && (
+            <div className="error-banner">
+              <FaExclamationTriangle />
+              <div>{error}</div>
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Chat Area */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        padding: '20px'
-      }}>
-        {/* Messages */}
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          backgroundColor: '#ffffff',
-          borderRadius: '8px',
-          padding: '20px',
-          marginBottom: '20px',
-          border: '1px solid #dee2e6'
-        }}>
-          {answers.length === 0 ? (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '100%',
-              color: '#6c757d',
-              fontSize: '16px'
-            }}>
-              {connected ? 'Start asking questions...' : 'Connect to MCP to start chatting'}
+          <section className="panel chat-panel">
+            <div className="panel-header">
+              <span>Streaming chat</span>
+              <span>{activeChatRunning ? streamNote || 'Streaming response' : canSendPrompt ? 'Ready' : 'Configure MCP and model'}</span>
             </div>
-          ) : (
-            <div>
-              {answers.map((answer, index) => {
-                // Skip thinking messages - they're handled separately or already in answers
-                if (answer.type === 'thinking') {
+            <div className="messages">
+              {!answers.length ? (
+                <div className="empty-state">
+                  {canSendPrompt ? 'Ask a question or request a dashboard.' : 'Configure MCP and Ollama to start chatting.'}
+                </div>
+              ) : (
+                answers.map((answer, index) => {
+                  const messageId = answer.id || `message-${index}`;
+                  const assistantLabel = assistantName.trim() || DEFAULT_ASSISTANT_NAME;
                   return (
-                    <div
-                      key={`thinking-${answer.timestamp || index}`}
-                      style={{
-                        marginBottom: '20px',
-                        padding: '15px',
-                        borderRadius: '8px',
-                        backgroundColor: '#f8f9fa',
-                        borderLeft: '4px solid #6c757d',
-                        animation: 'pulse 1.5s ease-in-out infinite'
-                      }}
-                    >
-                      <div style={{ fontWeight: '600', marginBottom: '8px', color: '#6c757d' }}>
-                        Assistant
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span>{answer.content}</span>
-                        <span style={{ fontSize: '18px' }}>⏳</span>
-                      </div>
+                    <div className="message-wrap" key={messageId}>
+                      {answer.type === 'assistant' ? (
+                        <button
+                          type="button"
+                          className={`message-info-button ${answer.showObservations ? 'active' : ''}`}
+                          title={answer.showObservations ? 'Hide MCP request log' : 'Show MCP request log'}
+                          aria-label={answer.showObservations ? 'Hide MCP request log' : 'Show MCP request log'}
+                          onClick={() => toggleObservations(answer.id)}
+                        >
+                          <FaInfoCircle />
+                        </button>
+                      ) : <div />}
+                      <article className={`message ${answer.type}`}>
+                        <div className="message-header">
+                          <span>{answer.type === 'user' ? 'You' : answer.type === 'error' ? 'Error' : assistantLabel}</span>
+                          {answer.streaming ? (
+                            <span>streaming</span>
+                          ) : answer.type === 'assistant' && typeof answer.totalElapsedMs === 'number' ? (
+                            <span>{formatDuration(answer.totalElapsedMs)}</span>
+                          ) : null}
+                        </div>
+                        <div className="message-body">
+                          {answer.type === 'assistant' ? (
+                            <>
+                              <MarkdownRenderer content={answer.content} />
+                              {answer.streaming && <span className="stream-cursor" />}
+                              {answer.streaming && streamNote && <div className="stream-note">{streamNote}</div>}
+                              {answer.showObservations && (
+                                <ObservationPanel
+                                  observations={answer.observations || []}
+                                  totalElapsedMs={answer.totalElapsedMs}
+                                />
+                              )}
+                              <ArtifactPanel content={answer.content} messageIndex={index} />
+                            </>
+                          ) : (
+                            <div style={{ whiteSpace: 'pre-wrap' }}>{answer.content}</div>
+                          )}
+
+                          {answer.type === 'error' && answer.failedPrompt && (
+                            <button className="secondary-button" type="button" onClick={() => handleAsk(answer.failedPrompt)} disabled={activeChatRunning}>
+                              <FaSyncAlt />
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                      </article>
                     </div>
                   );
-                }
-                
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      marginBottom: '20px',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      backgroundColor: answer.type === 'user' ? '#e7f3ff' : answer.type === 'error' ? '#ffe7e7' : '#f8f9fa',
-                      borderLeft: `4px solid ${answer.type === 'user' ? '#007bff' : answer.type === 'error' ? '#dc3545' : '#28a745'}`
-                    }}
-                  >
-                    <div style={{
-                      fontWeight: '600',
-                      marginBottom: '8px',
-                      color: answer.type === 'user' ? '#007bff' : answer.type === 'error' ? '#dc3545' : '#28a745'
-                    }}>
-                      {answer.type === 'user' ? '👤 You' : answer.type === 'error' ? '❌ Error' : 'Assistant'}
-                    </div>
-                    <div style={{ lineHeight: '1.6' }}>
-                      {answer.type === 'assistant' ? (
-                        <MarkdownRenderer content={answer.content} />
-                      ) : (
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{answer.content}</div>
-                      )}
-                    </div>
-                    {answer.type === 'error' && answer.failedPrompt && (
-                      <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-                        <button
-                          onClick={() => handleRetry(answer.failedPrompt)}
-                          disabled={asking}
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: '13px',
-                            background: '#007bff',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: asking ? 'not-allowed' : 'pointer',
-                            fontWeight: '500',
-                            opacity: asking ? 0.6 : 1
-                          }}
-                        >
-                          🔄 Retry
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {/* Show additional thinking indicator if asking but no thinking message in answers yet */}
-              {asking && !answers.some(msg => msg.type === 'thinking') && (
-                <div style={{
-                  padding: '15px',
-                  borderRadius: '8px',
-                  backgroundColor: '#f8f9fa',
-                  borderLeft: '4px solid #6c757d',
-                  animation: 'pulse 1.5s ease-in-out infinite'
-                }}>
-                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#6c757d' }}>
-                    Assistant
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span>Thinking...</span>
-                    <span style={{ fontSize: '18px' }}>⏳</span>
-                  </div>
-                </div>
+                })
               )}
               <div ref={messagesEndRef} />
             </div>
-          )}
-        </div>
 
-        {/* Input Area */}
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          flexShrink: 0
-        }}>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={
-              !connected 
-                ? "Connect to MCP first..." 
-                : !ollamaModel || !ollamaModel.trim()
-                  ? "Please select a model first..."
-                  : "Ask a question..."
-            }
-            disabled={!connected || asking || !ollamaModel || !ollamaModel.trim()}
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: '1px solid #ced4da',
-              borderRadius: '6px',
-              fontSize: '14px',
-              resize: 'none',
-              minHeight: '60px',
-              fontFamily: 'inherit',
-              backgroundColor: (!connected || asking || !ollamaModel || !ollamaModel.trim()) ? '#f5f5f5' : 'white',
-              color: (!connected || asking || !ollamaModel || !ollamaModel.trim()) ? '#999' : 'inherit',
-              cursor: (!connected || asking || !ollamaModel || !ollamaModel.trim()) ? 'not-allowed' : 'text'
-            }}
-          />
-          {asking ? (
-            <button
-              onClick={handleCancel}
-              style={{
-                padding: '12px 24px',
-                fontSize: '14px',
-                background: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                opacity: 1
-              }}
-            >
-              Cancel
-            </button>
-          ) : (
-            <button
-              onClick={handleAsk}
-              disabled={!connected || asking || !prompt.trim() || !ollamaModel || !ollamaModel.trim()}
-              style={{
-                padding: '12px 24px',
-                fontSize: '14px',
-                background: (connected && prompt.trim() && ollamaModel && ollamaModel.trim() && !asking) ? '#007bff' : '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: (connected && prompt.trim() && ollamaModel && ollamaModel.trim() && !asking) ? 'pointer' : 'not-allowed',
-                fontWeight: '500',
-                opacity: (connected && prompt.trim() && ollamaModel && ollamaModel.trim() && !asking) ? 1 : 0.6
-              }}
-            >
-              Send
-            </button>
-          )}
-        </div>
-      </div>
+            <div className="chat-input">
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleAsk();
+                  }
+                }}
+                disabled={!canSendPrompt}
+                placeholder={canSendPrompt ? 'Ask AnyLog, request a dashboard, or ask for HTML/CSS/JavaScript...' : 'Configure MCP and model first...'}
+              />
+              {activeChatRunning ? (
+                <button className="danger-button" type="button" onClick={() => handleCancel(activeChatId)}>
+                  <FaStop />
+                  Stop
+                </button>
+              ) : (
+                <button className="primary-button" type="button" onClick={() => handleAsk()} disabled={!canSendPrompt || !prompt.trim()}>
+                  <FaPaperPlane />
+                  Send
+                </button>
+              )}
+              <div className="hint" style={{ gridColumn: '1 / -1', marginTop: '-4px' }}>
+                Return sends. Shift+Return adds a new line.
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
     </div>
   );
 };
 
 export default McpclientPage;
-

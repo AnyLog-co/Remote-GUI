@@ -183,3 +183,94 @@ export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, co
     throw error;
   }
 };
+
+/**
+ * Ask a question and stream progress/answer events from the MCP agent.
+ */
+export const askMCPStream = async ({
+  prompt,
+  anylogSseUrl = null,
+  ollamaModel = null,
+  conversationHistory = null,
+  llmEndpoint = null,
+  abortSignal = null,
+  onEvent = () => {},
+}) => {
+  const response = await fetch(`${API_URL}/mcpclient/ask-stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify({
+      prompt,
+      anylog_sse_url: anylogSseUrl,
+      ollama_model: ollamaModel,
+      conversation_history: conversationHistory,
+      llm_endpoint: llmEndpoint,
+    }),
+    signal: abortSignal,
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    try {
+      const error = await response.json();
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch (_) {
+      try {
+        const text = await response.text();
+        if (text) errorMessage = text;
+      } catch (_) {
+        // Use default error message.
+      }
+    }
+    throw new Error(errorMessage);
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming response is not available in this browser.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalAnswer = '';
+
+  const processBuffer = (flush = false) => {
+    const events = buffer.split('\n\n');
+    buffer = flush ? '' : events.pop() || '';
+
+    events.forEach((eventText) => {
+      const dataLine = eventText
+        .split('\n')
+        .find((line) => line.startsWith('data: '));
+
+      if (!dataLine) return;
+
+      try {
+        const event = JSON.parse(dataLine.slice(6));
+        if (event.type === 'delta') {
+          finalAnswer += event.content || '';
+        } else if (event.type === 'done') {
+          finalAnswer = event.answer || finalAnswer;
+        }
+        onEvent(event);
+      } catch (error) {
+        console.warn('Failed to parse MCP stream event:', error, eventText);
+      }
+    });
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    processBuffer(false);
+  }
+
+  buffer += decoder.decode();
+  processBuffer(true);
+
+  return { success: true, answer: finalAnswer };
+};

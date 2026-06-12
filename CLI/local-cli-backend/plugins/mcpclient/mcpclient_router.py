@@ -3,6 +3,7 @@ MCP Client Plugin Router
 Integrates Ollama with AnyLog MCP for AI-powered maintenance copilot
 """
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from urllib.parse import urlparse
@@ -30,6 +31,21 @@ def _is_valid_ollama_endpoint(url: str) -> bool:
                 return False
             if any(int(p) > 255 for p in parts):
                 return False
+        return True
+    except Exception:
+        return False
+
+
+def _is_valid_mcp_sse_url(url: str) -> bool:
+    """Validate that a string looks like an MCP SSE URL."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        if not parsed.hostname:
+            return False
+        if parsed.hostname.endswith(".") or parsed.hostname.startswith("."):
+            return False
         return True
     except Exception:
         return False
@@ -71,13 +87,13 @@ except Exception as e:
 class MCPConnectRequest(BaseModel):
     anylog_sse_url: Optional[str] = None
     ollama_model: Optional[str] = None
-    llm_endpoint: Optional[str] = None  # Docker container endpoint (e.g., "http://localhost:11434")
+    llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
 
 class MCPAskRequest(BaseModel):
     prompt: str
     anylog_sse_url: Optional[str] = None
     ollama_model: Optional[str] = None
-    llm_endpoint: Optional[str] = None  # Docker container endpoint (e.g., "http://localhost:11434")
+    llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
     conversation_history: Optional[List[Dict[str, str]]] = None  # List of {role: "user"|"assistant", content: "..."}
 
 class MCPStatusResponse(BaseModel):
@@ -85,9 +101,10 @@ class MCPStatusResponse(BaseModel):
     available_tools: List[str]
     ollama_available: bool
     mcp_available: bool
+    ollama_reachable: Optional[bool] = None
     current_model: Optional[str] = None
     anylog_url: Optional[str] = None
-    llm_endpoint: Optional[str] = None  # Docker container endpoint if using Docker
+    llm_endpoint: Optional[str] = None  # Custom Ollama endpoint if configured
 
 # Global agent instance (per-request would be better, but for simplicity we'll use one)
 _agent_instance: Optional[AnyLogMCPAgent] = None
@@ -111,6 +128,9 @@ async def get_or_create_agent(
             endpoint = os.getenv("LLM_ENDPOINT", None)
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
+
+        if not url or not _is_valid_mcp_sse_url(url):
+            raise RuntimeError("A valid AnyLog MCP SSE URL is required. Select a query node or enter an MCP URL.")
         
         # Reuse existing connection if URL, model, and endpoint match
         if _agent_instance is not None:
@@ -172,6 +192,8 @@ async def close_agent(timeout: float = 5.0):
                 _agent_instance.write = None
                 _agent_instance.exit_stack = None
                 _agent_instance.cached_tools = []
+                if hasattr(_agent_instance, "cached_ollama_tools"):
+                    _agent_instance.cached_ollama_tools = []
             except Exception as e:
                 print(f"Error closing agent: {e}")
             finally:
@@ -198,7 +220,7 @@ async def mcpclient_info():
             "/disconnect - Disconnect from AnyLog MCP",
             "/ask - Ask a question to the MCP agent",
             "/tools - List available MCP tools",
-            "/models - List available models from Docker container"
+            "/models - List available models from Ollama"
         ]
     }
 
@@ -284,6 +306,11 @@ async def connect_mcp(request: MCPConnectRequest):
                 status_code=400,
                 detail=f"Invalid LLM endpoint URL: '{endpoint}'. Please provide a complete URL like http://host:port"
             )
+        if not url or not _is_valid_mcp_sse_url(url):
+            raise HTTPException(
+                status_code=400,
+                detail="A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
+            )
         
         # Check if we can reuse existing connection
         async with _agent_lock:
@@ -335,13 +362,23 @@ async def connect_mcp(request: MCPConnectRequest):
             "anylog_url": url,
             "llm_endpoint": endpoint
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         error_detail = str(e)
+        error_lower = error_detail.lower()
         # Add more context for common errors
-        if "mcp-proxy" in error_detail.lower() or "command not found" in error_detail.lower():
+        if "mcp-proxy" in error_lower or "command not found" in error_lower:
             error_detail = f"mcp-proxy not found. Please ensure mcp-proxy is installed and in your PATH. Original error: {error_detail}"
-        elif "connection" in error_detail.lower() and "closed" in error_detail.lower():
+        elif "all connection attempts failed" in error_lower or "connecterror" in error_lower:
+            error_detail = (
+                f"Cannot reach AnyLog MCP server at {url}. "
+                "This page now defaults to the selected query node in the header; "
+                "verify that node exposes the MCP SSE endpoint at /mcp/sse, or enter a different MCP URL. "
+                f"Original error: {error_detail}"
+            )
+        elif "connection" in error_lower and "closed" in error_lower:
             error_detail = f"Connection to AnyLog MCP server failed. Please check if the server is running at {url}. Original error: {error_detail}"
         elif "ConnectionError" in str(type(e)):
             error_detail = f"Cannot reach AnyLog MCP server at {url}. Please verify the URL and that the server is accessible. Original error: {error_detail}"
@@ -364,7 +401,7 @@ async def disconnect_mcp():
 
 @api_router.get("/models")
 async def list_models(llm_endpoint: Optional[str] = None):
-    """List available models from either Docker Ollama container or local Ollama"""
+    """List available models from either a custom Ollama endpoint or local Ollama"""
     if not HAS_MCP_AGENT:
         raise HTTPException(
             status_code=500,
@@ -381,10 +418,10 @@ async def list_models(llm_endpoint: Optional[str] = None):
     
     try:
         if endpoint:
-            # List models from Docker container
+            # List models from a custom Ollama endpoint
             from .mcp_agent import list_models_from_docker
             models = await list_models_from_docker(endpoint, timeout=10.0)
-            source = "docker"
+            source = "remote"
         else:
             # List models from local Ollama
             from .mcp_agent import list_models_from_local_ollama
@@ -448,16 +485,15 @@ async def list_tools():
         )
     
     try:
-        # Use cached tools if available, otherwise fetch fresh (with timeout)
-        if _agent_instance.cached_tools:
-            # We have cached tool names, but need full details - fetch once with timeout
-            tools_resp = await asyncio.wait_for(_agent_instance.session.list_tools(), timeout=5.0)
+        # Use cached tool schemas if available, otherwise fetch fresh (with timeout).
+        if getattr(_agent_instance, "cached_ollama_tools", None):
             tools = []
-            for t in tools_resp.tools:
+            for tool in _agent_instance.cached_ollama_tools:
+                fn = tool.get("function", {})
                 tools.append({
-                    "name": t.name,
-                    "description": t.description or "",
-                    "inputSchema": t.inputSchema or {}
+                    "name": fn.get("name", ""),
+                    "description": fn.get("description", ""),
+                    "inputSchema": fn.get("parameters", {})
                 })
             return {
                 "success": True,
@@ -476,6 +512,9 @@ async def list_tools():
                 })
             # Update cache
             _agent_instance.cached_tools = [t.name for t in tools_resp.tools]
+            if hasattr(_agent_instance, "cached_ollama_tools"):
+                from .mcp_agent import mcp_tools_to_ollama_tools
+                _agent_instance.cached_ollama_tools = mcp_tools_to_ollama_tools(tools_resp.tools)
             return {
                 "success": True,
                 "tools": tools,
@@ -507,10 +546,20 @@ async def ask_question(request: MCPAskRequest):
             endpoint = os.getenv("LLM_ENDPOINT", None)
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
+        if endpoint and not _is_valid_ollama_endpoint(endpoint):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid LLM endpoint URL: '{endpoint}'. Please provide a complete URL like http://host:port"
+            )
+        if not url or not _is_valid_mcp_sse_url(url):
+            raise HTTPException(
+                status_code=400,
+                detail="A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
+            )
         
         # Log which LLM we're using
         if endpoint:
-            print(f"🐳 Using Docker LLM endpoint: {endpoint} with model: {model}")
+            print(f"🌐 Using Ollama endpoint: {endpoint} with model: {model}")
         else:
             print(f"💻 Using local Ollama with model: {model}")
         
@@ -538,6 +587,8 @@ async def ask_question(request: MCPAskRequest):
         
         print(f"✅ Returning response with answer field: {bool(response.get('answer'))}")
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         # If connection error, mark as disconnected
         error_str = str(e).lower()
@@ -547,6 +598,108 @@ async def ask_question(request: MCPAskRequest):
             except Exception:
                 pass
         raise HTTPException(status_code=500, detail=f"Failed to process question: {str(e)}")
+
+
+def _sse_event(event_type: str, **payload):
+    data = {"type": event_type, **payload}
+    return f"data: {json.dumps(data, default=str)}\n\n"
+
+
+@api_router.post("/ask-stream")
+async def ask_question_stream(request: MCPAskRequest):
+    """Ask a question and stream progress plus answer chunks as server-sent events."""
+    if not HAS_MCP_AGENT:
+        raise HTTPException(
+            status_code=500,
+            detail="MCP agent not available. Please install required dependencies: ollama, mcp"
+        )
+
+    async def event_generator():
+        agent = None
+        try:
+            url = request.anylog_sse_url or os.getenv("ANYLOG_MCP_SSE_URL", DEFAULT_ANYLOG_MCP_SSE_URL)
+            model = request.ollama_model or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+            endpoint = request.llm_endpoint.strip() if request.llm_endpoint and request.llm_endpoint.strip() else None
+            if not endpoint:
+                endpoint = os.getenv("LLM_ENDPOINT", None)
+                if endpoint:
+                    endpoint = endpoint.strip() if endpoint.strip() else None
+
+            if endpoint and not _is_valid_ollama_endpoint(endpoint):
+                yield _sse_event(
+                    "error",
+                    message=f"Invalid LLM endpoint URL: '{endpoint}'. Please provide a complete URL like http://host:port"
+                )
+                return
+            if not url or not _is_valid_mcp_sse_url(url):
+                yield _sse_event(
+                    "error",
+                    message="A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
+                )
+                return
+
+            yield _sse_event("status", message=f"Connecting to MCP with {model}")
+            agent = AnyLogMCPAgent(
+                anylog_sse_url=url,
+                ollama_model=model,
+                llm_endpoint=endpoint
+            )
+            await agent.connect(timeout=10.0)
+            yield _sse_event("status", message=f"Loaded {len(agent.cached_tools)} MCP tools")
+            yield _sse_event("tools", tools=agent.cached_tools)
+
+            event_queue = asyncio.Queue()
+            command_start = asyncio.get_event_loop().time()
+
+            async def emit_agent_event(event: Dict):
+                await event_queue.put(event)
+
+            async def run_agent():
+                return await agent.ask(
+                    request.prompt,
+                    conversation_history=request.conversation_history,
+                    timeout=300.0,
+                    event_callback=emit_agent_event
+                )
+
+            yield _sse_event("command_start", started_at_ms=int(command_start * 1000))
+            answer_task = asyncio.create_task(run_agent())
+
+            while not answer_task.done() or not event_queue.empty():
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                    event_type = event.get("type", "mcp_event")
+                    payload = {key: value for key, value in event.items() if key != "type"}
+                    yield _sse_event(event_type, **payload)
+                except asyncio.TimeoutError:
+                    continue
+
+            answer = await answer_task
+            total_elapsed_ms = int((asyncio.get_event_loop().time() - command_start) * 1000)
+
+            chunk_size = 32
+            for idx in range(0, len(answer), chunk_size):
+                yield _sse_event("delta", content=answer[idx:idx + chunk_size])
+                await asyncio.sleep(0.01)
+
+            yield _sse_event("command_done", elapsed_ms=total_elapsed_ms)
+            yield _sse_event("done", answer=answer, prompt=request.prompt, elapsed_ms=total_elapsed_ms)
+        except Exception as e:
+            error_str = str(e).lower()
+            if "connection" in error_str or "closed" in error_str or "not connected" in error_str:
+                try:
+                    await close_agent()
+                except Exception:
+                    pass
+            yield _sse_event("error", message=f"Failed to process question: {str(e)}")
+        finally:
+            if agent is not None:
+                try:
+                    await agent.close()
+                except Exception:
+                    pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -571,6 +724,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Connect to MCP
                 url = data.get("anylog_sse_url") or os.getenv("ANYLOG_MCP_SSE_URL", DEFAULT_ANYLOG_MCP_SSE_URL)
                 model = data.get("ollama_model") or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+                if not url or not _is_valid_mcp_sse_url(url):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
+                    })
+                    continue
                 
                 agent = AnyLogMCPAgent(anylog_sse_url=url, ollama_model=model)
                 tools = await agent.connect()
@@ -631,4 +790,3 @@ async def websocket_endpoint(websocket: WebSocket):
         })
         if agent:
             await agent.close()
-
