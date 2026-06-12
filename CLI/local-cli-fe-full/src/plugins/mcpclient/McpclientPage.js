@@ -33,7 +33,9 @@ export const pluginMetadata = {
 };
 
 const DEFAULT_MCP_PATH = '/mcp/sse';
-const PREFERRED_MODEL = 'qwen3:8b';
+const PREFERRED_MODEL = '';
+const MODEL_PLACEHOLDER = 'Select a running model';
+const DEFAULT_LLM_API_TYPE = 'auto';
 const HISTORY_STORAGE_KEY = 'mcpclient_chat_history';
 const CONFIG_STORAGE_KEY = 'mcpclient_config';
 const CHAT_SESSIONS_STORAGE_KEY = 'mcpclient_chats_v2';
@@ -193,6 +195,7 @@ const createChatSession = ({
   anylogUrl = '',
   ollamaModel = PREFERRED_MODEL,
   ollamaEndpoint = '',
+  llmApiType = DEFAULT_LLM_API_TYPE,
   assistantName = DEFAULT_ASSISTANT_NAME,
   instructions = '',
   mcpTools = [],
@@ -208,6 +211,7 @@ const createChatSession = ({
       anylogUrl,
       ollamaModel,
       ollamaEndpoint,
+      llmApiType,
       assistantName,
       instructions,
       mcpTools: normalizeToolList(mcpTools),
@@ -225,6 +229,7 @@ const normalizeChatSession = (chat, fallbackConfig = {}) => ({
     anylogUrl: chat.config?.anylogUrl || fallbackConfig.anylogUrl || '',
     ollamaModel: chat.config?.ollamaModel || fallbackConfig.ollamaModel || PREFERRED_MODEL,
     ollamaEndpoint: chat.config?.ollamaEndpoint || fallbackConfig.ollamaEndpoint || '',
+    llmApiType: chat.config?.llmApiType || fallbackConfig.llmApiType || DEFAULT_LLM_API_TYPE,
     assistantName: chat.config?.assistantName || fallbackConfig.assistantName || DEFAULT_ASSISTANT_NAME,
     instructions: chat.config?.instructions || fallbackConfig.instructions || '',
     mcpTools: normalizeToolList(chat.config?.mcpTools || fallbackConfig.mcpTools || []),
@@ -341,9 +346,10 @@ const McpclientPage = ({ node }) => {
   const [anylogUrl, setAnylogUrl] = useState(nodeMcpUrl);
   const [ollamaModel, setOllamaModel] = useState(PREFERRED_MODEL);
   const [ollamaEndpoint, setOllamaEndpoint] = useState('');
+  const [llmApiType, setLlmApiType] = useState(DEFAULT_LLM_API_TYPE);
   const [models, setModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [showConfig, setShowConfig] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
   const [streamNote, setStreamNote] = useState('');
   const [modelSource, setModelSource] = useState('local');
   const [assistantName, setAssistantName] = useState(DEFAULT_ASSISTANT_NAME);
@@ -369,6 +375,7 @@ const McpclientPage = ({ node }) => {
     setAnylogUrl(config.anylogUrl || nodeMcpUrl || '');
     setOllamaModel(config.ollamaModel || PREFERRED_MODEL);
     setOllamaEndpoint(config.ollamaEndpoint || '');
+    setLlmApiType(config.llmApiType || DEFAULT_LLM_API_TYPE);
     setAssistantName(config.assistantName || DEFAULT_ASSISTANT_NAME);
     setInstructions(config.instructions || '');
     setInstructionsSaved(false);
@@ -385,6 +392,7 @@ const McpclientPage = ({ node }) => {
     let initialAnylogUrl = nodeMcpUrl;
     let initialModel = PREFERRED_MODEL;
     let initialEndpoint = '';
+    let initialLlmApiType = DEFAULT_LLM_API_TYPE;
     let initialAssistantName = DEFAULT_ASSISTANT_NAME;
     let initialInstructions = '';
     let initialMessages = [];
@@ -395,6 +403,7 @@ const McpclientPage = ({ node }) => {
       initialAnylogUrl = nodeMcpUrl || savedConfig.anylogUrl || '';
       initialModel = savedConfig.ollamaModel || PREFERRED_MODEL;
       initialEndpoint = savedConfig.ollamaEndpoint || '';
+      initialLlmApiType = savedConfig.llmApiType || DEFAULT_LLM_API_TYPE;
       initialAssistantName = savedConfig.assistantName || DEFAULT_ASSISTANT_NAME;
       initialInstructions = savedConfig.instructions || '';
       const initialTools = normalizeToolList(savedConfig.mcpTools || []);
@@ -410,6 +419,7 @@ const McpclientPage = ({ node }) => {
           anylogUrl: initialAnylogUrl,
           ollamaModel: initialModel,
           ollamaEndpoint: initialEndpoint,
+          llmApiType: initialLlmApiType,
           assistantName: initialAssistantName,
           instructions: initialInstructions,
           mcpTools: initialTools,
@@ -423,6 +433,7 @@ const McpclientPage = ({ node }) => {
           anylogUrl: initialAnylogUrl,
           ollamaModel: initialModel,
           ollamaEndpoint: initialEndpoint,
+          llmApiType: initialLlmApiType,
           assistantName: initialAssistantName,
           instructions: initialInstructions,
           mcpTools: initialTools,
@@ -440,6 +451,7 @@ const McpclientPage = ({ node }) => {
       setAnylogUrl(activeChat.config.anylogUrl || nodeMcpUrl || '');
       setOllamaModel(activeChat.config.ollamaModel || PREFERRED_MODEL);
       setOllamaEndpoint(activeChat.config.ollamaEndpoint || '');
+      setLlmApiType(activeChat.config.llmApiType || DEFAULT_LLM_API_TYPE);
       setAssistantName(activeChat.config.assistantName || DEFAULT_ASSISTANT_NAME);
       setInstructions(activeChat.config.instructions || '');
       setTools(normalizeToolList(activeChat.config.mcpTools || []));
@@ -447,6 +459,7 @@ const McpclientPage = ({ node }) => {
       initialAnylogUrl = activeChat.config.anylogUrl || nodeMcpUrl || '';
       initialModel = activeChat.config.ollamaModel || PREFERRED_MODEL;
       initialEndpoint = activeChat.config.ollamaEndpoint || '';
+      initialLlmApiType = activeChat.config.llmApiType || DEFAULT_LLM_API_TYPE;
     } catch (storageError) {
       console.warn('Failed to load MCP client storage:', storageError);
       const fallbackChat = createChatSession({
@@ -460,7 +473,7 @@ const McpclientPage = ({ node }) => {
       initialAnylogUrl = fallbackChat.config.anylogUrl;
     }
 
-    loadStatus({ initialAnylogUrl, initialEndpoint, initialModel });
+    loadStatus({ initialAnylogUrl, initialEndpoint, initialModel, initialLlmApiType });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -498,6 +511,7 @@ const McpclientPage = ({ node }) => {
           anylogUrl,
           ollamaModel,
           ollamaEndpoint,
+          llmApiType,
           assistantName,
           instructions,
           mcpTools: tools,
@@ -510,7 +524,7 @@ const McpclientPage = ({ node }) => {
     } catch (storageError) {
       console.warn('Failed to persist MCP chat history:', storageError);
     }
-  }, [activeChatId, answers, anylogUrl, ollamaModel, ollamaEndpoint, assistantName, instructions, tools]);
+  }, [activeChatId, answers, anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, assistantName, instructions, tools]);
 
   useEffect(() => {
     if (!chatSessions.length) return;
@@ -558,6 +572,7 @@ const McpclientPage = ({ node }) => {
         anylogUrl,
         ollamaModel,
         ollamaEndpoint,
+        llmApiType,
         assistantName,
         instructions,
         mcpTools: tools,
@@ -565,13 +580,12 @@ const McpclientPage = ({ node }) => {
     } catch (storageError) {
       console.warn('Failed to persist MCP config:', storageError);
     }
-  }, [anylogUrl, ollamaModel, ollamaEndpoint, assistantName, instructions, tools]);
+  }, [anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, assistantName, instructions, tools]);
 
   const chooseModel = (availableModels, currentModel) => {
     const names = availableModels.map(getModelName);
     if (currentModel && names.includes(currentModel)) return currentModel;
-    if (names.includes(PREFERRED_MODEL)) return PREFERRED_MODEL;
-    return currentModel || names[0] || PREFERRED_MODEL;
+    return names[0] || '';
   };
 
   const updateChatConfig = (chatId, patch) => {
@@ -600,22 +614,27 @@ const McpclientPage = ({ node }) => {
     return normalizedTools;
   };
 
-  const loadModels = async (endpointOverride = ollamaEndpoint) => {
+  const loadModels = async (endpointOverride = ollamaEndpoint, apiTypeOverride = llmApiType) => {
     const endpoint = normalizeEndpoint(endpointOverride);
+    const requestedApiType = apiTypeOverride || DEFAULT_LLM_API_TYPE;
     setLoadingModels(true);
     try {
-      const result = await listModels(endpoint);
+      const result = await listModels(endpoint, requestedApiType);
       const availableModels = result.models || [];
       const selected = chooseModel(availableModels, ollamaModel);
       setModels(availableModels);
       setModelSource(result.source || (endpoint ? 'remote' : 'local'));
-      if (selected) setOllamaModel(selected);
+      if (requestedApiType === 'auto' && result.source === 'openai') {
+        setLlmApiType('openai');
+      }
+      setOllamaModel(selected);
       return { models: availableModels, selected };
     } catch (modelError) {
       setModels([]);
       setModelSource(endpoint ? 'remote' : 'local');
-      setError(`Could not load Ollama models: ${modelError.message}`);
-      return { models: [], selected: ollamaModel || PREFERRED_MODEL };
+      setOllamaModel('');
+      setError(`Could not load models: ${modelError.message}`);
+      return { models: [], selected: '' };
     } finally {
       setLoadingModels(false);
     }
@@ -625,6 +644,7 @@ const McpclientPage = ({ node }) => {
     initialAnylogUrl = anylogUrl,
     initialEndpoint = ollamaEndpoint,
     initialModel = ollamaModel,
+    initialLlmApiType = llmApiType,
   } = {}) => {
     setLoading(true);
     setError(null);
@@ -636,14 +656,16 @@ const McpclientPage = ({ node }) => {
         : defaultNodeUrl;
       const nextEndpoint = statusData.llm_endpoint || initialEndpoint || '';
       const nextModel = statusData.current_model || initialModel || PREFERRED_MODEL;
+      const nextApiType = statusData.llm_api_type || initialLlmApiType || DEFAULT_LLM_API_TYPE;
 
       setStatus(statusData);
       setConnected(Boolean(statusData.connected));
       setAnylogUrl(nextAnylogUrl);
       setOllamaEndpoint(nextEndpoint);
+      setLlmApiType(nextApiType);
       setOllamaModel(nextModel);
 
-      const loaded = await loadModels(nextEndpoint);
+      const loaded = await loadModels(nextEndpoint, nextApiType);
       const selectedModel = loaded.selected || nextModel;
 
       if (statusData.available_tools?.length) {
@@ -653,7 +675,7 @@ const McpclientPage = ({ node }) => {
       if (!statusData.connected && selectedModel && nextAnylogUrl) {
         try {
           setConnecting(true);
-          const result = await connectMCP(nextAnylogUrl, selectedModel, normalizeEndpoint(nextEndpoint));
+          const result = await connectMCP(nextAnylogUrl, selectedModel, normalizeEndpoint(nextEndpoint), nextApiType);
           setConnected(true);
           setStatus({ ...statusData, connected: true, available_tools: result.available_tools || [] });
           setChatTools(activeChatIdRef.current, result.available_tools || []);
@@ -666,7 +688,7 @@ const McpclientPage = ({ node }) => {
       }
     } catch (statusError) {
       setError(`Failed to load MCP status: ${statusError.message}`);
-      await loadModels(initialEndpoint);
+      await loadModels(initialEndpoint, initialLlmApiType);
     } finally {
       setLoading(false);
     }
@@ -686,7 +708,7 @@ const McpclientPage = ({ node }) => {
     setError(null);
     try {
       const endpoint = normalizeEndpoint(ollamaEndpoint);
-      const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint);
+      const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint, llmApiType);
       setConnected(true);
       setStatus({
         ...(status || {}),
@@ -694,6 +716,7 @@ const McpclientPage = ({ node }) => {
         current_model: ollamaModel,
         anylog_url: anylogUrl,
         llm_endpoint: endpoint,
+        llm_api_type: llmApiType,
         available_tools: result.available_tools || [],
       });
       setChatTools(activeChatIdRef.current, result.available_tools || []);
@@ -724,7 +747,7 @@ const McpclientPage = ({ node }) => {
 
   const handleRefreshModels = async () => {
     setError(null);
-    await loadModels(ollamaEndpoint);
+    await loadModels(ollamaEndpoint, llmApiType);
   };
 
   const updateChatMessages = (chatId, updater) => {
@@ -809,6 +832,7 @@ const McpclientPage = ({ node }) => {
       anylogUrl,
       ollamaModel,
       ollamaEndpoint,
+      llmApiType,
       instructions,
     };
     const promptForModel = requestConfig.instructions?.trim()
@@ -852,6 +876,7 @@ const McpclientPage = ({ node }) => {
         ollamaModel: requestConfig.ollamaModel || null,
         conversationHistory: conversationHistory.length ? conversationHistory : null,
         llmEndpoint: endpoint,
+        llmApiType: requestConfig.llmApiType || DEFAULT_LLM_API_TYPE,
         abortSignal: abortController.signal,
         onEvent: (event) => {
           if (event.type === 'status') {
@@ -902,6 +927,13 @@ const McpclientPage = ({ node }) => {
       if (askError.name === 'AbortError' || askError.message?.includes('aborted')) {
         updateChatMessages(requestChatId, (messages) => messages.filter((msg) => msg.id !== assistantId));
         setStreamNote('');
+      } else if ((requestConfig.llmApiType || DEFAULT_LLM_API_TYPE) === 'openai') {
+        setError(askError.message || 'Failed to process question.');
+        updateChatMessages(requestChatId, (messages) => messages.map((msg) => (
+          msg.id === assistantId
+            ? { type: 'error', content: askError.message || 'Failed to process question.', failedPrompt: userPrompt, id: assistantId }
+            : msg
+        )));
       } else {
         try {
           const fallback = await askMCP(
@@ -910,6 +942,7 @@ const McpclientPage = ({ node }) => {
             requestConfig.ollamaModel || null,
             conversationHistory.length ? conversationHistory : null,
             normalizeEndpoint(requestConfig.ollamaEndpoint),
+            requestConfig.llmApiType || DEFAULT_LLM_API_TYPE,
             abortController.signal
           );
           updateAssistantMessage(requestChatId, assistantId, () => ({
@@ -956,6 +989,7 @@ const McpclientPage = ({ node }) => {
       anylogUrl: nodeMcpUrl || anylogUrl || '',
       ollamaModel: ollamaModel || PREFERRED_MODEL,
       ollamaEndpoint,
+      llmApiType,
       assistantName: assistantName || DEFAULT_ASSISTANT_NAME,
       instructions,
       mcpTools: tools,
@@ -1070,7 +1104,7 @@ const McpclientPage = ({ node }) => {
       writeWrapped('MCP Client Chat Export', 18, 'bold');
       writeWrapped(`Exported: ${new Date().toLocaleString()}`, 9);
       writeWrapped(`Model: ${ollamaModel || 'Not selected'}`, 9);
-      writeWrapped(`Ollama endpoint: ${normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama'}`, 9);
+      writeWrapped(`LLM endpoint: ${normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama'}`, 9);
       y += 4;
 
       answers
@@ -1099,6 +1133,8 @@ const McpclientPage = ({ node }) => {
   const activeChatRunning = runningChatIds.includes(activeChatId);
   const activeChat = chatSessions.find((chat) => chat.id === activeChatId);
   const canSendPrompt = Boolean(anylogUrl.trim() && ollamaModel.trim() && !activeChatRunning);
+  const modelNames = useMemo(() => models.map(getModelName).filter(Boolean), [models]);
+  const selectedModelListed = modelNames.includes(ollamaModel);
 
   return (
     <div className="mcp-page">
@@ -1153,12 +1189,53 @@ const McpclientPage = ({ node }) => {
           display: grid;
           grid-template-columns: 330px minmax(0, 1fr);
         }
+        .mcp-layout.config-expanded {
+          grid-template-columns: minmax(0, 1fr);
+          place-items: start center;
+          overflow: auto;
+          padding: 18px;
+        }
         .mcp-sidebar {
           min-height: 0;
           overflow: auto;
           padding: 18px;
           background: #ffffff;
           border-right: 1px solid #d7dde8;
+        }
+        .mcp-layout.config-expanded .mcp-sidebar {
+          width: min(1080px, 100%);
+          max-height: calc(100vh - 108px);
+          box-sizing: border-box;
+          display: grid;
+          grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+          gap: 14px;
+          border: 1px solid #d7dde8;
+          border-radius: 10px;
+          box-shadow: 0 20px 48px rgba(16, 24, 40, 0.14);
+        }
+        .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(1) {
+          grid-row: 1 / span 2;
+        }
+        .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(2),
+        .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(3) {
+          grid-column: 2;
+        }
+        .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(3) {
+          margin-top: 0 !important;
+        }
+        .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(2) .panel-body {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          column-gap: 14px;
+          align-items: start;
+        }
+        .mcp-layout.config-expanded .status-grid,
+        .mcp-layout.config-expanded .field-wide,
+        .mcp-layout.config-expanded .panel:nth-child(2) .panel-body > .secondary-button {
+          grid-column: 1 / -1;
+        }
+        .mcp-layout.config-expanded .mcp-workspace {
+          display: none;
         }
         .mcp-workspace {
           min-width: 0;
@@ -1198,6 +1275,7 @@ const McpclientPage = ({ node }) => {
           margin-bottom: 6px;
         }
         .field input,
+        .field select,
         .field textarea {
           width: 100%;
           box-sizing: border-box;
@@ -1209,10 +1287,26 @@ const McpclientPage = ({ node }) => {
           background: #fbfcfe;
         }
         .field input:focus,
+        .field select:focus,
         .chat-input textarea:focus {
           outline: 2px solid #89b4ff;
           outline-offset: 1px;
           border-color: #3b82f6;
+        }
+        .model-picker {
+          display: grid;
+          gap: 8px;
+        }
+        .model-picker select {
+          background: #ffffff;
+        }
+        .model-empty {
+          border: 1px dashed #c8d1df;
+          border-radius: 6px;
+          padding: 10px 11px;
+          color: #66748b;
+          background: #fbfcfe;
+          font-size: 13px;
         }
         .hint {
           margin-top: 6px;
@@ -1598,10 +1692,26 @@ const McpclientPage = ({ node }) => {
           .mcp-layout {
             grid-template-columns: 1fr;
           }
+          .mcp-layout.config-expanded {
+            padding: 12px;
+          }
           .mcp-sidebar {
             max-height: 42vh;
             border-right: 0;
             border-bottom: 1px solid #d7dde8;
+          }
+          .mcp-layout.config-expanded .mcp-sidebar {
+            max-height: none;
+            grid-template-columns: 1fr;
+          }
+          .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(1),
+          .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(2),
+          .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(3) {
+            grid-column: 1;
+            grid-row: auto;
+          }
+          .mcp-layout.config-expanded .mcp-sidebar .panel:nth-child(2) .panel-body {
+            grid-template-columns: 1fr;
           }
         }
         @media (max-width: 680px) {
@@ -1645,9 +1755,9 @@ const McpclientPage = ({ node }) => {
             <FaTrash />
             Clear
           </button>
-          <button className="icon-action" type="button" onClick={() => setShowConfig((value) => !value)} title="Toggle configuration">
+          <button className="icon-action" type="button" onClick={() => setShowConfig((value) => !value)} title={showConfig ? 'Return to chat layout' : 'Focus configuration'}>
             <FaCog />
-            Config
+            {showConfig ? 'Chat' : 'Config'}
           </button>
           {connected ? (
             <button className="danger-button" type="button" onClick={handleDisconnect} disabled={connecting}>
@@ -1663,9 +1773,8 @@ const McpclientPage = ({ node }) => {
         </div>
       </header>
 
-      <main className="mcp-layout">
-        {showConfig && (
-          <aside className="mcp-sidebar">
+      <main className={`mcp-layout ${showConfig ? 'config-expanded' : ''}`}>
+        <aside className="mcp-sidebar">
             <section className="panel" style={{ marginBottom: 14 }}>
               <div className="panel-header">
                 <span>Chats</span>
@@ -1685,7 +1794,7 @@ const McpclientPage = ({ node }) => {
                     >
                       <span className="chat-session-title">{chat.title || 'New chat'}</span>
                       <span className="chat-session-meta">
-                        {runningChatIds.includes(chat.id) ? 'Running | ' : ''}{(chat.config?.assistantName || DEFAULT_ASSISTANT_NAME)} | {(chat.config?.ollamaModel || PREFERRED_MODEL)}
+                        {runningChatIds.includes(chat.id) ? 'Running | ' : ''}{(chat.config?.assistantName || DEFAULT_ASSISTANT_NAME)} | {(chat.config?.ollamaModel || 'No model')}
                       </span>
                     </button>
                   ))}
@@ -1755,33 +1864,56 @@ const McpclientPage = ({ node }) => {
                 </div>
 
                 <div className="field">
-                  <label htmlFor="ollama-endpoint">Ollama base URL</label>
+                  <label htmlFor="ollama-endpoint">LLM base URL</label>
                   <input
                     id="ollama-endpoint"
                     value={ollamaEndpoint}
                     onChange={(event) => setOllamaEndpoint(event.target.value)}
-                    placeholder="http://192.168.1.50:11434"
+                    placeholder="http://192.168.1.50:11434 or http://localhost:1234"
                   />
-                  <div className="hint">Leave blank to use Ollama on the backend machine. Enter any IP and port where Ollama is running.</div>
+                  <div className="hint">Leave blank to use Ollama on the backend machine. For LM Studio, use its local server base URL, commonly http://localhost:1234.</div>
                 </div>
 
                 <div className="field">
-                  <label htmlFor="ollama-model">Ollama model</label>
-                  <input
-                    id="ollama-model"
-                    list="ollama-model-options"
-                    value={ollamaModel}
-                    onChange={(event) => setOllamaModel(event.target.value)}
-                    placeholder={PREFERRED_MODEL}
-                  />
-                  <datalist id="ollama-model-options">
-                    {models.map((model, index) => {
-                      const name = getModelName(model, index);
-                      return <option key={name} value={name} />;
-                    })}
-                  </datalist>
+                  <label htmlFor="llm-api-type">LLM API type</label>
+                  <select
+                    id="llm-api-type"
+                    value={llmApiType}
+                    onChange={(event) => setLlmApiType(event.target.value)}
+                  >
+                    <option value="auto">Auto detect</option>
+                    <option value="ollama">Ollama (/api/chat)</option>
+                    <option value="openai">OpenAI / LM Studio (/v1/chat/completions)</option>
+                  </select>
+                  <div className="hint">Choose OpenAI / LM Studio for LM Studio local server. That avoids sending requests to Ollama's /api/chat endpoint.</div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="ollama-model-select">LLM model</label>
+                  <div className="model-picker">
+                    {modelNames.length ? (
+                      <select
+                        id="ollama-model-select"
+                        value={selectedModelListed ? ollamaModel : ''}
+                        onChange={(event) => {
+                          setOllamaModel(event.target.value);
+                        }}
+                      >
+                        <option value="" disabled>{MODEL_PLACEHOLDER}</option>
+                        {modelNames.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="model-empty">
+                        {loadingModels ? 'Loading running/loaded models...' : 'No running/loaded models found for this LLM base URL.'}
+                      </div>
+                    )}
+                  </div>
                   <div className="hint">
-                    {loadingModels ? 'Loading models...' : `${models.length} model(s) found. You can also type a model name manually.`}
+                    {loadingModels
+                      ? 'Loading models...'
+                      : `${modelNames.length} running/loaded model(s) found for this LLM base URL. Only these models can be selected.`}
                   </div>
                 </div>
 
@@ -1796,7 +1928,7 @@ const McpclientPage = ({ node }) => {
                   <div className="hint">Purely cosmetic. Name your agent whatever makes the console feel friendlier.</div>
                 </div>
 
-                <div className="field">
+                <div className="field field-wide">
                   <label htmlFor="chat-instructions">Instructions</label>
                   <textarea
                     id="chat-instructions"
@@ -1834,8 +1966,7 @@ const McpclientPage = ({ node }) => {
                 </div>
               </div>
             </section>
-          </aside>
-        )}
+        </aside>
 
         <section className="mcp-workspace">
           {error && (

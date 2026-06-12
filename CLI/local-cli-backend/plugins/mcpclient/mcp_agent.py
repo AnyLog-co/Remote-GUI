@@ -8,6 +8,7 @@ import json
 from contextlib import AsyncExitStack
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 import os
+import re
 
 try:
     import httpx
@@ -52,6 +53,7 @@ except (ImportError, ValueError, json.JSONDecodeError, Exception) as e:
 # Default configuration - can be overridden via environment variables
 DEFAULT_ANYLOG_MCP_SSE_URL = os.getenv("ANYLOG_MCP_SSE_URL", "")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+DEFAULT_LLM_API_TYPE = os.getenv("LLM_API_TYPE", "auto")
 _MCP_TOOL_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
@@ -64,6 +66,59 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     if hasattr(value, "dict"):
         return value.dict()
     return {}
+
+
+def normalize_llm_api_type(value: Optional[str]) -> str:
+    normalized = (value or DEFAULT_LLM_API_TYPE or "auto").strip().lower()
+    aliases = {
+        "lmstudio": "openai",
+        "lm-studio": "openai",
+        "lm studio": "openai",
+        "openai-compatible": "openai",
+        "openai_compatible": "openai",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"auto", "ollama", "openai"} else "auto"
+
+
+def _is_gemma_model(model: Optional[str]) -> bool:
+    return "gemma" in (model or "").lower()
+
+
+def _parse_text_tool_calls(content: str) -> List[Dict[str, Any]]:
+    """
+    Parse local-model text tool-call syntax such as:
+    <|tool_call>call:listLocalDatabases{}
+    """
+    if not content or "call:" not in content:
+        return []
+
+    calls: List[Dict[str, Any]] = []
+    pattern = re.compile(r"(?:<\|tool_call\>|<tool_call\|>\s*)?\s*call:([A-Za-z_][A-Za-z0-9_]*)\s*(\{.*?\})", re.DOTALL)
+    for index, match in enumerate(pattern.finditer(content)):
+        tool_name = match.group(1)
+        raw_args = match.group(2) or "{}"
+        try:
+            arguments = json.loads(raw_args)
+        except (json.JSONDecodeError, ValueError):
+            arguments = {}
+        calls.append({
+            "id": f"text-tool-{index + 1}-{tool_name}",
+            "function": {
+                "name": tool_name,
+                "arguments": arguments,
+            },
+            "text_span": match.span(),
+        })
+    return calls
+
+
+def _strip_text_tool_calls(content: str) -> str:
+    if not content:
+        return ""
+    stripped = re.sub(r"(?:<\|tool_call\>|<tool_call\|>\s*)?\s*call:[A-Za-z_][A-Za-z0-9_]*\s*\{.*?\}", "", content, flags=re.DOTALL)
+    stripped = stripped.replace("<|tool_call>", "").replace("<tool_call|>", "")
+    return stripped.strip()
 
 def sanitize_json_schema(schema: dict) -> dict:
     """
@@ -233,6 +288,82 @@ def _build_tool_result_report(tool_results: List[Dict[str, Any]]) -> str:
     return "\n".join(sections)
 
 
+def _openai_compatible_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Normalize messages for local OpenAI-compatible servers.
+
+    Some LM Studio model templates, especially Gemma-family templates, reject the
+    OpenAI `system` channel with a runner-side "Channel Error". Fold system text
+    into the first user turn while preserving assistant/tool messages.
+    """
+    system_parts: List[str] = []
+    raw_messages: List[Dict[str, Any]] = []
+
+    def public_message(message: Dict[str, Any]) -> Dict[str, Any]:
+        return {key: value for key, value in message.items() if not key.startswith("_") and key != "text_span"}
+
+    for message in messages:
+        role = message.get("role")
+        if role == "system":
+            content = message.get("content") or ""
+            if content:
+                system_parts.append(str(content))
+            continue
+        if role == "assistant" and message.get("_text_tool_calls"):
+            # Text-form tool calls are an internal compatibility shim for
+            # local models. Do not send synthetic assistant.tool_calls back to
+            # LM Studio; several runners reject that as invalid messages.
+            continue
+        if role in {"user", "assistant", "tool"}:
+            raw_messages.append(public_message(dict(message)))
+
+    # Gemma-family templates in LM Studio often fail if history starts with an
+    # assistant turn. Drop stale leading non-user messages so the chat begins
+    # with a user channel.
+    while raw_messages and raw_messages[0].get("role") != "user":
+        raw_messages.pop(0)
+
+    normalized: List[Dict[str, Any]] = []
+    for message in raw_messages:
+        role = message.get("role")
+        content = message.get("content") or ""
+
+        # Consecutive user/assistant turns from persisted retries can also
+        # trip local templates. Merge adjacent same-role text turns.
+        if (
+            normalized
+            and role in {"user", "assistant"}
+            and normalized[-1].get("role") == role
+            and "tool_calls" not in normalized[-1]
+            and "tool_calls" not in message
+        ):
+            normalized[-1]["content"] = f"{normalized[-1].get('content', '')}\n\n{content}".strip()
+            continue
+
+        if role == "tool":
+            # Keep tool messages only when they follow an assistant tool call.
+            previous = normalized[-1] if normalized else {}
+            if previous.get("role") != "assistant" or not previous.get("tool_calls"):
+                normalized.append({
+                    "role": "user",
+                    "content": f"Tool result:\n{content}",
+                })
+                continue
+
+        normalized.append(message)
+
+    if not system_parts:
+        return normalized
+
+    system_text = "\n\n".join(system_parts)
+    for message in normalized:
+        if message.get("role") == "user":
+            message["content"] = f"{system_text}\n\nUser request:\n{message.get('content', '')}"
+            return normalized
+
+    return [{"role": "user", "content": system_text}, *normalized]
+
+
 async def list_models_from_local_ollama(timeout: float = 10.0) -> List[Dict[str, Any]]:
     """
     List available models from local Ollama installation.
@@ -247,9 +378,13 @@ async def list_models_from_local_ollama(timeout: float = 10.0) -> List[Dict[str,
         raise RuntimeError("Ollama is not installed. Please install it with: pip install ollama")
     
     try:
-        # Use ollama.list() to get local models
+        # Use ollama.ps() to get running local models. ollama.list() returns
+        # installed models, which can make the UI show models that are not
+        # actually loaded/running.
         # This is a sync call, so run it in a thread
-        models_response = await asyncio.to_thread(ollama.list)
+        if not hasattr(ollama, "ps"):
+            raise RuntimeError("The installed Ollama Python client does not support listing running models.")
+        models_response = await asyncio.to_thread(ollama.ps)
         models_data = _as_dict(models_response)
         
         # Convert to list of dicts
@@ -284,11 +419,11 @@ async def list_models_from_local_ollama(timeout: float = 10.0) -> List[Dict[str,
                         "family": model.get("details", {}).get("family", ""),
                     } if model.get("details") else {}
                 })
-        print(f"📋 Local Ollama models found: {[m['name'] for m in model_list]}")
+        print(f"📋 Running local Ollama models found: {[m['name'] for m in model_list]}")
         
         return model_list
     except Exception as e:
-        raise RuntimeError(f"Failed to list models from local Ollama: {str(e)}")
+        raise RuntimeError(f"Failed to list running models from local Ollama: {str(e)}")
 
 
 async def list_models_from_docker(endpoint: str, timeout: float = 10.0) -> List[Dict[str, Any]]:
@@ -307,21 +442,106 @@ async def list_models_from_docker(endpoint: str, timeout: float = 10.0) -> List[
     
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            # Ollama API endpoint for listing models
-            url = f"{endpoint.rstrip('/')}/api/tags"
+            # Ollama API endpoint for running models. /api/tags lists installed
+            # models, which is too broad for this UI.
+            url = f"{endpoint.rstrip('/')}/api/ps"
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
             models = data.get("models", [])
-            print(f"🔍 Ollama API response: {data}")
-            print(f"🔍 Ollama models found: {[m.get('name', m.get('model', 'unknown')) for m in models]}")
+            print(f"🔍 Ollama running models response: {data}")
+            print(f"🔍 Ollama running models found: {[m.get('name', m.get('model', 'unknown')) for m in models]}")
             return models
     except httpx.TimeoutException:
         raise RuntimeError(f"Request to Ollama endpoint timed out after {timeout}s")
     except httpx.HTTPStatusError as e:
         raise RuntimeError(f"Ollama endpoint returned error {e.response.status_code}: {e.response.text}")
     except Exception as e:
-        raise RuntimeError(f"Failed to list models from Ollama endpoint at {endpoint}: {str(e)}")
+        raise RuntimeError(f"Failed to list running models from Ollama endpoint at {endpoint}: {str(e)}")
+
+
+async def list_models_from_openai_endpoint(endpoint: str, timeout: float = 10.0) -> List[Dict[str, Any]]:
+    """
+    List available models from an OpenAI-compatible endpoint such as LM Studio.
+    """
+    if not HAS_HTTPX:
+        raise RuntimeError("httpx is not installed. Please install it with: pip install httpx")
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            url = f"{endpoint.rstrip('/')}/v1/models"
+            headers = {}
+            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            models = data.get("data", [])
+            print(f"🔍 OpenAI-compatible models found: {[m.get('id', m.get('name', 'unknown')) for m in models]}")
+            return [
+                {
+                    "name": model.get("id") or model.get("name") or model.get("model") or "",
+                    "model": model.get("id") or model.get("name") or model.get("model") or "",
+                    "size": model.get("size", 0),
+                    "modified_at": model.get("created", ""),
+                    "details": model,
+                }
+                for model in models
+                if model.get("id") or model.get("name") or model.get("model")
+            ]
+    except httpx.TimeoutException:
+        raise RuntimeError(f"Request to OpenAI-compatible endpoint timed out after {timeout}s")
+    except httpx.HTTPStatusError as e:
+        raise RuntimeError(f"OpenAI-compatible endpoint returned error {e.response.status_code}: {e.response.text}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to list models from OpenAI-compatible endpoint at {endpoint}: {str(e)}")
+
+
+async def list_models_from_endpoint(
+    endpoint: str,
+    llm_api_type: Optional[str] = "auto",
+    timeout: float = 10.0
+) -> Dict[str, Any]:
+    api_type = normalize_llm_api_type(llm_api_type)
+    if api_type == "ollama":
+        return {"models": await list_models_from_docker(endpoint, timeout=timeout), "source": "ollama"}
+    if api_type == "openai":
+        return {"models": await list_models_from_openai_endpoint(endpoint, timeout=timeout), "source": "openai"}
+
+    errors = []
+    try:
+        models = await list_models_from_docker(endpoint, timeout=timeout)
+        if models:
+            return {"models": models, "source": "ollama"}
+        errors.append("Ollama endpoint returned no models")
+    except Exception as e:
+        errors.append(str(e))
+
+    try:
+        models = await list_models_from_openai_endpoint(endpoint, timeout=timeout)
+        return {"models": models, "source": "openai"}
+    except Exception as e:
+        errors.append(str(e))
+
+    raise RuntimeError("Could not list models from endpoint. " + " | ".join(errors))
+
+
+async def _openai_endpoint_available(endpoint: str, timeout: float = 3.0) -> bool:
+    if not HAS_HTTPX:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            base = endpoint.rstrip("/")
+            url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
+            headers = {}
+            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            response = await client.get(url, headers=headers)
+            return response.status_code == 200 and isinstance(response.json().get("data"), list)
+    except Exception:
+        return False
 
 
 async def ollama_chat_async(
@@ -330,6 +550,7 @@ async def ollama_chat_async(
     tools: Optional[List[Dict[str, Any]]] = None,
     stream: bool = False,
     llm_endpoint: Optional[str] = None,
+    llm_api_type: Optional[str] = "auto",
     timeout: float = 300.0  # Increased to 5 minutes to match ask() timeout
 ) -> Dict[str, Any]:
     """
@@ -347,10 +568,32 @@ async def ollama_chat_async(
     Returns:
         Response dictionary with "message" key containing the assistant's response
     """
-    # If an endpoint is provided, use the HTTP API
+    # If an endpoint is provided, use the selected HTTP API.
     if llm_endpoint:
-        print(f"🌐 Using Ollama endpoint: {llm_endpoint} with model: {model}")
-        return await _ollama_chat_docker(llm_endpoint, model, messages, tools, timeout)
+        api_type = normalize_llm_api_type(llm_api_type)
+        if api_type == "openai" or llm_endpoint.rstrip("/").endswith("/v1"):
+            print(f"🌐 Using OpenAI-compatible endpoint: {llm_endpoint} with model: {model}")
+            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+        if api_type == "ollama":
+            print(f"🌐 Using Ollama endpoint: {llm_endpoint} with model: {model}")
+            return await _ollama_chat_docker(llm_endpoint, model, messages, tools, timeout)
+
+        if await _openai_endpoint_available(llm_endpoint):
+            print(f"🌐 Auto-detected OpenAI-compatible endpoint: {llm_endpoint} with model: {model}")
+            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+
+        try:
+            print(f"🌐 Auto-detecting endpoint API via Ollama first: {llm_endpoint} with model: {model}")
+            return await _ollama_chat_docker(llm_endpoint, model, messages, tools, timeout)
+        except Exception as ollama_error:
+            print(f"⚠️  Ollama-compatible chat failed, trying OpenAI-compatible endpoint: {ollama_error}")
+            try:
+                return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+            except Exception as openai_error:
+                raise RuntimeError(
+                    "Endpoint did not work as Ollama or OpenAI/LM Studio. "
+                    f"Ollama error: {ollama_error}. OpenAI-compatible error: {openai_error}"
+                )
     
     # Otherwise, use local Ollama library
     if not HAS_OLLAMA:
@@ -489,16 +732,115 @@ async def _ollama_chat_docker(
         raise RuntimeError(f"Failed to communicate with Ollama endpoint: {str(e)}")
 
 
+async def _openai_chat_http(
+    endpoint: str,
+    model: str,
+    messages: List[Dict[str, Any]],
+    tools: Optional[List[Dict[str, Any]]] = None,
+    timeout: float = 300.0
+) -> Dict[str, Any]:
+    """
+    Call an OpenAI-compatible Chat Completions endpoint, including LM Studio.
+    """
+    if not HAS_HTTPX:
+        raise RuntimeError("httpx is not installed. Please install it with: pip install httpx")
+
+    def channel_error_message(error_msg: str) -> RuntimeError:
+        return RuntimeError(
+            "LM Studio rejected this model's chat template with a Channel Error. "
+            "This usually means the selected model does not support the requested chat/tool-calling format. "
+            "Try an instruct model with tool/function-calling support, or reduce prior chat history. "
+            f"Original error: {error_msg}"
+        )
+
+    async def post_chat(client, url: str, headers: Dict[str, str], payload: Dict[str, Any], timeout_value: float) -> Dict[str, Any]:
+        response = await client.post(url, json=payload, headers=headers, timeout=timeout_value)
+        print(f"🌐 OpenAI-compatible Response - Status: {response.status_code}")
+        if response.status_code != 200:
+            try:
+                error_json = response.json()
+                error_msg = error_json.get("error", {}).get("message", str(error_json)) if isinstance(error_json, dict) else str(error_json)
+            except Exception:
+                error_msg = response.text or f"HTTP {response.status_code}"
+            if "channel error" in error_msg.lower():
+                raise channel_error_message(error_msg)
+            raise RuntimeError(f"OpenAI-compatible endpoint returned error {response.status_code}: {error_msg}")
+
+        response_json = response.json()
+        if isinstance(response_json, dict) and response_json.get("error"):
+            error_value = response_json.get("error")
+            error_msg = error_value.get("message", str(error_value)) if isinstance(error_value, dict) else str(error_value)
+            if "channel error" in error_msg.lower():
+                raise channel_error_message(error_msg)
+            raise RuntimeError(f"OpenAI-compatible endpoint returned error: {error_msg}")
+        return response_json
+
+    try:
+        httpx_timeout = httpx.Timeout(timeout, connect=10.0, read=timeout, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=httpx_timeout) as client:
+            base = endpoint.rstrip("/")
+            url = f"{base}/chat/completions" if base.endswith("/v1") else f"{base}/v1/chat/completions"
+            payload = {
+                "model": model,
+                "messages": _openai_compatible_messages(messages),
+                "stream": False,
+            }
+            use_native_tools = bool(tools) and not _is_gemma_model(model)
+            if tools and not use_native_tools:
+                print(f"⚠️  Native tools disabled for model '{model}' to avoid LM Studio chat template Channel Error")
+            if use_native_tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = "auto"
+
+            headers = {"Content-Type": "application/json"}
+            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            print(f"🌐 OpenAI-compatible Request - URL: {url}, Model: {model}, Messages: {len(messages)}")
+            try:
+                response_json = await post_chat(client, url, headers, payload, timeout)
+            except RuntimeError as e:
+                if use_native_tools and "Channel Error" in str(e):
+                    print("⚠️  Retrying LM Studio request without native tools after Channel Error")
+                    fallback_payload = dict(payload)
+                    fallback_payload.pop("tools", None)
+                    fallback_payload.pop("tool_choice", None)
+                    response_json = await post_chat(client, url, headers, fallback_payload, timeout)
+                else:
+                    raise
+            choices = response_json.get("choices") or []
+            if not choices:
+                raise RuntimeError("OpenAI-compatible response missing choices")
+            msg = choices[0].get("message") or {}
+            result_message = {
+                "role": msg.get("role", "assistant"),
+                "content": msg.get("content") or "",
+            }
+            if msg.get("tool_calls"):
+                result_message["tool_calls"] = msg["tool_calls"]
+                print(f"🌐 OpenAI-compatible Response - Found {len(msg.get('tool_calls', []))} tool call(s)")
+            else:
+                print("🌐 OpenAI-compatible Response - No tool_calls in response")
+            return {"message": result_message}
+    except httpx.TimeoutException:
+        raise RuntimeError(f"Request to OpenAI-compatible endpoint timed out after {timeout}s")
+    except Exception as e:
+        raise RuntimeError(f"Failed to communicate with OpenAI-compatible endpoint: {str(e)}")
+
+
 class AnyLogMCPAgent:
     def __init__(
         self,
         anylog_sse_url: str,
         ollama_model: str = DEFAULT_OLLAMA_MODEL,
-        llm_endpoint: Optional[str] = None
+        llm_endpoint: Optional[str] = None,
+        llm_api_type: Optional[str] = "auto"
     ):
         self.anylog_sse_url = anylog_sse_url
         self.ollama_model = ollama_model
         self.llm_endpoint = llm_endpoint  # Ollama endpoint (e.g., "http://localhost:11434")
+        self.llm_api_type = normalize_llm_api_type(llm_api_type)
         self.session: Optional[ClientSession] = None
         self.exit_stack: Optional[AsyncExitStack] = None
         self.stdio = None
@@ -689,10 +1031,12 @@ class AnyLogMCPAgent:
                 },
             ]
             
-            # Add conversation history (limit to last 10 exchanges = 20 messages for efficiency)
-            if conversation_history:
-                # Take last 20 messages to keep context manageable for small LLMs
-                recent_history = conversation_history[-20:]
+            # Add conversation history (keep local model chat templates conservative)
+            include_history = not (self.llm_api_type == "openai" and _is_gemma_model(self.ollama_model))
+            if conversation_history and include_history:
+                # Take last 8 messages to keep context manageable and avoid brittle
+                # local templates failing with long multi-turn conversations.
+                recent_history = conversation_history[-8:]
                 for msg in recent_history:
                     # Only include user and assistant messages, skip errors
                     if msg.get("role") in ["user", "assistant"]:
@@ -700,6 +1044,8 @@ class AnyLogMCPAgent:
                             "role": msg.get("role"),
                             "content": msg.get("content", "")
                         })
+            elif conversation_history and not include_history:
+                print(f"⚠️  Chat history disabled for model '{self.ollama_model}' in LM Studio compatibility mode")
             
             # Add current user prompt
             messages.append({"role": "user", "content": user_prompt})
@@ -740,6 +1086,7 @@ class AnyLogMCPAgent:
 
         print(f"🔧 Agent loop starting with {len(ollama_tools)} tools available")
         tool_results: List[Dict[str, Any]] = []
+        text_tool_call_signatures = set()
         for iteration in range(12):  # safety loop cap
             iteration_start = asyncio.get_event_loop().time()
             print(f"🔄 Agent loop iteration {iteration + 1}/12")
@@ -750,11 +1097,21 @@ class AnyLogMCPAgent:
                 tools=ollama_tools,
                 stream=False,
                 llm_endpoint=self.llm_endpoint,
+                llm_api_type=self.llm_api_type,
             )
             iteration_elapsed = asyncio.get_event_loop().time() - iteration_start
             print(f"⏱️  LLM call completed in {iteration_elapsed:.2f}s")
 
             msg = resp["message"]
+            text_tool_calls = _parse_text_tool_calls(msg.get("content", ""))
+            if text_tool_calls and not msg.get("tool_calls"):
+                msg = {
+                    **msg,
+                    "content": _strip_text_tool_calls(msg.get("content", "")),
+                    "tool_calls": text_tool_calls,
+                    "_text_tool_calls": True,
+                }
+                print(f"📥 Parsed {len(text_tool_calls)} text tool call(s) from model content")
             messages.append(msg)
             
             # Debug: Log what we received
@@ -766,11 +1123,28 @@ class AnyLogMCPAgent:
                     print(f"   - Tool: {tc.get('function', {}).get('name', 'unknown')}")
 
             tool_calls = msg.get("tool_calls") or []
+            text_tool_call_mode = bool(msg.get("_text_tool_calls"))
+            if text_tool_call_mode:
+                signatures = {
+                    f"{tc.get('function', {}).get('name')}:{json.dumps(tc.get('function', {}).get('arguments') or {}, sort_keys=True, default=str)}"
+                    for tc in tool_calls
+                }
+                if signatures and signatures.issubset(text_tool_call_signatures):
+                    fallback_report = _build_tool_result_report(tool_results)
+                    if fallback_report:
+                        return fallback_report
+                text_tool_call_signatures.update(signatures)
             if not tool_calls:
                 print(f"⚠️  No tool calls detected. Model returned direct answer (may be too small or not understanding tool usage)")
                 content_preview = msg.get('content', '')[:200]
                 print(f"   Response preview: {content_preview}...")
                 content = msg.get("content", "") or ""
+                if self.llm_api_type == "openai" and _is_gemma_model(self.ollama_model) and not content.strip():
+                    return (
+                        "LM Studio accepted the request, but this Gemma model did not return a usable chat response. "
+                        "For MCP data questions, select an LM Studio model with native tool/function-calling support, "
+                        "or switch back to a tool-capable Ollama model."
+                    )
                 if content.strip():
                     return content
                 fallback_report = _build_tool_result_report(tool_results)
@@ -859,15 +1233,26 @@ class AnyLogMCPAgent:
                     "elapsed_ms": int(tool_elapsed * 1000),
                     "total_elapsed_ms": int((asyncio.get_event_loop().time() - command_start) * 1000),
                 })
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.get("id") or request_id,
-                        "tool_name": tool_name,
-                        "name": tool_name,
-                        "content": _format_tool_result_for_model(tool_name, result_payload),
-                    }
-                )
+                formatted_result = _format_tool_result_for_model(tool_name, result_payload)
+                if text_tool_call_mode:
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"{formatted_result}\n\n"
+                            "Use this tool result to answer the user's question. "
+                            "Do not include tool-call markup in your response."
+                        ),
+                    })
+                else:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.get("id") or request_id,
+                            "tool_name": tool_name,
+                            "name": tool_name,
+                            "content": formatted_result,
+                        }
+                    )
 
         fallback_report = _build_tool_result_report(tool_results)
         if fallback_report:

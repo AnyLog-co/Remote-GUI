@@ -40,11 +40,13 @@ export const getMCPStatus = async () => {
 /**
  * List available models from Docker Ollama container or local Ollama
  */
-export const listModels = async (llmEndpoint = null) => {
+export const listModels = async (llmEndpoint = null, llmApiType = 'auto') => {
   try {
-    const url = llmEndpoint 
-      ? `${API_URL}/mcpclient/models?llm_endpoint=${encodeURIComponent(llmEndpoint)}`
-      : `${API_URL}/mcpclient/models`;
+    const params = new URLSearchParams();
+    if (llmEndpoint) params.set('llm_endpoint', llmEndpoint);
+    if (llmApiType) params.set('llm_api_type', llmApiType);
+    const query = params.toString();
+    const url = `${API_URL}/mcpclient/models${query ? `?${query}` : ''}`;
     const response = await fetch(url);
     if (!response.ok) {
       const error = await response.json();
@@ -68,7 +70,7 @@ export const listModelsFromDocker = async (llmEndpoint) => {
 /**
  * Connect to AnyLog MCP
  */
-export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEndpoint = null) => {
+export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEndpoint = null, llmApiType = 'auto') => {
   try {
     const response = await fetch(`${API_URL}/mcpclient/connect`, {
       method: 'POST',
@@ -79,6 +81,7 @@ export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEnd
         anylog_sse_url: anylogSseUrl,
         ollama_model: ollamaModel,
         llm_endpoint: llmEndpoint,
+        llm_api_type: llmApiType,
       }),
     });
     if (!response.ok) {
@@ -148,7 +151,7 @@ export const listMCPTools = async () => {
 /**
  * Ask a question to the MCP agent
  */
-export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, conversationHistory = null, llmEndpoint = null, abortSignal = null) => {
+export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, conversationHistory = null, llmEndpoint = null, llmApiType = 'auto', abortSignal = null) => {
   try {
     console.log('🌐 Sending request to MCP...');
     const response = await fetch(`${API_URL}/mcpclient/ask`, {
@@ -162,6 +165,7 @@ export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, co
         ollama_model: ollamaModel,
         conversation_history: conversationHistory,
         llm_endpoint: llmEndpoint,
+        llm_api_type: llmApiType,
       }),
       signal: abortSignal,
     });
@@ -193,6 +197,7 @@ export const askMCPStream = async ({
   ollamaModel = null,
   conversationHistory = null,
   llmEndpoint = null,
+  llmApiType = 'auto',
   abortSignal = null,
   onEvent = () => {},
 }) => {
@@ -208,6 +213,7 @@ export const askMCPStream = async ({
       ollama_model: ollamaModel,
       conversation_history: conversationHistory,
       llm_endpoint: llmEndpoint,
+      llm_api_type: llmApiType,
     }),
     signal: abortSignal,
   });

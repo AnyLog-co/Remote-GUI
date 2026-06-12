@@ -56,7 +56,15 @@ api_router = APIRouter(prefix="/mcpclient", tags=["MCP Client"])
 # Try to import MCP agent
 HAS_MCP_AGENT = False
 try:
-    from .mcp_agent import AnyLogMCPAgent, HAS_OLLAMA, HAS_MCP, DEFAULT_ANYLOG_MCP_SSE_URL, DEFAULT_OLLAMA_MODEL
+    from .mcp_agent import (
+        AnyLogMCPAgent,
+        HAS_OLLAMA,
+        HAS_MCP,
+        DEFAULT_ANYLOG_MCP_SSE_URL,
+        DEFAULT_OLLAMA_MODEL,
+        DEFAULT_LLM_API_TYPE,
+        normalize_llm_api_type,
+    )
     HAS_MCP_AGENT = True
     print("✅ Successfully imported MCP agent")
 except (ImportError, ValueError, json.JSONDecodeError) as e:
@@ -88,12 +96,14 @@ class MCPConnectRequest(BaseModel):
     anylog_sse_url: Optional[str] = None
     ollama_model: Optional[str] = None
     llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
+    llm_api_type: Optional[str] = None  # auto, ollama, or openai
 
 class MCPAskRequest(BaseModel):
     prompt: str
     anylog_sse_url: Optional[str] = None
     ollama_model: Optional[str] = None
     llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
+    llm_api_type: Optional[str] = None  # auto, ollama, or openai
     conversation_history: Optional[List[Dict[str, str]]] = None  # List of {role: "user"|"assistant", content: "..."}
 
 class MCPStatusResponse(BaseModel):
@@ -105,6 +115,7 @@ class MCPStatusResponse(BaseModel):
     current_model: Optional[str] = None
     anylog_url: Optional[str] = None
     llm_endpoint: Optional[str] = None  # Custom Ollama endpoint if configured
+    llm_api_type: Optional[str] = None
 
 # Global agent instance (per-request would be better, but for simplicity we'll use one)
 _agent_instance: Optional[AnyLogMCPAgent] = None
@@ -114,7 +125,8 @@ _connecting = False  # Flag to prevent concurrent connection attempts
 async def get_or_create_agent(
     anylog_sse_url: Optional[str] = None,
     ollama_model: Optional[str] = None,
-    llm_endpoint: Optional[str] = None
+    llm_endpoint: Optional[str] = None,
+    llm_api_type: Optional[str] = None
 ) -> AnyLogMCPAgent:
     """Get or create a global agent instance with connection reuse"""
     global _agent_instance, _connecting
@@ -128,6 +140,7 @@ async def get_or_create_agent(
             endpoint = os.getenv("LLM_ENDPOINT", None)
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
+        api_type = normalize_llm_api_type(llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
 
         if not url or not _is_valid_mcp_sse_url(url):
             raise RuntimeError("A valid AnyLog MCP SSE URL is required. Select a query node or enter an MCP URL.")
@@ -136,10 +149,12 @@ async def get_or_create_agent(
         if _agent_instance is not None:
             # Normalize existing endpoint for comparison
             existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
+            existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
             
             if (_agent_instance.anylog_sse_url == url and 
                 _agent_instance.ollama_model == model and
                 existing_endpoint == endpoint and
+                existing_api_type == api_type and
                 _agent_instance.session is not None):
                 # Verify it's still alive
                 if await _agent_instance.health_check():
@@ -153,7 +168,7 @@ async def get_or_create_agent(
                     _agent_instance = None
             else:
                 # Model, URL, or endpoint changed - close old agent and create new one
-                print(f"🔄 Model/URL/Endpoint changed. Old model: {_agent_instance.ollama_model}, New model: {model}. Closing old agent...")
+                print(f"🔄 Model/URL/Endpoint/API changed. Old model: {_agent_instance.ollama_model}, New model: {model}. Closing old agent...")
                 try:
                     await asyncio.wait_for(_agent_instance.close(), timeout=5.0)
                 except Exception:
@@ -166,11 +181,12 @@ async def get_or_create_agent(
         
         _connecting = True
         try:
-            print(f"🆕 Creating new agent with model: {model}, endpoint: {endpoint}")
+            print(f"🆕 Creating new agent with model: {model}, endpoint: {endpoint}, api_type: {api_type}")
             _agent_instance = AnyLogMCPAgent(
                 anylog_sse_url=url,
                 ollama_model=model,
-                llm_endpoint=endpoint
+                llm_endpoint=endpoint,
+                llm_api_type=api_type
             )
             await _agent_instance.connect(timeout=10.0)
             return _agent_instance
@@ -236,7 +252,8 @@ async def get_status():
             ollama_available=HAS_OLLAMA,
             mcp_available=HAS_MCP,
             current_model=None,
-            anylog_url=None
+            anylog_url=None,
+            llm_api_type=None
         )
     
     if _agent_instance is None or _agent_instance.session is None:
@@ -247,7 +264,8 @@ async def get_status():
             mcp_available=HAS_MCP,
             current_model=_agent_instance.ollama_model if _agent_instance else None,
             anylog_url=_agent_instance.anylog_sse_url if _agent_instance else None,
-            llm_endpoint=_agent_instance.llm_endpoint if _agent_instance else None
+            llm_endpoint=_agent_instance.llm_endpoint if _agent_instance else None,
+            llm_api_type=getattr(_agent_instance, "llm_api_type", None) if _agent_instance else None
         )
     
     # Verify connection is actually working with a health check
@@ -266,7 +284,8 @@ async def get_status():
             mcp_available=HAS_MCP,
             current_model=_agent_instance.ollama_model if _agent_instance else None,
             anylog_url=_agent_instance.anylog_sse_url if _agent_instance else None,
-            llm_endpoint=_agent_instance.llm_endpoint if _agent_instance else None
+            llm_endpoint=_agent_instance.llm_endpoint if _agent_instance else None,
+            llm_api_type=getattr(_agent_instance, "llm_api_type", None) if _agent_instance else None
         )
     
     # Connection is alive, use cached tools
@@ -277,7 +296,8 @@ async def get_status():
         mcp_available=HAS_MCP,
         current_model=_agent_instance.ollama_model,
         anylog_url=_agent_instance.anylog_sse_url,
-        llm_endpoint=_agent_instance.llm_endpoint
+        llm_endpoint=_agent_instance.llm_endpoint,
+        llm_api_type=getattr(_agent_instance, "llm_api_type", "auto")
     )
 
 @api_router.post("/connect")
@@ -300,6 +320,7 @@ async def connect_mcp(request: MCPConnectRequest):
             endpoint = os.getenv("LLM_ENDPOINT", None)
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
+        api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
         
         if endpoint and not _is_valid_ollama_endpoint(endpoint):
             raise HTTPException(
@@ -317,10 +338,12 @@ async def connect_mcp(request: MCPConnectRequest):
             if _agent_instance is not None:
                 # Normalize existing endpoint for comparison
                 existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
+                existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
                 
                 if (_agent_instance.anylog_sse_url == url and 
                     _agent_instance.ollama_model == model and
                     existing_endpoint == endpoint and
+                    existing_api_type == api_type and
                     _agent_instance.session is not None):
                     # Verify it's still alive
                     if await _agent_instance.health_check():
@@ -330,7 +353,8 @@ async def connect_mcp(request: MCPConnectRequest):
                             "available_tools": _agent_instance.cached_tools,
                             "ollama_model": model,
                             "anylog_url": url,
-                            "llm_endpoint": endpoint
+                            "llm_endpoint": endpoint,
+                            "llm_api_type": api_type
                         }
                     else:
                         # Connection is dead, clean it up
@@ -344,14 +368,16 @@ async def connect_mcp(request: MCPConnectRequest):
         if _agent_instance is not None:
             # Normalize existing endpoint for comparison
             existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
+            existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
             
             if (_agent_instance.anylog_sse_url != url or 
                 _agent_instance.ollama_model != model or
-                existing_endpoint != endpoint):
+                existing_endpoint != endpoint or
+                existing_api_type != api_type):
                 await close_agent()
         
         # Create new connection (or reuse if same URL/model/endpoint)
-        agent = await get_or_create_agent(url, model, endpoint)
+        agent = await get_or_create_agent(url, model, endpoint, api_type)
         tools = agent.cached_tools
         
         return {
@@ -360,7 +386,8 @@ async def connect_mcp(request: MCPConnectRequest):
             "available_tools": tools,
             "ollama_model": model,
             "anylog_url": url,
-            "llm_endpoint": endpoint
+            "llm_endpoint": endpoint,
+            "llm_api_type": api_type
         }
     except HTTPException:
         raise
@@ -400,8 +427,8 @@ async def disconnect_mcp():
         raise HTTPException(status_code=500, detail=f"Failed to disconnect: {str(e)}")
 
 @api_router.get("/models")
-async def list_models(llm_endpoint: Optional[str] = None):
-    """List available models from either a custom Ollama endpoint or local Ollama"""
+async def list_models(llm_endpoint: Optional[str] = None, llm_api_type: Optional[str] = None):
+    """List available models from local Ollama, Ollama HTTP, or OpenAI-compatible endpoints."""
     if not HAS_MCP_AGENT:
         raise HTTPException(
             status_code=500,
@@ -409,6 +436,7 @@ async def list_models(llm_endpoint: Optional[str] = None):
         )
     
     endpoint = llm_endpoint or os.getenv("LLM_ENDPOINT", None)
+    api_type = normalize_llm_api_type(llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
     
     if endpoint and not _is_valid_ollama_endpoint(endpoint):
         raise HTTPException(
@@ -418,10 +446,10 @@ async def list_models(llm_endpoint: Optional[str] = None):
     
     try:
         if endpoint:
-            # List models from a custom Ollama endpoint
-            from .mcp_agent import list_models_from_docker
-            models = await list_models_from_docker(endpoint, timeout=10.0)
-            source = "remote"
+            from .mcp_agent import list_models_from_endpoint
+            result = await list_models_from_endpoint(endpoint, api_type, timeout=10.0)
+            models = result["models"]
+            source = result["source"]
         else:
             # List models from local Ollama
             from .mcp_agent import list_models_from_local_ollama
@@ -459,7 +487,8 @@ async def list_models(llm_endpoint: Optional[str] = None):
             "models": model_list,
             "count": len(model_list),
             "source": source,
-            "endpoint": endpoint if endpoint else "local"
+            "endpoint": endpoint if endpoint else "local",
+            "llm_api_type": api_type if endpoint else "ollama"
         }
     except Exception as e:
         raise HTTPException(
@@ -546,6 +575,7 @@ async def ask_question(request: MCPAskRequest):
             endpoint = os.getenv("LLM_ENDPOINT", None)
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
+        api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
         if endpoint and not _is_valid_ollama_endpoint(endpoint):
             raise HTTPException(
                 status_code=400,
@@ -559,11 +589,11 @@ async def ask_question(request: MCPAskRequest):
         
         # Log which LLM we're using
         if endpoint:
-            print(f"🌐 Using Ollama endpoint: {endpoint} with model: {model}")
+            print(f"🌐 Using LLM endpoint: {endpoint} with model: {model}, api_type: {api_type}")
         else:
             print(f"💻 Using local Ollama with model: {model}")
         
-        agent = await get_or_create_agent(url, model, endpoint)
+        agent = await get_or_create_agent(url, model, endpoint, api_type)
         
         # Ask the question (with timeout and conversation history)
         print(f"📝 MCP Ask Request - Prompt: {request.prompt[:100]}...")
@@ -590,6 +620,9 @@ async def ask_question(request: MCPAskRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"❌ MCP Ask Error: {str(e)}")
+        print(f"   Traceback: {traceback.format_exc()}")
         # If connection error, mark as disconnected
         error_str = str(e).lower()
         if "connection" in error_str or "closed" in error_str or "not connected" in error_str:
@@ -624,6 +657,7 @@ async def ask_question_stream(request: MCPAskRequest):
                 endpoint = os.getenv("LLM_ENDPOINT", None)
                 if endpoint:
                     endpoint = endpoint.strip() if endpoint.strip() else None
+            api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
 
             if endpoint and not _is_valid_ollama_endpoint(endpoint):
                 yield _sse_event(
@@ -642,7 +676,8 @@ async def ask_question_stream(request: MCPAskRequest):
             agent = AnyLogMCPAgent(
                 anylog_sse_url=url,
                 ollama_model=model,
-                llm_endpoint=endpoint
+                llm_endpoint=endpoint,
+                llm_api_type=api_type
             )
             await agent.connect(timeout=10.0)
             yield _sse_event("status", message=f"Loaded {len(agent.cached_tools)} MCP tools")
