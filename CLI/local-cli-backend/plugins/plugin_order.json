@@ -2,6 +2,7 @@
   "plugin_order": [
     "policycreator",
     "grafana",
+    "edgedatafabrictopology",
     "reportgenerator",
     "nodecheck",
     "mcpclient",

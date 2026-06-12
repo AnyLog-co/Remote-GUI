@@ -1,3 +1,13 @@
 {
-  "bookmarks": []
+  "bookmarks": [
+    {
+      "id": "5db1c8c4-19a8-42b5-ad62-c153e3dc4aab",
+      "node": {
+        "conn": "192.168.0.138:32149"
+      },
+      "description": "",
+      "created_at": "2026-06-10T17:45:22.861767",
+      "is_default": true
+    }
+  ]
 }

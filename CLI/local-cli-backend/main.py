@@ -41,7 +41,8 @@ from feature_config_loader import (
     is_plugin_enabled,
     get_enabled_features,
     get_enabled_plugins,
-    load_feature_config
+    load_feature_config,
+    reload_config
 )
 
 
@@ -286,7 +287,7 @@ def get_env_config_endpoint():
 @app.get("/feature-config")
 def get_feature_config_endpoint():
     """Get the feature configuration for frontend"""
-    config = load_feature_config()
+    config = reload_config()
     # Return only enabled status for each feature/plugin
     features_status = {
         name: {"enabled": data.get("enabled", True)}

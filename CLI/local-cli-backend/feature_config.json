@@ -62,6 +62,10 @@
       "enabled": true,
       "description": "Grafana Dashboard Plugin"
     },
+    "edgedatafabrictopology": {
+      "enabled": true,
+      "description": "Edge Data Fabric Topology Plugin"
+    },
     "mcpclient": {
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"

@@ -71,7 +71,9 @@ export const isFeatureEnabled = async (featureName) => {
 
 /**
  * Check if a plugin is enabled.
- * Only plugins listed in feature_config and with enabled !== false are enabled.
+ * Auto-discovered frontend plugins are enabled unless feature_config explicitly
+ * disables them. This keeps newly added plugins visible even while a running
+ * backend still has an older cached feature_config response.
  * @param {string} pluginName - Name of the plugin
  * @returns {boolean} True if listed and enabled, false otherwise (including when not in config).
  */
@@ -79,11 +81,7 @@ export const isPluginEnabled = async (pluginName) => {
   const config = await fetchFeatureConfig();
   const plugins = config.plugins || {};
   
-  if (!(pluginName in plugins)) {
-    return false;
-  }
-  
-  return plugins[pluginName].enabled !== false;
+  return plugins[pluginName]?.enabled !== false;
 };
 
 /**
