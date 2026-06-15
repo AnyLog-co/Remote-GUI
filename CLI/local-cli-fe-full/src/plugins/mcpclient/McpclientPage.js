@@ -19,6 +19,7 @@ import {
 import {
   askMCP,
   askMCPStream,
+  cancelMCPStream,
   connectMCP,
   disconnectMCP,
   getMCPStatus,
@@ -36,6 +37,9 @@ const DEFAULT_MCP_PATH = '/mcp/sse';
 const PREFERRED_MODEL = '';
 const MODEL_PLACEHOLDER = 'Select a running model';
 const DEFAULT_LLM_API_TYPE = 'auto';
+const DEFAULT_REQUEST_TIMEOUT_SECONDS = 900;
+const MIN_REQUEST_TIMEOUT_SECONDS = 30;
+const MAX_REQUEST_TIMEOUT_SECONDS = 7200;
 const HISTORY_STORAGE_KEY = 'mcpclient_chat_history';
 const CONFIG_STORAGE_KEY = 'mcpclient_config';
 const CHAT_SESSIONS_STORAGE_KEY = 'mcpclient_chats_v2';
@@ -155,6 +159,17 @@ const stringifyPayload = (payload) => {
   }
 };
 
+const formatBriefError = (message = '') => {
+  const firstLine = String(message || 'Failed to process question.').split('\n').find(Boolean) || 'Failed to process question.';
+  return firstLine.length > 220 ? `${firstLine.slice(0, 220)}...` : firstLine;
+};
+
+const normalizeRequestTimeout = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_REQUEST_TIMEOUT_SECONDS;
+  return Math.max(MIN_REQUEST_TIMEOUT_SECONDS, Math.min(MAX_REQUEST_TIMEOUT_SECONDS, Math.round(parsed)));
+};
+
 const createChatId = () => `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const normalizeToolList = (tools = []) => (
@@ -196,6 +211,8 @@ const createChatSession = ({
   ollamaModel = PREFERRED_MODEL,
   ollamaEndpoint = '',
   llmApiType = DEFAULT_LLM_API_TYPE,
+  llmBearerToken = '',
+  requestTimeoutSeconds = DEFAULT_REQUEST_TIMEOUT_SECONDS,
   assistantName = DEFAULT_ASSISTANT_NAME,
   instructions = '',
   mcpTools = [],
@@ -212,6 +229,8 @@ const createChatSession = ({
       ollamaModel,
       ollamaEndpoint,
       llmApiType,
+      llmBearerToken,
+      requestTimeoutSeconds: normalizeRequestTimeout(requestTimeoutSeconds),
       assistantName,
       instructions,
       mcpTools: normalizeToolList(mcpTools),
@@ -230,6 +249,8 @@ const normalizeChatSession = (chat, fallbackConfig = {}) => ({
     ollamaModel: chat.config?.ollamaModel || fallbackConfig.ollamaModel || PREFERRED_MODEL,
     ollamaEndpoint: chat.config?.ollamaEndpoint || fallbackConfig.ollamaEndpoint || '',
     llmApiType: chat.config?.llmApiType || fallbackConfig.llmApiType || DEFAULT_LLM_API_TYPE,
+    llmBearerToken: chat.config?.llmBearerToken || fallbackConfig.llmBearerToken || '',
+    requestTimeoutSeconds: normalizeRequestTimeout(chat.config?.requestTimeoutSeconds ?? fallbackConfig.requestTimeoutSeconds),
     assistantName: chat.config?.assistantName || fallbackConfig.assistantName || DEFAULT_ASSISTANT_NAME,
     instructions: chat.config?.instructions || fallbackConfig.instructions || '',
     mcpTools: normalizeToolList(chat.config?.mcpTools || fallbackConfig.mcpTools || []),
@@ -270,9 +291,27 @@ const ObservationPanel = ({ observations = [], totalElapsedMs }) => (
                 <pre>{item.error}</pre>
               </details>
             )}
+            {item.status === 'error' && item.exception && (
+              <details>
+                <summary>Full exception</summary>
+                <pre>{item.exception}</pre>
+              </details>
+            )}
           </div>
         ))}
       </div>
+    )}
+  </div>
+);
+
+const ErrorDetails = ({ message, exception }) => (
+  <div className="message-error-content">
+    <div className="error-summary-text">{formatBriefError(message)}</div>
+    {exception && (
+      <details className="exception-details">
+        <summary>Full exception</summary>
+        <pre>{exception}</pre>
+      </details>
     )}
   </div>
 );
@@ -347,18 +386,21 @@ const McpclientPage = ({ node }) => {
   const [ollamaModel, setOllamaModel] = useState(PREFERRED_MODEL);
   const [ollamaEndpoint, setOllamaEndpoint] = useState('');
   const [llmApiType, setLlmApiType] = useState(DEFAULT_LLM_API_TYPE);
+  const [llmBearerToken, setLlmBearerToken] = useState('');
   const [models, setModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [streamNote, setStreamNote] = useState('');
   const [modelSource, setModelSource] = useState('local');
   const [assistantName, setAssistantName] = useState(DEFAULT_ASSISTANT_NAME);
+  const [requestTimeoutSeconds, setRequestTimeoutSeconds] = useState(DEFAULT_REQUEST_TIMEOUT_SECONDS);
   const [instructions, setInstructions] = useState('');
   const [instructionsSaved, setInstructionsSaved] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
   const [activeChatId, setActiveChatId] = useState('');
 
   const abortControllersRef = useRef({});
+  const streamRequestIdsRef = useRef({});
   const messagesEndRef = useRef(null);
   const answersRef = useRef([]);
   const activeChatIdRef = useRef('');
@@ -376,6 +418,8 @@ const McpclientPage = ({ node }) => {
     setOllamaModel(config.ollamaModel || PREFERRED_MODEL);
     setOllamaEndpoint(config.ollamaEndpoint || '');
     setLlmApiType(config.llmApiType || DEFAULT_LLM_API_TYPE);
+    setLlmBearerToken(config.llmBearerToken || '');
+    setRequestTimeoutSeconds(normalizeRequestTimeout(config.requestTimeoutSeconds));
     setAssistantName(config.assistantName || DEFAULT_ASSISTANT_NAME);
     setInstructions(config.instructions || '');
     setInstructionsSaved(false);
@@ -393,6 +437,8 @@ const McpclientPage = ({ node }) => {
     let initialModel = PREFERRED_MODEL;
     let initialEndpoint = '';
     let initialLlmApiType = DEFAULT_LLM_API_TYPE;
+    let initialLlmBearerToken = '';
+    let initialRequestTimeoutSeconds = DEFAULT_REQUEST_TIMEOUT_SECONDS;
     let initialAssistantName = DEFAULT_ASSISTANT_NAME;
     let initialInstructions = '';
     let initialMessages = [];
@@ -404,6 +450,8 @@ const McpclientPage = ({ node }) => {
       initialModel = savedConfig.ollamaModel || PREFERRED_MODEL;
       initialEndpoint = savedConfig.ollamaEndpoint || '';
       initialLlmApiType = savedConfig.llmApiType || DEFAULT_LLM_API_TYPE;
+      initialLlmBearerToken = savedConfig.llmBearerToken || '';
+      initialRequestTimeoutSeconds = normalizeRequestTimeout(savedConfig.requestTimeoutSeconds);
       initialAssistantName = savedConfig.assistantName || DEFAULT_ASSISTANT_NAME;
       initialInstructions = savedConfig.instructions || '';
       const initialTools = normalizeToolList(savedConfig.mcpTools || []);
@@ -420,6 +468,8 @@ const McpclientPage = ({ node }) => {
           ollamaModel: initialModel,
           ollamaEndpoint: initialEndpoint,
           llmApiType: initialLlmApiType,
+          llmBearerToken: initialLlmBearerToken,
+          requestTimeoutSeconds: initialRequestTimeoutSeconds,
           assistantName: initialAssistantName,
           instructions: initialInstructions,
           mcpTools: initialTools,
@@ -434,6 +484,8 @@ const McpclientPage = ({ node }) => {
           ollamaModel: initialModel,
           ollamaEndpoint: initialEndpoint,
           llmApiType: initialLlmApiType,
+          llmBearerToken: initialLlmBearerToken,
+          requestTimeoutSeconds: initialRequestTimeoutSeconds,
           assistantName: initialAssistantName,
           instructions: initialInstructions,
           mcpTools: initialTools,
@@ -452,6 +504,8 @@ const McpclientPage = ({ node }) => {
       setOllamaModel(activeChat.config.ollamaModel || PREFERRED_MODEL);
       setOllamaEndpoint(activeChat.config.ollamaEndpoint || '');
       setLlmApiType(activeChat.config.llmApiType || DEFAULT_LLM_API_TYPE);
+      setLlmBearerToken(activeChat.config.llmBearerToken || '');
+      setRequestTimeoutSeconds(normalizeRequestTimeout(activeChat.config.requestTimeoutSeconds));
       setAssistantName(activeChat.config.assistantName || DEFAULT_ASSISTANT_NAME);
       setInstructions(activeChat.config.instructions || '');
       setTools(normalizeToolList(activeChat.config.mcpTools || []));
@@ -460,6 +514,8 @@ const McpclientPage = ({ node }) => {
       initialModel = activeChat.config.ollamaModel || PREFERRED_MODEL;
       initialEndpoint = activeChat.config.ollamaEndpoint || '';
       initialLlmApiType = activeChat.config.llmApiType || DEFAULT_LLM_API_TYPE;
+      initialLlmBearerToken = activeChat.config.llmBearerToken || '';
+      initialRequestTimeoutSeconds = normalizeRequestTimeout(activeChat.config.requestTimeoutSeconds);
     } catch (storageError) {
       console.warn('Failed to load MCP client storage:', storageError);
       const fallbackChat = createChatSession({
@@ -473,7 +529,7 @@ const McpclientPage = ({ node }) => {
       initialAnylogUrl = fallbackChat.config.anylogUrl;
     }
 
-    loadStatus({ initialAnylogUrl, initialEndpoint, initialModel, initialLlmApiType });
+    loadStatus({ initialAnylogUrl, initialEndpoint, initialModel, initialLlmApiType, initialLlmBearerToken });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -512,6 +568,8 @@ const McpclientPage = ({ node }) => {
           ollamaModel,
           ollamaEndpoint,
           llmApiType,
+          llmBearerToken,
+          requestTimeoutSeconds,
           assistantName,
           instructions,
           mcpTools: tools,
@@ -524,7 +582,7 @@ const McpclientPage = ({ node }) => {
     } catch (storageError) {
       console.warn('Failed to persist MCP chat history:', storageError);
     }
-  }, [activeChatId, answers, anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, assistantName, instructions, tools]);
+  }, [activeChatId, answers, anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, llmBearerToken, requestTimeoutSeconds, assistantName, instructions, tools]);
 
   useEffect(() => {
     if (!chatSessions.length) return;
@@ -573,6 +631,8 @@ const McpclientPage = ({ node }) => {
         ollamaModel,
         ollamaEndpoint,
         llmApiType,
+        llmBearerToken,
+        requestTimeoutSeconds,
         assistantName,
         instructions,
         mcpTools: tools,
@@ -580,7 +640,7 @@ const McpclientPage = ({ node }) => {
     } catch (storageError) {
       console.warn('Failed to persist MCP config:', storageError);
     }
-  }, [anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, assistantName, instructions, tools]);
+  }, [anylogUrl, ollamaModel, ollamaEndpoint, llmApiType, llmBearerToken, requestTimeoutSeconds, assistantName, instructions, tools]);
 
   const chooseModel = (availableModels, currentModel) => {
     const names = availableModels.map(getModelName);
@@ -614,12 +674,13 @@ const McpclientPage = ({ node }) => {
     return normalizedTools;
   };
 
-  const loadModels = async (endpointOverride = ollamaEndpoint, apiTypeOverride = llmApiType) => {
+  const loadModels = async (endpointOverride = ollamaEndpoint, apiTypeOverride = llmApiType, bearerTokenOverride = llmBearerToken) => {
     const endpoint = normalizeEndpoint(endpointOverride);
     const requestedApiType = apiTypeOverride || DEFAULT_LLM_API_TYPE;
+    const bearerToken = bearerTokenOverride || '';
     setLoadingModels(true);
     try {
-      const result = await listModels(endpoint, requestedApiType);
+      const result = await listModels(endpoint, requestedApiType, bearerToken);
       const availableModels = result.models || [];
       const selected = chooseModel(availableModels, ollamaModel);
       setModels(availableModels);
@@ -645,6 +706,7 @@ const McpclientPage = ({ node }) => {
     initialEndpoint = ollamaEndpoint,
     initialModel = ollamaModel,
     initialLlmApiType = llmApiType,
+    initialLlmBearerToken = llmBearerToken,
   } = {}) => {
     setLoading(true);
     setError(null);
@@ -665,7 +727,7 @@ const McpclientPage = ({ node }) => {
       setLlmApiType(nextApiType);
       setOllamaModel(nextModel);
 
-      const loaded = await loadModels(nextEndpoint, nextApiType);
+      const loaded = await loadModels(nextEndpoint, nextApiType, initialLlmBearerToken);
       const selectedModel = loaded.selected || nextModel;
 
       if (statusData.available_tools?.length) {
@@ -675,7 +737,7 @@ const McpclientPage = ({ node }) => {
       if (!statusData.connected && selectedModel && nextAnylogUrl) {
         try {
           setConnecting(true);
-          const result = await connectMCP(nextAnylogUrl, selectedModel, normalizeEndpoint(nextEndpoint), nextApiType);
+          const result = await connectMCP(nextAnylogUrl, selectedModel, normalizeEndpoint(nextEndpoint), nextApiType, initialLlmBearerToken);
           setConnected(true);
           setStatus({ ...statusData, connected: true, available_tools: result.available_tools || [] });
           setChatTools(activeChatIdRef.current, result.available_tools || []);
@@ -688,7 +750,7 @@ const McpclientPage = ({ node }) => {
       }
     } catch (statusError) {
       setError(`Failed to load MCP status: ${statusError.message}`);
-      await loadModels(initialEndpoint, initialLlmApiType);
+      await loadModels(initialEndpoint, initialLlmApiType, initialLlmBearerToken);
     } finally {
       setLoading(false);
     }
@@ -708,7 +770,7 @@ const McpclientPage = ({ node }) => {
     setError(null);
     try {
       const endpoint = normalizeEndpoint(ollamaEndpoint);
-      const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint, llmApiType);
+      const result = await connectMCP(anylogUrl || null, ollamaModel || null, endpoint, llmApiType, llmBearerToken);
       setConnected(true);
       setStatus({
         ...(status || {}),
@@ -747,7 +809,7 @@ const McpclientPage = ({ node }) => {
 
   const handleRefreshModels = async () => {
     setError(null);
-    await loadModels(ollamaEndpoint, llmApiType);
+    await loadModels(ollamaEndpoint, llmApiType, llmBearerToken);
   };
 
   const updateChatMessages = (chatId, updater) => {
@@ -794,6 +856,7 @@ const McpclientPage = ({ node }) => {
         arguments: event.arguments ?? existing.arguments,
         response: event.response ?? existing.response,
         error: event.error ?? existing.error,
+        exception: event.exception ?? event.traceback ?? existing.exception,
         elapsedMs: event.elapsed_ms ?? event.elapsedMs ?? existing.elapsedMs,
         totalElapsedMs: event.total_elapsed_ms ?? event.totalElapsedMs ?? existing.totalElapsedMs,
         iteration: event.iteration ?? existing.iteration,
@@ -833,6 +896,8 @@ const McpclientPage = ({ node }) => {
       ollamaModel,
       ollamaEndpoint,
       llmApiType,
+      llmBearerToken,
+      requestTimeoutSeconds: normalizeRequestTimeout(requestTimeoutSeconds),
       instructions,
     };
     const promptForModel = requestConfig.instructions?.trim()
@@ -866,7 +931,9 @@ const McpclientPage = ({ node }) => {
 
     const abortController = new AbortController();
     abortControllersRef.current[requestChatId] = abortController;
+    streamRequestIdsRef.current[requestChatId] = assistantId;
     let streamError = '';
+    let streamErrorEvent = null;
 
     try {
       const endpoint = normalizeEndpoint(requestConfig.ollamaEndpoint);
@@ -877,6 +944,9 @@ const McpclientPage = ({ node }) => {
         conversationHistory: conversationHistory.length ? conversationHistory : null,
         llmEndpoint: endpoint,
         llmApiType: requestConfig.llmApiType || DEFAULT_LLM_API_TYPE,
+        streamRequestId: assistantId,
+        timeoutSeconds: requestConfig.requestTimeoutSeconds,
+        llmBearerToken: requestConfig.llmBearerToken,
         abortSignal: abortController.signal,
         onEvent: (event) => {
           if (event.type === 'status') {
@@ -914,11 +984,17 @@ const McpclientPage = ({ node }) => {
           }
           if (event.type === 'error') {
             streamError = event.message || 'Streaming request failed.';
+            streamErrorEvent = event;
           }
         },
       });
 
-      if (streamError) throw new Error(streamError);
+      if (streamError) {
+        const error = new Error(streamError);
+        error.exception = streamErrorEvent?.exception || streamErrorEvent?.traceback || '';
+        error.event = streamErrorEvent;
+        throw error;
+      }
       updateAssistantMessage(requestChatId, assistantId, (msg) => ({
         content: msg.content || streamResult.answer || '',
         streaming: false,
@@ -927,11 +1003,28 @@ const McpclientPage = ({ node }) => {
       if (askError.name === 'AbortError' || askError.message?.includes('aborted')) {
         updateChatMessages(requestChatId, (messages) => messages.filter((msg) => msg.id !== assistantId));
         setStreamNote('');
+      } else if (askError.streamDisconnected) {
+        setError(`${askError.message || 'The response stream disconnected.'} The backend request may still be running; reconnect will resume when the stream is available.`);
+        updateAssistantMessage(requestChatId, assistantId, (msg) => ({
+          type: 'error',
+          content: msg.content || 'The response stream disconnected before completion.',
+          exception: askError.exception || askError.stack || '',
+          streaming: false,
+          showObservations: true,
+        }));
       } else if ((requestConfig.llmApiType || DEFAULT_LLM_API_TYPE) === 'openai') {
         setError(askError.message || 'Failed to process question.');
         updateChatMessages(requestChatId, (messages) => messages.map((msg) => (
           msg.id === assistantId
-            ? { type: 'error', content: askError.message || 'Failed to process question.', failedPrompt: userPrompt, id: assistantId }
+            ? {
+              ...msg,
+              type: 'error',
+              content: askError.message || 'Failed to process question.',
+              exception: askError.exception || askError.stack || '',
+              failedPrompt: userPrompt,
+              streaming: false,
+              showObservations: true,
+            }
             : msg
         )));
       } else {
@@ -943,7 +1036,9 @@ const McpclientPage = ({ node }) => {
             conversationHistory.length ? conversationHistory : null,
             normalizeEndpoint(requestConfig.ollamaEndpoint),
             requestConfig.llmApiType || DEFAULT_LLM_API_TYPE,
-            abortController.signal
+            abortController.signal,
+            requestConfig.requestTimeoutSeconds,
+            requestConfig.llmBearerToken
           );
           updateAssistantMessage(requestChatId, assistantId, () => ({
             content: fallback.answer || fallback.content || '',
@@ -953,7 +1048,15 @@ const McpclientPage = ({ node }) => {
           setError(fallbackError.message || askError.message || 'Failed to process question.');
           updateChatMessages(requestChatId, (messages) => messages.map((msg) => (
             msg.id === assistantId
-              ? { type: 'error', content: fallbackError.message || askError.message, failedPrompt: userPrompt, id: assistantId }
+              ? {
+                ...msg,
+                type: 'error',
+                content: fallbackError.message || askError.message,
+                exception: fallbackError.exception || fallbackError.stack || askError.exception || askError.stack || '',
+                failedPrompt: userPrompt,
+                streaming: false,
+                showObservations: true,
+              }
               : msg
           )));
         }
@@ -962,12 +1065,22 @@ const McpclientPage = ({ node }) => {
       setRunningChatIds((prev) => prev.filter((chatId) => chatId !== requestChatId));
       setStreamNote('');
       delete abortControllersRef.current[requestChatId];
+      delete streamRequestIdsRef.current[requestChatId];
     }
   };
 
-  const handleCancel = (chatId = activeChatIdRef.current) => {
+  const handleCancel = async (chatId = activeChatIdRef.current) => {
+    const streamRequestId = streamRequestIdsRef.current[chatId];
     abortControllersRef.current[chatId]?.abort();
     delete abortControllersRef.current[chatId];
+    delete streamRequestIdsRef.current[chatId];
+    if (streamRequestId) {
+      try {
+        await cancelMCPStream(streamRequestId);
+      } catch (cancelError) {
+        setError(cancelError.message || 'Failed to cancel request.');
+      }
+    }
     setRunningChatIds((prev) => prev.filter((runningChatId) => runningChatId !== chatId));
     setStreamNote('');
   };
@@ -990,6 +1103,8 @@ const McpclientPage = ({ node }) => {
       ollamaModel: ollamaModel || PREFERRED_MODEL,
       ollamaEndpoint,
       llmApiType,
+      llmBearerToken,
+      requestTimeoutSeconds,
       assistantName: assistantName || DEFAULT_ASSISTANT_NAME,
       instructions,
       mcpTools: tools,
@@ -1549,6 +1664,35 @@ const McpclientPage = ({ node }) => {
           font-size: 12px;
           margin-top: 8px;
         }
+        .message-error-content {
+          display: grid;
+          gap: 10px;
+        }
+        .error-summary-text {
+          color: #7f1d1d;
+          font-weight: 700;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .exception-details summary {
+          cursor: pointer;
+          color: #7f1d1d;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .exception-details pre {
+          margin: 8px 0 0;
+          padding: 10px;
+          max-height: 320px;
+          overflow: auto;
+          border-radius: 6px;
+          background: #111827;
+          color: #fee2e2;
+          font-size: 12px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
         .observation-panel {
           margin-top: 12px;
           border: 1px solid #c8d1df;
@@ -1875,6 +2019,20 @@ const McpclientPage = ({ node }) => {
                 </div>
 
                 <div className="field">
+                  <label htmlFor="llm-bearer-token">API Bearer Token</label>
+                  <input
+                    id="llm-bearer-token"
+                    type="password"
+                    value={llmBearerToken}
+                    onChange={(event) => setLlmBearerToken(event.target.value)}
+                    placeholder="No token"
+                    autoComplete="off"
+                    spellCheck="false"
+                  />
+                  <div className="hint">Optional. Leave blank to send no chat-specific token.</div>
+                </div>
+
+                <div className="field">
                   <label htmlFor="llm-api-type">LLM API type</label>
                   <select
                     id="llm-api-type"
@@ -1886,6 +2044,26 @@ const McpclientPage = ({ node }) => {
                     <option value="openai">OpenAI / LM Studio (/v1/chat/completions)</option>
                   </select>
                   <div className="hint">Choose OpenAI / LM Studio for LM Studio local server. That avoids sending requests to Ollama's /api/chat endpoint.</div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="request-timeout">Request timeout (seconds)</label>
+                  <input
+                    id="request-timeout"
+                    type="number"
+                    min={MIN_REQUEST_TIMEOUT_SECONDS}
+                    max={MAX_REQUEST_TIMEOUT_SECONDS}
+                    step="30"
+                    value={requestTimeoutSeconds}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setRequestTimeoutSeconds(value === '' ? '' : Number(value));
+                    }}
+                    onBlur={() => setRequestTimeoutSeconds((value) => normalizeRequestTimeout(value))}
+                  />
+                  <div className="hint">
+                    Applies only to this chat. Range {MIN_REQUEST_TIMEOUT_SECONDS}-{MAX_REQUEST_TIMEOUT_SECONDS} seconds; default {DEFAULT_REQUEST_TIMEOUT_SECONDS}.
+                  </div>
                 </div>
 
                 <div className="field">
@@ -1990,9 +2168,10 @@ const McpclientPage = ({ node }) => {
                 answers.map((answer, index) => {
                   const messageId = answer.id || `message-${index}`;
                   const assistantLabel = assistantName.trim() || DEFAULT_ASSISTANT_NAME;
+                  const canShowObservationControl = answer.type === 'assistant' || (answer.type === 'error' && (answer.observations || []).length > 0);
                   return (
                     <div className="message-wrap" key={messageId}>
-                      {answer.type === 'assistant' ? (
+                      {canShowObservationControl ? (
                         <button
                           type="button"
                           className={`message-info-button ${answer.showObservations ? 'active' : ''}`}
@@ -2025,6 +2204,16 @@ const McpclientPage = ({ node }) => {
                                 />
                               )}
                               <ArtifactPanel content={answer.content} messageIndex={index} />
+                            </>
+                          ) : answer.type === 'error' ? (
+                            <>
+                              <ErrorDetails message={answer.content} exception={answer.exception} />
+                              {(answer.showObservations || (answer.observations || []).length > 0) && (
+                                <ObservationPanel
+                                  observations={answer.observations || []}
+                                  totalElapsedMs={answer.totalElapsedMs}
+                                />
+                              )}
                             </>
                           ) : (
                             <div style={{ whiteSpace: 'pre-wrap' }}>{answer.content}</div>

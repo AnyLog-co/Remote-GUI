@@ -5,6 +5,7 @@ Based on ollama_demo.py
 """
 import asyncio
 import json
+import traceback
 from contextlib import AsyncExitStack
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 import os
@@ -79,6 +80,10 @@ def normalize_llm_api_type(value: Optional[str]) -> str:
     }
     normalized = aliases.get(normalized, normalized)
     return normalized if normalized in {"auto", "ollama", "openai"} else "auto"
+
+
+def _effective_llm_api_key(bearer_token: Optional[str] = None) -> Optional[str]:
+    return bearer_token.strip() if bearer_token and bearer_token.strip() else None
 
 
 def _is_gemma_model(model: Optional[str]) -> bool:
@@ -460,7 +465,54 @@ async def list_models_from_docker(endpoint: str, timeout: float = 10.0) -> List[
         raise RuntimeError(f"Failed to list running models from Ollama endpoint at {endpoint}: {str(e)}")
 
 
-async def list_models_from_openai_endpoint(endpoint: str, timeout: float = 10.0) -> List[Dict[str, Any]]:
+def _openai_model_urls(endpoint: str) -> List[str]:
+    base = endpoint.rstrip("/")
+    root = base[:-3] if base.endswith("/v1") else base
+    urls = [
+        f"{root}/api/v0/models",  # LM Studio native API.
+        f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models",
+    ]
+    seen = set()
+    return [url for url in urls if not (url in seen or seen.add(url))]
+
+
+def _normalize_openai_model_response(data: Any, source_url: str) -> List[Dict[str, Any]]:
+    if isinstance(data, dict):
+        if isinstance(data.get("error"), dict) or isinstance(data.get("error"), str):
+            raise RuntimeError(f"{source_url} returned error: {data.get('error')}")
+        entries = data.get("data") or data.get("models") or []
+    elif isinstance(data, list):
+        entries = data
+    else:
+        entries = []
+
+    models = []
+    for model in entries:
+        if isinstance(model, str):
+            model_id = model
+            details = {"id": model}
+        elif isinstance(model, dict):
+            model_id = model.get("id") or model.get("name") or model.get("model") or model.get("path") or ""
+            details = model
+        else:
+            model_id = getattr(model, "id", None) or getattr(model, "name", None) or getattr(model, "model", None) or ""
+            details = {"raw": str(model)}
+        if model_id:
+            models.append({
+                "name": model_id,
+                "model": model_id,
+                "size": details.get("size", 0) if isinstance(details, dict) else 0,
+                "modified_at": details.get("created", "") if isinstance(details, dict) else "",
+                "details": details,
+            })
+    return models
+
+
+async def list_models_from_openai_endpoint(
+    endpoint: str,
+    timeout: float = 10.0,
+    bearer_token: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
     List available models from an OpenAI-compatible endpoint such as LM Studio.
     """
@@ -469,29 +521,28 @@ async def list_models_from_openai_endpoint(endpoint: str, timeout: float = 10.0)
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            url = f"{endpoint.rstrip('/')}/v1/models"
             headers = {}
-            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            api_key = _effective_llm_api_key(bearer_token)
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            models = data.get("data", [])
-            print(f"🔍 OpenAI-compatible models found: {[m.get('id', m.get('name', 'unknown')) for m in models]}")
-            return [
-                {
-                    "name": model.get("id") or model.get("name") or model.get("model") or "",
-                    "model": model.get("id") or model.get("name") or model.get("model") or "",
-                    "size": model.get("size", 0),
-                    "modified_at": model.get("created", ""),
-                    "details": model,
-                }
-                for model in models
-                if model.get("id") or model.get("name") or model.get("model")
-            ]
+            errors = []
+            for url in _openai_model_urls(endpoint):
+                try:
+                    response = await client.get(url, headers=headers)
+                    response.raise_for_status()
+                    models = _normalize_openai_model_response(response.json(), url)
+                    if models:
+                        print(f"🔍 OpenAI-compatible models found via {url}: {[m.get('name', 'unknown') for m in models]}")
+                        return models
+                    errors.append(f"{url} returned no models")
+                except Exception as e:
+                    errors.append(f"{url}: {e}")
+            raise RuntimeError(" | ".join(errors))
     except httpx.TimeoutException:
-        raise RuntimeError(f"Request to OpenAI-compatible endpoint timed out after {timeout}s")
+        raise RuntimeError(
+            f"OpenAI-compatible model list request timed out after {timeout:.1f}s. "
+            "Check that the LLM base URL is reachable and that the server exposes a model-list endpoint."
+        )
     except httpx.HTTPStatusError as e:
         raise RuntimeError(f"OpenAI-compatible endpoint returned error {e.response.status_code}: {e.response.text}")
     except Exception as e:
@@ -501,13 +552,14 @@ async def list_models_from_openai_endpoint(endpoint: str, timeout: float = 10.0)
 async def list_models_from_endpoint(
     endpoint: str,
     llm_api_type: Optional[str] = "auto",
-    timeout: float = 10.0
+    timeout: float = 10.0,
+    bearer_token: Optional[str] = None
 ) -> Dict[str, Any]:
     api_type = normalize_llm_api_type(llm_api_type)
     if api_type == "ollama":
         return {"models": await list_models_from_docker(endpoint, timeout=timeout), "source": "ollama"}
     if api_type == "openai":
-        return {"models": await list_models_from_openai_endpoint(endpoint, timeout=timeout), "source": "openai"}
+        return {"models": await list_models_from_openai_endpoint(endpoint, timeout=timeout, bearer_token=bearer_token), "source": "openai"}
 
     errors = []
     try:
@@ -519,7 +571,7 @@ async def list_models_from_endpoint(
         errors.append(str(e))
 
     try:
-        models = await list_models_from_openai_endpoint(endpoint, timeout=timeout)
+        models = await list_models_from_openai_endpoint(endpoint, timeout=timeout, bearer_token=bearer_token)
         return {"models": models, "source": "openai"}
     except Exception as e:
         errors.append(str(e))
@@ -527,19 +579,27 @@ async def list_models_from_endpoint(
     raise RuntimeError("Could not list models from endpoint. " + " | ".join(errors))
 
 
-async def _openai_endpoint_available(endpoint: str, timeout: float = 3.0) -> bool:
+async def _openai_endpoint_available(
+    endpoint: str,
+    timeout: float = 3.0,
+    bearer_token: Optional[str] = None
+) -> bool:
     if not HAS_HTTPX:
         return False
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            base = endpoint.rstrip("/")
-            url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
             headers = {}
-            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            api_key = _effective_llm_api_key(bearer_token)
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-            response = await client.get(url, headers=headers)
-            return response.status_code == 200 and isinstance(response.json().get("data"), list)
+            for url in _openai_model_urls(endpoint):
+                try:
+                    response = await client.get(url, headers=headers)
+                    if response.status_code == 200 and _normalize_openai_model_response(response.json(), url):
+                        return True
+                except Exception:
+                    continue
+            return False
     except Exception:
         return False
 
@@ -551,7 +611,8 @@ async def ollama_chat_async(
     stream: bool = False,
     llm_endpoint: Optional[str] = None,
     llm_api_type: Optional[str] = "auto",
-    timeout: float = 300.0  # Increased to 5 minutes to match ask() timeout
+    llm_bearer_token: Optional[str] = None,
+    timeout: float = 900.0
 ) -> Dict[str, Any]:
     """
     Run ollama.chat - supports both local Ollama library and Ollama HTTP endpoints.
@@ -573,14 +634,14 @@ async def ollama_chat_async(
         api_type = normalize_llm_api_type(llm_api_type)
         if api_type == "openai" or llm_endpoint.rstrip("/").endswith("/v1"):
             print(f"🌐 Using OpenAI-compatible endpoint: {llm_endpoint} with model: {model}")
-            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout, bearer_token=llm_bearer_token)
         if api_type == "ollama":
             print(f"🌐 Using Ollama endpoint: {llm_endpoint} with model: {model}")
             return await _ollama_chat_docker(llm_endpoint, model, messages, tools, timeout)
 
-        if await _openai_endpoint_available(llm_endpoint):
+        if await _openai_endpoint_available(llm_endpoint, bearer_token=llm_bearer_token):
             print(f"🌐 Auto-detected OpenAI-compatible endpoint: {llm_endpoint} with model: {model}")
-            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+            return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout, bearer_token=llm_bearer_token)
 
         try:
             print(f"🌐 Auto-detecting endpoint API via Ollama first: {llm_endpoint} with model: {model}")
@@ -588,7 +649,7 @@ async def ollama_chat_async(
         except Exception as ollama_error:
             print(f"⚠️  Ollama-compatible chat failed, trying OpenAI-compatible endpoint: {ollama_error}")
             try:
-                return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout)
+                return await _openai_chat_http(llm_endpoint, model, messages, tools, timeout, bearer_token=llm_bearer_token)
             except Exception as openai_error:
                 raise RuntimeError(
                     "Endpoint did not work as Ollama or OpenAI/LM Studio. "
@@ -611,7 +672,7 @@ async def _ollama_chat_docker(
     model: str,
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
-    timeout: float = 300.0  # Increased to 5 minutes to match ask() timeout
+    timeout: float = 900.0
 ) -> Dict[str, Any]:
     """
     Call Ollama API via HTTP.
@@ -737,7 +798,8 @@ async def _openai_chat_http(
     model: str,
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
-    timeout: float = 300.0
+    timeout: float = 900.0,
+    bearer_token: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Call an OpenAI-compatible Chat Completions endpoint, including LM Studio.
@@ -793,7 +855,7 @@ async def _openai_chat_http(
                 payload["tool_choice"] = "auto"
 
             headers = {"Content-Type": "application/json"}
-            api_key = os.getenv("LOCAL_LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+            api_key = _effective_llm_api_key(bearer_token)
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
 
@@ -824,7 +886,11 @@ async def _openai_chat_http(
                 print("🌐 OpenAI-compatible Response - No tool_calls in response")
             return {"message": result_message}
     except httpx.TimeoutException:
-        raise RuntimeError(f"Request to OpenAI-compatible endpoint timed out after {timeout}s")
+        raise RuntimeError(
+            f"OpenAI-compatible model call timed out after {timeout:.1f}s. "
+            "The local model did not finish generation in time; try reducing the date range, "
+            "asking for fewer plotted points, or increasing the MCP client request timeout."
+        )
     except Exception as e:
         raise RuntimeError(f"Failed to communicate with OpenAI-compatible endpoint: {str(e)}")
 
@@ -835,12 +901,14 @@ class AnyLogMCPAgent:
         anylog_sse_url: str,
         ollama_model: str = DEFAULT_OLLAMA_MODEL,
         llm_endpoint: Optional[str] = None,
-        llm_api_type: Optional[str] = "auto"
+        llm_api_type: Optional[str] = "auto",
+        llm_bearer_token: Optional[str] = None
     ):
         self.anylog_sse_url = anylog_sse_url
         self.ollama_model = ollama_model
         self.llm_endpoint = llm_endpoint  # Ollama endpoint (e.g., "http://localhost:11434")
         self.llm_api_type = normalize_llm_api_type(llm_api_type)
+        self.llm_bearer_token = llm_bearer_token.strip() if llm_bearer_token and llm_bearer_token.strip() else None
         self.session: Optional[ClientSession] = None
         self.exit_stack: Optional[AsyncExitStack] = None
         self.stdio = None
@@ -924,10 +992,10 @@ class AnyLogMCPAgent:
             return False
 
     async def ask(
-        self,
-        user_prompt: str,
+        self, 
+        user_prompt: str, 
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        timeout: float = 300.0,
+        timeout: float = 900.0,
         event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
     ) -> str:
         """Ask a question to the MCP agent using Ollama with timeout and conversation history"""
@@ -1055,7 +1123,13 @@ class AnyLogMCPAgent:
             print(f"🔄 Starting agent loop with {len(messages)} messages...")
             try:
                 result = await asyncio.wait_for(
-                    self._agent_loop(messages, ollama_tools, event_callback=event_callback, command_start=start_time),
+                    self._agent_loop(
+                        messages,
+                        ollama_tools,
+                        event_callback=event_callback,
+                        command_start=start_time,
+                        loop_timeout=timeout
+                    ),
                     timeout=timeout
                 )
                 elapsed = asyncio.get_event_loop().time() - start_time
@@ -1064,7 +1138,10 @@ class AnyLogMCPAgent:
             except asyncio.TimeoutError:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 print(f"❌ Request timed out after {elapsed:.2f}s (limit: {timeout}s)")
-                raise RuntimeError(f"Request timed out after {timeout}s. The MCP server may be overloaded or unresponsive. Elapsed time: {elapsed:.2f}s")
+                raise RuntimeError(
+                    f"Request timed out after {timeout}s. The local model or MCP server did not finish in time. "
+                    f"Elapsed time: {elapsed:.2f}s"
+                )
         except asyncio.TimeoutError:
             elapsed = asyncio.get_event_loop().time() - start_time
             print(f"❌ Operation timed out after {elapsed:.2f}s")
@@ -1075,7 +1152,8 @@ class AnyLogMCPAgent:
         messages: List[Dict[str, Any]],
         ollama_tools: List[Dict[str, Any]],
         event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
-        command_start: Optional[float] = None
+        command_start: Optional[float] = None,
+        loop_timeout: float = 900.0
     ) -> str:
         """Internal agent loop with timeouts on individual operations"""
         command_start = command_start or asyncio.get_event_loop().time()
@@ -1089,8 +1167,10 @@ class AnyLogMCPAgent:
         text_tool_call_signatures = set()
         for iteration in range(12):  # safety loop cap
             iteration_start = asyncio.get_event_loop().time()
+            elapsed_total = iteration_start - command_start
+            remaining_timeout = max(30.0, loop_timeout - elapsed_total)
             print(f"🔄 Agent loop iteration {iteration + 1}/12")
-            print(f"⏱️  Calling LLM ({self.ollama_model})...")
+            print(f"⏱️  Calling LLM ({self.ollama_model}) with timeout={remaining_timeout:.1f}s...")
             resp = await ollama_chat_async(
                 model=self.ollama_model,
                 messages=messages,
@@ -1098,6 +1178,8 @@ class AnyLogMCPAgent:
                 stream=False,
                 llm_endpoint=self.llm_endpoint,
                 llm_api_type=self.llm_api_type,
+                llm_bearer_token=self.llm_bearer_token,
+                timeout=remaining_timeout,
             )
             iteration_elapsed = asyncio.get_event_loop().time() - iteration_start
             print(f"⏱️  LLM call completed in {iteration_elapsed:.2f}s")
@@ -1212,6 +1294,7 @@ class AnyLogMCPAgent:
                         "tool_name": tool_name,
                         "arguments": tool_args,
                         "error": str(e),
+                        "exception": traceback.format_exc(),
                         "elapsed_ms": int(tool_elapsed * 1000),
                         "total_elapsed_ms": int((asyncio.get_event_loop().time() - command_start) * 1000),
                     })

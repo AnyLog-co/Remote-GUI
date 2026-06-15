@@ -2,14 +2,17 @@
 MCP Client Plugin Router
 Integrates Ollama with AnyLog MCP for AI-powered maintenance copilot
 """
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 import os
 import asyncio
 import json
+import time
+import traceback
+import uuid
 
 
 def _is_valid_ollama_endpoint(url: str) -> bool:
@@ -97,6 +100,7 @@ class MCPConnectRequest(BaseModel):
     ollama_model: Optional[str] = None
     llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
     llm_api_type: Optional[str] = None  # auto, ollama, or openai
+    llm_bearer_token: Optional[str] = None
 
 class MCPAskRequest(BaseModel):
     prompt: str
@@ -104,7 +108,10 @@ class MCPAskRequest(BaseModel):
     ollama_model: Optional[str] = None
     llm_endpoint: Optional[str] = None  # Ollama endpoint (e.g., "http://localhost:11434")
     llm_api_type: Optional[str] = None  # auto, ollama, or openai
+    llm_bearer_token: Optional[str] = None
     conversation_history: Optional[List[Dict[str, str]]] = None  # List of {role: "user"|"assistant", content: "..."}
+    stream_request_id: Optional[str] = None
+    timeout_seconds: Optional[float] = None
 
 class MCPStatusResponse(BaseModel):
     connected: bool
@@ -121,12 +128,32 @@ class MCPStatusResponse(BaseModel):
 _agent_instance: Optional[AnyLogMCPAgent] = None
 _agent_lock = asyncio.Lock()
 _connecting = False  # Flag to prevent concurrent connection attempts
+_stream_jobs: Dict[str, Dict[str, Any]] = {}
+_STREAM_JOB_TTL_SECONDS = 30 * 60
+_STREAM_JOB_MAX_EVENTS = 2000
+_DEFAULT_REQUEST_TIMEOUT_SECONDS = 900.0
+_MIN_REQUEST_TIMEOUT_SECONDS = 30.0
+_MAX_REQUEST_TIMEOUT_SECONDS = 7200.0
+
+
+def _request_timeout_seconds(value: Optional[float]) -> float:
+    """Normalize user-configured request timeout, keeping it in a useful range."""
+    if value is None:
+        return _DEFAULT_REQUEST_TIMEOUT_SECONDS
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return _DEFAULT_REQUEST_TIMEOUT_SECONDS
+    if timeout != timeout:
+        return _DEFAULT_REQUEST_TIMEOUT_SECONDS
+    return max(_MIN_REQUEST_TIMEOUT_SECONDS, min(_MAX_REQUEST_TIMEOUT_SECONDS, timeout))
 
 async def get_or_create_agent(
     anylog_sse_url: Optional[str] = None,
     ollama_model: Optional[str] = None,
     llm_endpoint: Optional[str] = None,
-    llm_api_type: Optional[str] = None
+    llm_api_type: Optional[str] = None,
+    llm_bearer_token: Optional[str] = None
 ) -> AnyLogMCPAgent:
     """Get or create a global agent instance with connection reuse"""
     global _agent_instance, _connecting
@@ -141,6 +168,7 @@ async def get_or_create_agent(
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
         api_type = normalize_llm_api_type(llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+        bearer_token = llm_bearer_token.strip() if llm_bearer_token and llm_bearer_token.strip() else None
 
         if not url or not _is_valid_mcp_sse_url(url):
             raise RuntimeError("A valid AnyLog MCP SSE URL is required. Select a query node or enter an MCP URL.")
@@ -150,11 +178,13 @@ async def get_or_create_agent(
             # Normalize existing endpoint for comparison
             existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
             existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
+            existing_bearer_token = getattr(_agent_instance, "llm_bearer_token", None)
             
             if (_agent_instance.anylog_sse_url == url and 
                 _agent_instance.ollama_model == model and
                 existing_endpoint == endpoint and
                 existing_api_type == api_type and
+                existing_bearer_token == bearer_token and
                 _agent_instance.session is not None):
                 # Verify it's still alive
                 if await _agent_instance.health_check():
@@ -181,12 +211,13 @@ async def get_or_create_agent(
         
         _connecting = True
         try:
-            print(f"🆕 Creating new agent with model: {model}, endpoint: {endpoint}, api_type: {api_type}")
+            print(f"🆕 Creating new agent with model: {model}, endpoint: {endpoint}, api_type: {api_type}, token: {'set' if bearer_token else 'not set'}")
             _agent_instance = AnyLogMCPAgent(
                 anylog_sse_url=url,
                 ollama_model=model,
                 llm_endpoint=endpoint,
-                llm_api_type=api_type
+                llm_api_type=api_type,
+                llm_bearer_token=bearer_token
             )
             await _agent_instance.connect(timeout=10.0)
             return _agent_instance
@@ -321,6 +352,7 @@ async def connect_mcp(request: MCPConnectRequest):
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
         api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+        bearer_token = request.llm_bearer_token.strip() if request.llm_bearer_token and request.llm_bearer_token.strip() else None
         
         if endpoint and not _is_valid_ollama_endpoint(endpoint):
             raise HTTPException(
@@ -339,11 +371,13 @@ async def connect_mcp(request: MCPConnectRequest):
                 # Normalize existing endpoint for comparison
                 existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
                 existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
+                existing_bearer_token = getattr(_agent_instance, "llm_bearer_token", None)
                 
                 if (_agent_instance.anylog_sse_url == url and 
                     _agent_instance.ollama_model == model and
                     existing_endpoint == endpoint and
                     existing_api_type == api_type and
+                    existing_bearer_token == bearer_token and
                     _agent_instance.session is not None):
                     # Verify it's still alive
                     if await _agent_instance.health_check():
@@ -354,7 +388,8 @@ async def connect_mcp(request: MCPConnectRequest):
                             "ollama_model": model,
                             "anylog_url": url,
                             "llm_endpoint": endpoint,
-                            "llm_api_type": api_type
+                            "llm_api_type": api_type,
+                            "llm_auth_configured": bool(bearer_token)
                         }
                     else:
                         # Connection is dead, clean it up
@@ -369,15 +404,17 @@ async def connect_mcp(request: MCPConnectRequest):
             # Normalize existing endpoint for comparison
             existing_endpoint = _agent_instance.llm_endpoint.strip() if _agent_instance.llm_endpoint and _agent_instance.llm_endpoint.strip() else None
             existing_api_type = getattr(_agent_instance, "llm_api_type", "auto")
+            existing_bearer_token = getattr(_agent_instance, "llm_bearer_token", None)
             
             if (_agent_instance.anylog_sse_url != url or 
                 _agent_instance.ollama_model != model or
                 existing_endpoint != endpoint or
-                existing_api_type != api_type):
+                existing_api_type != api_type or
+                existing_bearer_token != bearer_token):
                 await close_agent()
         
         # Create new connection (or reuse if same URL/model/endpoint)
-        agent = await get_or_create_agent(url, model, endpoint, api_type)
+        agent = await get_or_create_agent(url, model, endpoint, api_type, bearer_token)
         tools = agent.cached_tools
         
         return {
@@ -387,7 +424,8 @@ async def connect_mcp(request: MCPConnectRequest):
             "ollama_model": model,
             "anylog_url": url,
             "llm_endpoint": endpoint,
-            "llm_api_type": api_type
+            "llm_api_type": api_type,
+            "llm_auth_configured": bool(bearer_token)
         }
     except HTTPException:
         raise
@@ -427,7 +465,11 @@ async def disconnect_mcp():
         raise HTTPException(status_code=500, detail=f"Failed to disconnect: {str(e)}")
 
 @api_router.get("/models")
-async def list_models(llm_endpoint: Optional[str] = None, llm_api_type: Optional[str] = None):
+async def list_models(
+    llm_endpoint: Optional[str] = None,
+    llm_api_type: Optional[str] = None,
+    llm_bearer_token: Optional[str] = Header(None, alias="X-LLM-Bearer-Token")
+):
     """List available models from local Ollama, Ollama HTTP, or OpenAI-compatible endpoints."""
     if not HAS_MCP_AGENT:
         raise HTTPException(
@@ -437,6 +479,7 @@ async def list_models(llm_endpoint: Optional[str] = None, llm_api_type: Optional
     
     endpoint = llm_endpoint or os.getenv("LLM_ENDPOINT", None)
     api_type = normalize_llm_api_type(llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+    bearer_token = llm_bearer_token.strip() if llm_bearer_token and llm_bearer_token.strip() else None
     
     if endpoint and not _is_valid_ollama_endpoint(endpoint):
         raise HTTPException(
@@ -447,7 +490,7 @@ async def list_models(llm_endpoint: Optional[str] = None, llm_api_type: Optional
     try:
         if endpoint:
             from .mcp_agent import list_models_from_endpoint
-            result = await list_models_from_endpoint(endpoint, api_type, timeout=10.0)
+            result = await list_models_from_endpoint(endpoint, api_type, timeout=10.0, bearer_token=bearer_token)
             models = result["models"]
             source = result["source"]
         else:
@@ -576,6 +619,7 @@ async def ask_question(request: MCPAskRequest):
             if endpoint:
                 endpoint = endpoint.strip() if endpoint.strip() else None
         api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+        bearer_token = request.llm_bearer_token.strip() if request.llm_bearer_token and request.llm_bearer_token.strip() else None
         if endpoint and not _is_valid_ollama_endpoint(endpoint):
             raise HTTPException(
                 status_code=400,
@@ -593,17 +637,18 @@ async def ask_question(request: MCPAskRequest):
         else:
             print(f"💻 Using local Ollama with model: {model}")
         
-        agent = await get_or_create_agent(url, model, endpoint, api_type)
+        agent = await get_or_create_agent(url, model, endpoint, api_type, bearer_token)
+        request_timeout = _request_timeout_seconds(request.timeout_seconds)
         
         # Ask the question (with timeout and conversation history)
         print(f"📝 MCP Ask Request - Prompt: {request.prompt[:100]}...")
         print(f"📝 Conversation history length: {len(request.conversation_history) if request.conversation_history else 0}")
         
-        # Increased timeout to 5 minutes (300s) to handle complex queries with multiple tool calls
+        # Long tool chains can spend minutes in local model prompt processing plus MCP calls.
         answer = await agent.ask(
             request.prompt, 
             conversation_history=request.conversation_history,
-            timeout=300.0  # 5 minutes (increased from 120s)
+            timeout=request_timeout
         )
         
         print(f"✅ MCP Ask Response - Answer length: {len(answer) if answer else 0}")
@@ -638,6 +683,157 @@ def _sse_event(event_type: str, **payload):
     return f"data: {json.dumps(data, default=str)}\n\n"
 
 
+def _sse_event_data(event: Dict[str, Any]):
+    return f"data: {json.dumps(event, default=str)}\n\n"
+
+
+def _cleanup_stream_jobs():
+    now = time.time()
+    stale_ids = [
+        job_id
+        for job_id, job in _stream_jobs.items()
+        if job.get("done") and now - job.get("updated_at", now) > _STREAM_JOB_TTL_SECONDS
+    ]
+    for job_id in stale_ids:
+        _stream_jobs.pop(job_id, None)
+
+
+async def _publish_stream_event(job: Dict[str, Any], event_type: str, **payload):
+    async with job["condition"]:
+        event = {
+            "seq": len(job["events"]) + 1,
+            "request_id": job["id"],
+            "type": event_type,
+            **payload,
+        }
+        job["events"].append(event)
+        if len(job["events"]) > _STREAM_JOB_MAX_EVENTS:
+            job["events"] = job["events"][-_STREAM_JOB_MAX_EVENTS:]
+        job["updated_at"] = time.time()
+        job["condition"].notify_all()
+        return event
+
+
+async def _finish_stream_job(job: Dict[str, Any]):
+    async with job["condition"]:
+        job["done"] = True
+        job["updated_at"] = time.time()
+        job["condition"].notify_all()
+
+
+async def _run_stream_job(job: Dict[str, Any], request: MCPAskRequest):
+    agent = None
+    try:
+        url = request.anylog_sse_url or os.getenv("ANYLOG_MCP_SSE_URL", DEFAULT_ANYLOG_MCP_SSE_URL)
+        model = request.ollama_model or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+        endpoint = request.llm_endpoint.strip() if request.llm_endpoint and request.llm_endpoint.strip() else None
+        if not endpoint:
+            endpoint = os.getenv("LLM_ENDPOINT", None)
+            if endpoint:
+                endpoint = endpoint.strip() if endpoint.strip() else None
+        api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+        bearer_token = request.llm_bearer_token.strip() if request.llm_bearer_token and request.llm_bearer_token.strip() else None
+
+        if endpoint and not _is_valid_ollama_endpoint(endpoint):
+            await _publish_stream_event(
+                job,
+                "error",
+                message=f"Invalid LLM endpoint URL: '{endpoint}'. Please provide a complete URL like http://host:port"
+            )
+            return
+        if not url or not _is_valid_mcp_sse_url(url):
+            await _publish_stream_event(
+                job,
+                "error",
+                message="A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
+            )
+            return
+
+        await _publish_stream_event(job, "status", message=f"Connecting to MCP with {model}")
+        agent = AnyLogMCPAgent(
+            anylog_sse_url=url,
+            ollama_model=model,
+            llm_endpoint=endpoint,
+            llm_api_type=api_type,
+            llm_bearer_token=bearer_token
+        )
+        job["agent"] = agent
+        await agent.connect(timeout=10.0)
+        await _publish_stream_event(job, "status", message=f"Loaded {len(agent.cached_tools)} MCP tools")
+        await _publish_stream_event(job, "tools", tools=agent.cached_tools)
+
+        command_start = asyncio.get_event_loop().time()
+
+        async def emit_agent_event(event: Dict):
+            event_type = event.get("type", "mcp_event")
+            payload = {key: value for key, value in event.items() if key != "type"}
+            await _publish_stream_event(job, event_type, **payload)
+
+        await _publish_stream_event(job, "command_start", started_at_ms=int(command_start * 1000))
+        request_timeout = _request_timeout_seconds(request.timeout_seconds)
+        answer = await agent.ask(
+            request.prompt,
+            conversation_history=request.conversation_history,
+            timeout=request_timeout,
+            event_callback=emit_agent_event
+        )
+        total_elapsed_ms = int((asyncio.get_event_loop().time() - command_start) * 1000)
+
+        chunk_size = 32
+        for idx in range(0, len(answer), chunk_size):
+            await _publish_stream_event(job, "delta", content=answer[idx:idx + chunk_size])
+            await asyncio.sleep(0.01)
+
+        await _publish_stream_event(job, "command_done", elapsed_ms=total_elapsed_ms)
+        await _publish_stream_event(job, "done", answer=answer, prompt=request.prompt, elapsed_ms=total_elapsed_ms)
+    except asyncio.CancelledError:
+        await _publish_stream_event(job, "error", message="Request cancelled.", exception="Request cancelled by user.")
+        raise
+    except Exception as e:
+        error_str = str(e).lower()
+        if "connection" in error_str or "closed" in error_str or "not connected" in error_str:
+            try:
+                await close_agent()
+            except Exception:
+                pass
+        await _publish_stream_event(
+            job,
+            "error",
+            message=f"Failed to process question: {str(e)}",
+            exception=traceback.format_exc()
+        )
+    finally:
+        if agent is not None:
+            try:
+                await agent.close()
+            except Exception:
+                pass
+        job["agent"] = None
+        await _finish_stream_job(job)
+
+
+def _get_or_start_stream_job(request: MCPAskRequest) -> Dict[str, Any]:
+    _cleanup_stream_jobs()
+    job_id = request.stream_request_id or str(uuid.uuid4())
+    existing = _stream_jobs.get(job_id)
+    if existing:
+        return existing
+
+    job = {
+        "id": job_id,
+        "events": [],
+        "condition": asyncio.Condition(),
+        "done": False,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "agent": None,
+        "task": None,
+    }
+    job["task"] = asyncio.create_task(_run_stream_job(job, request))
+    _stream_jobs[job_id] = job
+    return job
+
+
 @api_router.post("/ask-stream")
 async def ask_question_stream(request: MCPAskRequest):
     """Ask a question and stream progress plus answer chunks as server-sent events."""
@@ -647,94 +843,54 @@ async def ask_question_stream(request: MCPAskRequest):
             detail="MCP agent not available. Please install required dependencies: ollama, mcp"
         )
 
+    job = _get_or_start_stream_job(request)
+
     async def event_generator():
-        agent = None
+        next_index = 0
         try:
-            url = request.anylog_sse_url or os.getenv("ANYLOG_MCP_SSE_URL", DEFAULT_ANYLOG_MCP_SSE_URL)
-            model = request.ollama_model or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
-            endpoint = request.llm_endpoint.strip() if request.llm_endpoint and request.llm_endpoint.strip() else None
-            if not endpoint:
-                endpoint = os.getenv("LLM_ENDPOINT", None)
-                if endpoint:
-                    endpoint = endpoint.strip() if endpoint.strip() else None
-            api_type = normalize_llm_api_type(request.llm_api_type or os.getenv("LLM_API_TYPE", DEFAULT_LLM_API_TYPE))
+            while True:
+                while next_index < len(job["events"]):
+                    yield _sse_event_data(job["events"][next_index])
+                    next_index += 1
 
-            if endpoint and not _is_valid_ollama_endpoint(endpoint):
-                yield _sse_event(
-                    "error",
-                    message=f"Invalid LLM endpoint URL: '{endpoint}'. Please provide a complete URL like http://host:port"
-                )
-                return
-            if not url or not _is_valid_mcp_sse_url(url):
-                yield _sse_event(
-                    "error",
-                    message="A valid AnyLog MCP SSE URL is required. Select a query node in the header or enter an MCP URL."
-                )
-                return
+                if job.get("done"):
+                    break
 
-            yield _sse_event("status", message=f"Connecting to MCP with {model}")
-            agent = AnyLogMCPAgent(
-                anylog_sse_url=url,
-                ollama_model=model,
-                llm_endpoint=endpoint,
-                llm_api_type=api_type
-            )
-            await agent.connect(timeout=10.0)
-            yield _sse_event("status", message=f"Loaded {len(agent.cached_tools)} MCP tools")
-            yield _sse_event("tools", tools=agent.cached_tools)
-
-            event_queue = asyncio.Queue()
-            command_start = asyncio.get_event_loop().time()
-
-            async def emit_agent_event(event: Dict):
-                await event_queue.put(event)
-
-            async def run_agent():
-                return await agent.ask(
-                    request.prompt,
-                    conversation_history=request.conversation_history,
-                    timeout=300.0,
-                    event_callback=emit_agent_event
-                )
-
-            yield _sse_event("command_start", started_at_ms=int(command_start * 1000))
-            answer_task = asyncio.create_task(run_agent())
-
-            while not answer_task.done() or not event_queue.empty():
                 try:
-                    event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
-                    event_type = event.get("type", "mcp_event")
-                    payload = {key: value for key, value in event.items() if key != "type"}
-                    yield _sse_event(event_type, **payload)
+                    async with job["condition"]:
+                        await asyncio.wait_for(job["condition"].wait(), timeout=10.0)
                 except asyncio.TimeoutError:
-                    continue
-
-            answer = await answer_task
-            total_elapsed_ms = int((asyncio.get_event_loop().time() - command_start) * 1000)
-
-            chunk_size = 32
-            for idx in range(0, len(answer), chunk_size):
-                yield _sse_event("delta", content=answer[idx:idx + chunk_size])
-                await asyncio.sleep(0.01)
-
-            yield _sse_event("command_done", elapsed_ms=total_elapsed_ms)
-            yield _sse_event("done", answer=answer, prompt=request.prompt, elapsed_ms=total_elapsed_ms)
-        except Exception as e:
-            error_str = str(e).lower()
-            if "connection" in error_str or "closed" in error_str or "not connected" in error_str:
-                try:
-                    await close_agent()
-                except Exception:
-                    pass
-            yield _sse_event("error", message=f"Failed to process question: {str(e)}")
-        finally:
-            if agent is not None:
-                try:
-                    await agent.close()
-                except Exception:
-                    pass
+                    yield _sse_event_data({
+                        "seq": 0,
+                        "request_id": job["id"],
+                        "type": "heartbeat",
+                        "message": "Still working"
+                    })
+        except asyncio.CancelledError:
+            # Client disconnects should only detach this observer. The background job continues.
+            return
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@api_router.post("/ask-stream/{stream_request_id}/cancel")
+async def cancel_stream_request(stream_request_id: str):
+    """Cancel a background streaming request."""
+    job = _stream_jobs.get(stream_request_id)
+    if not job:
+        return {"success": True, "cancelled": False, "message": "Request is no longer running."}
+
+    task = job.get("task")
+    if task and not task.done():
+        task.cancel()
+    agent = job.get("agent")
+    if agent is not None:
+        try:
+            await agent.close()
+        except Exception:
+            pass
+    await _finish_stream_job(job)
+    return {"success": True, "cancelled": True}
 
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
