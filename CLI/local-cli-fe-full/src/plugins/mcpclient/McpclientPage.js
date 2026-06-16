@@ -402,6 +402,8 @@ const McpclientPage = ({ node }) => {
   const abortControllersRef = useRef({});
   const streamRequestIdsRef = useRef({});
   const messagesEndRef = useRef(null);
+  const observationPanelRefs = useRef({});
+  const skipNextBottomScrollRef = useRef(false);
   const answersRef = useRef([]);
   const activeChatIdRef = useRef('');
   const userEditedAnylogUrlRef = useRef(false);
@@ -621,6 +623,10 @@ const McpclientPage = ({ node }) => {
   }, [nodeMcpUrl]);
 
   useEffect(() => {
+    if (skipNextBottomScrollRef.current) {
+      skipNextBottomScrollRef.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [answers, streamNote]);
 
@@ -875,9 +881,20 @@ const McpclientPage = ({ node }) => {
   };
 
   const toggleObservations = (assistantId) => {
+    const currentMessage = normalizeMessages(answersRef.current).find((msg) => msg.id === assistantId);
+    const willShow = !currentMessage?.showObservations;
+    skipNextBottomScrollRef.current = true;
     updateAssistantMessage(activeChatIdRef.current, assistantId, (msg) => ({
       showObservations: !msg.showObservations,
     }));
+    if (willShow) {
+      window.setTimeout(() => {
+        observationPanelRefs.current[assistantId]?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }, 0);
+    }
   };
 
   const handleAsk = async (retryPrompt = null) => {
@@ -2198,10 +2215,12 @@ const McpclientPage = ({ node }) => {
                               {answer.streaming && <span className="stream-cursor" />}
                               {answer.streaming && streamNote && <div className="stream-note">{streamNote}</div>}
                               {answer.showObservations && (
-                                <ObservationPanel
-                                  observations={answer.observations || []}
-                                  totalElapsedMs={answer.totalElapsedMs}
-                                />
+                                <div ref={(node) => { observationPanelRefs.current[answer.id] = node; }}>
+                                  <ObservationPanel
+                                    observations={answer.observations || []}
+                                    totalElapsedMs={answer.totalElapsedMs}
+                                  />
+                                </div>
                               )}
                               <ArtifactPanel content={answer.content} messageIndex={index} />
                             </>
@@ -2209,10 +2228,12 @@ const McpclientPage = ({ node }) => {
                             <>
                               <ErrorDetails message={answer.content} exception={answer.exception} />
                               {(answer.showObservations || (answer.observations || []).length > 0) && (
-                                <ObservationPanel
-                                  observations={answer.observations || []}
-                                  totalElapsedMs={answer.totalElapsedMs}
-                                />
+                                <div ref={(node) => { observationPanelRefs.current[answer.id] = node; }}>
+                                  <ObservationPanel
+                                    observations={answer.observations || []}
+                                    totalElapsedMs={answer.totalElapsedMs}
+                                  />
+                                </div>
                               )}
                             </>
                           ) : (
