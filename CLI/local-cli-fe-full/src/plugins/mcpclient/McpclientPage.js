@@ -410,6 +410,22 @@ const McpclientPage = ({ node }) => {
   const previousNodeMcpUrlRef = useRef(nodeMcpUrl);
   const applyingChatRef = useRef(false);
 
+  const refreshConnectionStatus = async () => {
+    try {
+      const statusData = await getMCPStatus();
+      setStatus(statusData);
+      setConnected(Boolean(statusData.connected));
+      if (statusData.connected) {
+        setTools(normalizeToolList(statusData.available_tools || []));
+      } else {
+        setTools([]);
+      }
+    } catch (_) {
+      setConnected(false);
+      setStatus((prev) => ({ ...(prev || {}), connected: false, available_tools: [] }));
+    }
+  };
+
   const applyChatSession = (chat) => {
     if (!chat) return;
     applyingChatRef.current = true;
@@ -629,6 +645,14 @@ const McpclientPage = ({ node }) => {
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [answers, streamNote]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refreshConnectionStatus();
+    }, 15000);
+    return () => window.clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     try {
@@ -2150,7 +2174,7 @@ const McpclientPage = ({ node }) => {
             </section>
 
             <section className="panel" style={{ marginTop: 14 }}>
-              <div className="panel-header">MCP tools</div>
+              <div className="panel-header">MCP tools ({tools.length})</div>
               <div className="panel-body">
                 <div className="tools-list">
                   {tools.length ? tools.map((tool, index) => (
