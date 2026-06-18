@@ -101,6 +101,79 @@ const MarkdownRenderer = ({ content }) => {
     return /^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed);
   };
 
+  const splitTableRow = (line) => (
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim())
+  );
+
+  const isTableDivider = (line) => {
+    const cells = splitTableRow(line);
+    return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  };
+
+  const isTableRow = (line) => {
+    const trimmed = line.trim();
+    return trimmed.includes('|') && splitTableRow(trimmed).length > 1;
+  };
+
+  const renderTable = (headers, rows, key) => (
+    <div key={key} style={{ overflowX: 'auto', margin: '12px 0' }}>
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: '0.92em',
+          background: '#fff',
+          border: '1px solid #d7dde8',
+          borderRadius: '6px',
+          overflow: 'hidden'
+        }}
+      >
+        <thead>
+          <tr>
+            {headers.map((header, index) => (
+              <th
+                key={`th-${index}`}
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  background: '#eef3f8',
+                  borderBottom: '1px solid #d7dde8',
+                  color: '#24364b',
+                  fontWeight: 700
+                }}
+              >
+                {processInlineMarkdown(header)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`tr-${rowIndex}`}>
+              {headers.map((_, cellIndex) => (
+                <td
+                  key={`td-${rowIndex}-${cellIndex}`}
+                  style={{
+                    padding: '8px 10px',
+                    borderTop: rowIndex === 0 ? 'none' : '1px solid #edf0f5',
+                    verticalAlign: 'top'
+                  }}
+                >
+                  {processInlineMarkdown(row[cellIndex] || '')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   // Build nested list tree structure
   const buildListTree = (items) => {
     if (items.length === 0) return null;
@@ -191,6 +264,29 @@ const MarkdownRenderer = ({ content }) => {
 
     if (inCodeBlock) {
       codeBlockContent.push(line);
+      continue;
+    }
+
+    if (isTableRow(line) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      if (inList) {
+        const listTree = buildListTree(listItems);
+        if (listTree) {
+          elements.push(renderListTree(listTree, `list-${i}-pre-table`));
+        }
+        listItems = [];
+        inList = false;
+      }
+
+      const headers = splitTableRow(line);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && isTableRow(lines[i]) && !isTableDivider(lines[i])) {
+        rows.push(splitTableRow(lines[i]));
+        i += 1;
+      }
+      i -= 1;
+
+      elements.push(renderTable(headers, rows, `table-${i}`));
       continue;
     }
 
