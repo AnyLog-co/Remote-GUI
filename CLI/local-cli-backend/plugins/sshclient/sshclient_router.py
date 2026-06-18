@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import uuid
 
 import paramiko
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -34,8 +35,10 @@ ALLOWED_ON_START_TASKS = ["direct_ssh", "docker_attach", "docker_exec"]
 ALLOWED_CONNECTION_METHODS = ["password", "key-string", "keyfile"]
 input_buffer = {}
 
-# Global mapping of all active sessions.
+# Global mapping of all active SSH sessions by frontend terminal id.
 sessions = {}
+DETACHED_SESSION_TTL_SECONDS = 3600
+MAX_SESSION_BUFFER_CHARS = 200000
 
 def container_exists(ssh_client, container_name: str) -> bool:
     """Returns True if the container exists on the remote host."""
@@ -45,19 +48,135 @@ def container_exists(ssh_client, container_name: str) -> bool:
     output = stdout.read().decode().strip()
     return bool(output) 
 
-async def listen_to_ssh(ws: WebSocket, channel: paramiko.Channel):
+def append_session_output(session: dict, output: str):
+    session["output_buffer"] = (session.get("output_buffer", "") + output)[
+        -MAX_SESSION_BUFFER_CHARS:
+    ]
+
+
+async def send_session_output(session_id: str, output: str):
+    session = sessions.get(session_id)
+    if not session:
+        return
+
+    append_session_output(session, output)
+    ws = session.get("ws")
+    if not ws:
+        return
+
+    try:
+        await ws.send_text(output)
+    except Exception:
+        if sessions.get(session_id, {}).get("ws") is ws:
+            sessions[session_id]["ws"] = None
+
+
+async def close_session(session_id: str, reason: str = ""):
+    session = sessions.pop(session_id, None)
+    input_buffer.pop(session_id, None)
+    if not session:
+        return
+
+    cleanup_task = session.get("cleanup_task")
+    if cleanup_task:
+        cleanup_task.cancel()
+
+    listener_task = session.get("listener_task")
+    current_task = asyncio.current_task()
+    if listener_task and listener_task is not current_task:
+        listener_task.cancel()
+
+    ws = session.get("ws")
+    if ws:
+        try:
+            await ws.close(code=1000, reason=reason or "SSH session closed")
+        except Exception:
+            pass
+
+    channel = session.get("channel")
+    client = session.get("client")
+    if channel:
+        channel.close()
+    if client:
+        client.close()
+
+
+async def cleanup_detached_session(session_id: str):
+    await asyncio.sleep(DETACHED_SESSION_TTL_SECONDS)
+    session = sessions.get(session_id)
+    if session and not session.get("ws"):
+        await close_session(session_id, "Detached SSH session expired")
+
+
+async def detach_ws(session_id: str, ws: WebSocket):
+    session = sessions.get(session_id)
+    if not session or session.get("ws") is not ws:
+        return
+
+    session["ws"] = None
+    cleanup_task = session.get("cleanup_task")
+    if cleanup_task:
+        cleanup_task.cancel()
+    session["cleanup_task"] = asyncio.create_task(cleanup_detached_session(session_id))
+
+
+async def attach_ws(session_id: str, ws: WebSocket, cols: int = 80, rows: int = 24):
+    session = sessions.get(session_id)
+    if not session:
+        await ws.close(code=1008, reason="SSH session no longer exists")
+        return False
+
+    cleanup_task = session.get("cleanup_task")
+    if cleanup_task:
+        cleanup_task.cancel()
+        session["cleanup_task"] = None
+
+    old_ws = session.get("ws")
+    if old_ws and old_ws is not ws:
+        try:
+            await old_ws.close(code=1000, reason="SSH session attached elsewhere")
+        except Exception:
+            pass
+
+    session["ws"] = ws
+    channel = session.get("channel")
+    if channel:
+        try:
+            channel.resize_pty(width=cols, height=rows)
+        except Exception:
+            pass
+
+    output_buffer = session.get("output_buffer")
+    if output_buffer:
+        await ws.send_text(output_buffer)
+    return True
+
+
+async def listen_to_ssh(session_id: str):
     """
     Continuously listens to receiving messages from Paramiko Channel and relays to WebSocket
     """
     try:
         while True:
+            session = sessions.get(session_id)
+            if not session:
+                return
+
+            channel = session.get("channel")
+            if not channel or channel.closed:
+                await close_session(session_id, "SSH session ended")
+                return
+
             if channel.recv_ready():
                 output = channel.recv(4096).decode("utf-8", "replace")
-                await ws.send_text(output)
+                await send_session_output(session_id, output)
             # Avoid wasting possible sleep cycles
             await asyncio.sleep(0.02)
-    except Exception:
-        pass
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        await send_session_output(session_id, f"\r\nSSH ERROR: {str(e)}\r\n")
+        await close_session(session_id, str(e))
 
 
 def connect_client(ip, user, port, password=None, pkey=None) -> paramiko.SSHClient:
@@ -154,19 +273,32 @@ async def ws_handler(ws: WebSocket):
     # WebSocket endpoint to handle SSHClient logic
     await ws.accept()
 
-    channel = None
+    session_id = None
 
     try:
         while True:
             message = await ws.receive_json()
 
+            session_id = message.get("session_id") or session_id
             node_name = message.get("name")
             action = message.get("action")
             conn_method_info = message.get("conn_method")
 
+            if action == "reattach":
+                cols = message.get("cols", 80)
+                rows = message.get("rows", 24)
+                if not session_id or not await attach_ws(session_id, ws, cols, rows):
+                    return
+                continue
+
             if action in ALLOWED_ON_START_TASKS:
                 cols = message.get("cols", 80)
                 rows = message.get("rows", 24)
+                session_id = session_id or str(uuid.uuid4())
+
+                if session_id in sessions:
+                    await attach_ws(session_id, ws, cols, rows)
+                    continue
 
                 client = open_ssh_chan(
                     message["ip"],
@@ -185,7 +317,7 @@ async def ws_handler(ws: WebSocket):
                 if action == "direct_ssh":
                     # Create default shell. No other on-start commands
                     channel = client.invoke_shell(term="xterm", width=cols, height=rows)
-                    await ws.send_text("Connected to SSH\r\n")
+                    initial_output = "Connected to SSH\r\n"
                 else:
                     # Create a shell session
                     transport = client.get_transport()
@@ -201,9 +333,7 @@ async def ws_handler(ws: WebSocket):
                         channel.exec_command(f"docker attach {node_name}")
                         # Relay shell ready status
                         logger.info(f'docker attach {node_name}')
-                        await ws.send_text(
-                            f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
-                        )
+                        initial_output = f"Attached to {node_name}. Press <ctrl>p and then <ctrl>q to detach\r\n"
 
                     if action == "docker_exec":
                         if not container_exists(client, node_name):
@@ -214,51 +344,62 @@ async def ws_handler(ws: WebSocket):
                         logger.info(f'docker exec -it {node_name} sh')
 
                         # Relay shell ready status
-                        await ws.send_text(f"Started in {node_name}\r\n")
+                        initial_output = f"Started in {node_name}\r\n"
 
                 # Store connection within global sessions
-                sessions[ws] = {"client": client, "channel": channel}
+                sessions[session_id] = {
+                    "client": client,
+                    "channel": channel,
+                    "ws": ws,
+                    "output_buffer": "",
+                    "cleanup_task": None,
+                    "listener_task": None,
+                }
+                await send_session_output(session_id, initial_output)
 
                 # Start SSH loop task
-                asyncio.create_task(listen_to_ssh(ws, channel))
+                sessions[session_id]["listener_task"] = asyncio.create_task(
+                    listen_to_ssh(session_id)
+                )
             elif action == "resize":
                 # Handle terminal resizing and dynamic adjustment
-                if ws in sessions and sessions[ws].get("channel"):
-                    channel = sessions[ws]["channel"]
+                if session_id in sessions and sessions[session_id].get("channel"):
+                    channel = sessions[session_id]["channel"]
                     cols = message.get("cols", 80)
                     rows = message.get("rows", 24)
                     channel.resize_pty(width=cols, height=rows)
             elif action == "client_input":
                 # Relay user keystrokes in terminal
+                session = sessions.get(session_id)
+                channel = session.get("channel") if session else None
                 if channel:
                     data = message.get("input", "")
                     channel.send(data)
                     
                     # Log completed input only
-                    input_buffer.setdefault(ws, "")
+                    input_buffer.setdefault(session_id, "")
                     if "\r" in data or "\n" in data:
-                        if input_buffer[ws].strip(): 
-                            logger.info(f'input: {input_buffer[ws]}')
-                        input_buffer[ws] = ""
+                        if input_buffer[session_id].strip(): 
+                            logger.info(f'input: {input_buffer[session_id]}')
+                        input_buffer[session_id] = ""
                     else:
-                        input_buffer[ws] += data
+                        input_buffer[session_id] += data
+            elif action == "close_session":
+                if session_id:
+                    await close_session(session_id, "SSH session closed")
+                return
     except WebSocketDisconnect:
         print("WS Disconnect\n")
     except Exception as e:
         # Try to return error to user's WebSocket and close
-        if str(e).lower() == "socket is closed":
-            await ws.send_text("Internal connection to remote host broken")
-        else:
-            await ws.send_text(f"\r\nSSH ERROR: {str(e)}\r\n")
-        await ws.close()
+        try:
+            if str(e).lower() == "socket is closed":
+                await ws.send_text("Internal connection to remote host broken")
+            else:
+                await ws.send_text(f"\r\nSSH ERROR: {str(e)}\r\n")
+            await ws.close()
+        except Exception:
+            pass
     finally:
-        # Clean up client and session
-        session = sessions.pop(ws, None)
-        input_buffer.pop(ws, None)
-        if session:
-            channel = session.get("channel")
-            client = session.get("client")
-            if channel:
-                channel.close()
-            if client:
-                client.close()
+        if session_id:
+            await detach_ws(session_id, ws)
