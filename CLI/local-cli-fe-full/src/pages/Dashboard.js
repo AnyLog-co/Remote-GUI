@@ -26,7 +26,13 @@ import {
 import PolicyGeneratorPage from './Security';
 // import Presets from './Presets';
 import '../styles/Dashboard.css'; // dashboard-specific styles
-import { bookmarkNode, getBookmarks, setDefaultBookmark } from '../services/file_auth';
+import {
+  bookmarkNode,
+  deleteBookmarkedNode,
+  getBookmarks,
+  setDefaultBookmark,
+  updateBookmarkNode,
+} from '../services/file_auth';
 
 const DEFAULT_BOOKMARK_PORT = '32149';
 
@@ -186,37 +192,49 @@ const Dashboard = () => {
     }
   }, []);
 
-  // On first load, if no selected node, use default bookmark if present
+  // Keep the dropdown in sync with saved bookmarks.
   useEffect(() => {
-    (async () => {
+    const syncBookmarksToNodes = async (event) => {
       try {
-        if (!selectedNode) {
-          const res = await getBookmarks();
-          const list = Array.isArray(res.data) ? res.data : [];
-          const def = list.find((b) => b.is_default);
-          if (def && def.node) {
-            setSelectedNode(def.node);
-            setNodes((prev) => (
-              prev.includes(def.node) ? prev : [...prev, def.node]
-            ));
-          } else if (list.length === 0) {
-            const browserDefaultNode = getBrowserDefaultNode();
-            if (browserDefaultNode) {
-              await bookmarkNode({ node: browserDefaultNode });
-              await setDefaultBookmark({ node: browserDefaultNode });
-              setSelectedNode(browserDefaultNode);
-              setNodes((prev) => (
-                prev.includes(browserDefaultNode) ? prev : [...prev, browserDefaultNode]
-              ));
-            }
+        const preferDefault = event?.detail?.preferDefault === true;
+        const res = await getBookmarks();
+        let list = Array.isArray(res.data) ? res.data : [];
+
+        if (list.length === 0) {
+          const browserDefaultNode = getBrowserDefaultNode();
+          if (browserDefaultNode) {
+            await bookmarkNode({ node: browserDefaultNode });
+            await setDefaultBookmark({ node: browserDefaultNode });
+            list = [{ node: browserDefaultNode, is_default: true }];
           }
         }
+
+        const bookmarkNodes = uniqueNodes(list.map((bookmark) => bookmark.node));
+        setNodes((prev) => uniqueNodes([...prev, ...bookmarkNodes]));
+
+        setSelectedNode((currentSelectedNode) => {
+          const defaultBookmark = list.find((bookmark) => bookmark.is_default && bookmark.node);
+          if (preferDefault && defaultBookmark?.node) {
+            return defaultBookmark.node;
+          }
+
+          if (currentSelectedNode) {
+            return currentSelectedNode;
+          }
+
+          return defaultBookmark?.node || bookmarkNodes[0] || null;
+        });
       } catch (e) {
         // ignore failures silently
       }
-    })();
-    // run only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    };
+
+    syncBookmarksToNodes({ detail: { preferDefault: true } });
+    window.addEventListener('bookmark-refresh', syncBookmarksToNodes);
+
+    return () => {
+      window.removeEventListener('bookmark-refresh', syncBookmarksToNodes);
+    };
   }, []);
 
   // Utility function to clear all stored data
@@ -228,6 +246,7 @@ const Dashboard = () => {
       'mcpclient_config',
       'mcpclient_chats_v2',
       'mcpclient_active_chat_id',
+      'client-command-draft',
     ].forEach((key) => localStorage.removeItem(key));
     window.dispatchEvent(new Event('mcpclient-storage-cleared'));
     setNodes([]);
@@ -236,7 +255,7 @@ const Dashboard = () => {
   };
 
   // Adds a new node (if valid and not already in the list)
-  const handleAddNode = (newNode) => {
+  const handleAddNode = async (newNode) => {
     if (!newNode) {
       return;
     }
@@ -244,21 +263,43 @@ const Dashboard = () => {
     setNodes((prevNodes) => (
       prevNodes.includes(newNode) ? prevNodes : [...prevNodes, newNode]
     ));
+    await bookmarkNode({ node: newNode });
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
-  const handleRemoveNode = (nodeToRemove) => {
+  const handleRemoveNode = async (nodeToRemove) => {
+    if (!nodeToRemove) {
+      return;
+    }
+
     setNodes((prev) => prev.filter((n) => n !== nodeToRemove));
     if (selectedNode === nodeToRemove) {
       const remaining = nodes.filter((n) => n !== nodeToRemove);
       setSelectedNode(remaining.length > 0 ? remaining[0] : null);
     }
+    await deleteBookmarkedNode({ node: nodeToRemove });
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
-  const handleEditNode = (oldNode, newNode) => {
+  const handleEditNode = async (oldNode, newNode) => {
+    if (!oldNode || !newNode) {
+      return;
+    }
+
     setNodes((prev) => prev.map((n) => (n === oldNode ? newNode : n)));
     if (selectedNode === oldNode) {
       setSelectedNode(newNode);
     }
+    try {
+      await updateBookmarkNode({ oldNode, newNode });
+    } catch (error) {
+      if (error.message === 'Bookmark not found') {
+        await bookmarkNode({ node: newNode });
+      } else {
+        throw error;
+      }
+    }
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
   return (
@@ -274,7 +315,7 @@ const Dashboard = () => {
         onClearStoredData={clearStoredData}
       />
       <div className="dashboard-content">
-        <Sidebar selectedNode={selectedNode} />
+        <Sidebar />
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}
@@ -289,6 +330,10 @@ const Dashboard = () => {
                       element={
                         <route.component
                           node={selectedNode}
+                          nodes={nodes}
+                          onAddNode={handleAddNode}
+                          onRemoveNode={handleRemoveNode}
+                          onEditNode={handleEditNode}
                           onSelectNode={(node) => {
                             console.log('Selecting node from bookmarks:', node);
                             // Add node to nodes list if not already present

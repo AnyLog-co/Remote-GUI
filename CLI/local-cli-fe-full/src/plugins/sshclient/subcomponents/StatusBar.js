@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { cliState } from '../state/state';
+import { closeTerminalSession } from '../sessionManager';
 import { FaCircle } from 'react-icons/fa6';
 import '../styles/StatusBar.css';
 
@@ -36,7 +37,6 @@ export const TimeCounter = ({ customStart, enabled }) => {
 };
 
 const StatusBar = ({ id, conn }) => {
-  const { removeActiveConnection } = cliState();
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,
   );
@@ -51,7 +51,7 @@ const StatusBar = ({ id, conn }) => {
       <div className="statusbar-left">
         <span
           className="exit-button"
-          onClick={() => removeActiveConnection(id)}
+          onClick={() => closeTerminalSession(id)}
         >
           Exit
         </span>

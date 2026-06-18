@@ -1,12 +1,35 @@
 // src/components/TopBar.js
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import '../styles/TopBar.css';
 import logo from '../assets/logo.png';
 import NodePicker from './NodePicker.js';
 import { NavLink } from 'react-router-dom';
+import { getLicenseInfo } from '../services/api';
 
 
 const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode, restoredFromStorage, onClearStoredData }) => {
+  const [license, setLicense] = useState(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+    if (!selectedNode) {
+      setLicense(null);
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    getLicenseInfo({ connectInfo: selectedNode }).then((licenseInfo) => {
+      if (isCurrent) {
+        setLicense(licenseInfo);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedNode]);
+
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -19,6 +42,11 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
           onEditNode={onEditNode}
           onSelectNode={onSelectNode} 
         />
+      </div>
+      <div className="topbar-center">
+        <NavLink to="about" className="topbar-license-btn">
+          Licensee: {license?.company ?? '—'}
+        </NavLink>
       </div>
       <div className="topbar-right">
         {restoredFromStorage && (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable'; // Adjust path as needed
 import BlobsTable from '../components/BlobsTable'; // Adjust path as needed
@@ -7,14 +7,23 @@ import { sendCommand, viewBlobs, viewStreamingBlobs, getBasePresetPolicy } from 
 import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import { getPresetGroups, getPresetsByGroup, addPreset, addPresetGroup } from '../services/file_auth';
 import '../styles/Client.css'; // Optional: create client-specific CSS
-import { useEffect } from 'react';
+
+const DEFAULT_COMMAND = 'get status';
+const COMMAND_STORAGE_KEY = 'client-command-draft';
+
+const getStoredCommand = () => {
+  if (typeof window === 'undefined') return DEFAULT_COMMAND;
+
+  const storedCommand = window.localStorage.getItem(COMMAND_STORAGE_KEY);
+  return storedCommand === null ? DEFAULT_COMMAND : storedCommand;
+};
 
 const Client = ({ node }) => {
   const navigate = useNavigate();
   // Since the node is provided as a prop, we no longer need a "Connect info" field.
   const [authUser, setAuthUser] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [command, setCommand] = useState('get status');
+  const [command, setCommand] = useState(getStoredCommand);
   const [method, setMethod] = useState('GET');
   const [presetGroups, setPresetGroups] = useState([]);
   const [showPresets, setShowPresets] = useState(true);
@@ -46,6 +55,10 @@ const Client = ({ node }) => {
   useEffect(() => {
     console.log('Selected blobs:', selectedBlobs);
   }, [selectedBlobs]);
+
+  useEffect(() => {
+    window.localStorage.setItem(COMMAND_STORAGE_KEY, command);
+  }, [command]);
 
   // Fetch presets once on mount
   useEffect(() => {

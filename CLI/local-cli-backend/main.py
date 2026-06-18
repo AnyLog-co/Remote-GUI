@@ -1,6 +1,8 @@
 # (venv) ➜  Remote-GUI git:(bchain-optimz) ✗ uvicorn CLI.local-cli-backend.main:app --reload
 import configparser
+import importlib
 import os
+import re
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +36,7 @@ from file_auth import (
     file_set_default_bookmark,
 )
 # Import plugin loader
-from plugins.loader import load_plugins, get_plugin_order
+from plugins.loader import load_plugins, get_plugin_order, get_plugin_order_config, get_plugin_label_overrides
 # Import feature config loader
 from feature_config_loader import (
     is_feature_enabled, 
@@ -241,10 +243,18 @@ def _get_remote_gui_version() -> str:
     return '—'
 
 
+def _clean_version(version: str) -> str:
+    """Return only the version number, omitting branch/build suffixes."""
+    if not version or version == '—':
+        return '—'
+    match = re.match(r'^\s*v?([0-9]+(?:\.[0-9]+)*(?:[-+][0-9A-Za-z.-]+)?)', version)
+    return match.group(1) if match else version.strip().split()[0]
+
+
 @app.get("/version")
 def get_version_endpoint():
     """Return Remote-GUI version from setup.cfg for the About page."""
-    rg = _get_remote_gui_version()
+    rg = _clean_version(_get_remote_gui_version())
     return {"version": rg, "remote_gui_version": rg}
 
 
@@ -303,13 +313,42 @@ def get_feature_config_endpoint():
     }
 
 # Plugin order endpoint for frontend
+def get_plugin_router_labels(plugins_dir: str) -> Dict[str, str]:
+    """Discover plugin display labels from each plugin router's first FastAPI tag."""
+    labels = {}
+    if not os.path.isdir(plugins_dir):
+        return labels
+
+    for plugin_name in sorted(os.listdir(plugins_dir)):
+        plugin_path = os.path.join(plugins_dir, plugin_name)
+        router_path = os.path.join(plugin_path, f"{plugin_name}_router.py")
+        if not os.path.isdir(plugin_path) or not os.path.exists(router_path):
+            continue
+
+        try:
+            module = importlib.import_module(f"plugins.{plugin_name}.{plugin_name}_router")
+            router = getattr(module, "api_router", None)
+            tags = getattr(router, "tags", None) or []
+            if tags:
+                labels[plugin_name] = str(tags[0])
+        except Exception as exc:
+            print(f"⚠️  Warning: Could not inspect plugin router label for {plugin_name}: {exc}")
+
+    return labels
+
 @app.get("/plugins/order")
 def get_plugin_order_endpoint():
     """Get the plugin order configuration for frontend display"""
     plugins_dir = os.path.join(BASE_DIR, 'plugins')
+    plugin_config = get_plugin_order_config(plugins_dir) or {}
     plugin_order = get_plugin_order(plugins_dir)
+    plugin_labels = get_plugin_router_labels(plugins_dir)
+    plugin_labels.update(get_plugin_label_overrides(plugins_dir))
     return {
         "plugin_order": plugin_order if plugin_order else [],
+        "sidebar_order": plugin_config.get("sidebar_order", []),
+        "sidebar_sections": plugin_config.get("sidebar_sections", {}),
+        "plugin_labels": plugin_labels,
         "has_custom_order": plugin_order is not None
     }
 

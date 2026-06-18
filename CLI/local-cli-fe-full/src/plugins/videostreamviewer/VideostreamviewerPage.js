@@ -566,7 +566,7 @@ const VideostreamviewerPage = () => {
 
 export const pluginMetadata = {
   name: 'Video Stream Viewer',
-  icon: '🎥'
+  icon: null
 };
 
 export default VideostreamviewerPage;
