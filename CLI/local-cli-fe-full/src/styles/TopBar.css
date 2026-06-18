@@ -1,16 +1,47 @@
 /* src/styles/TopBar.css */
 .topbar {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     background: #007bff;
     color: #fff;
     padding: 10px 20px;
+    gap: 16px;
   }
   
   .topbar-left {
     display: flex;
     align-items: center;
+    min-width: 0;
+  }
+
+  .topbar-center {
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .topbar-license-btn {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 20px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    max-width: min(360px, 40vw);
+    overflow: hidden;
+    padding: 7px 14px;
+    text-align: center;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .topbar-license-btn:hover,
+  .topbar-license-btn.active {
+    background: rgba(255, 255, 255, 0.28);
+    border-color: rgba(255, 255, 255, 0.55);
   }
   
   .logo {
@@ -98,6 +129,8 @@
   .topbar-right {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 10px;
+    min-width: 0;
   }
   

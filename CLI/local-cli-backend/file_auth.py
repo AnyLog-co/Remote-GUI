@@ -436,6 +436,30 @@ def file_update_bookmark_description(node: str, description: str) -> Dict:
     
     return {"error": "Bookmark not found"}
 
+def file_update_bookmark_node(old_node: str, new_node: str) -> Dict:
+    """Update the node address for an existing bookmark."""
+    bookmarks_data = load_json_file(BOOKMARKS_FILE)
+    bookmarks = _ensure_bookmarks_list(bookmarks_data)
+
+    if old_node == new_node:
+        return {"message": "Bookmark node unchanged", "node": new_node}
+
+    for bookmark in bookmarks:
+        if bookmark.get("node", {}).get("conn") == new_node:
+            return {"error": "Bookmark already exists"}
+
+    for bookmark in bookmarks:
+        if bookmark.get("node", {}).get("conn") == old_node:
+            bookmark["node"] = {"conn": new_node}
+            save_json_file(BOOKMARKS_FILE, bookmarks_data)
+            return {
+                "message": "Bookmark node updated successfully",
+                "old_node": old_node,
+                "new_node": new_node,
+            }
+
+    return {"error": "Bookmark not found"}
+
 def file_set_default_bookmark(node: str) -> Dict:
     """Set a single bookmark as default and unset others"""
     bookmarks_data = load_json_file(BOOKMARKS_FILE)

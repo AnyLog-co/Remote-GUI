@@ -24,6 +24,10 @@ class BookmarkUpdateRequest(BaseModel):
     node: str
     description: str
 
+class BookmarkNodeUpdateRequest(BaseModel):
+    old_node: str
+    new_node: str
+
 class PresetGroup(BaseModel):
     group_name: str
 
@@ -53,4 +57,3 @@ class ColumnInfo(BaseModel):
 
 class SqlQuery(BaseModel):
     query: str
-

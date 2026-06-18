@@ -120,6 +120,19 @@ export const cliState = create(
 
       partialize: (state) => ({
         credLocked: state.credLocked,
+        activeTerminalOrder: state.activeTerminalOrder,
+        activeConnection: Object.fromEntries(
+          Object.entries(state.activeConnection).map(([id, conn]) => {
+            const { credential, ...persistedConnection } = conn;
+            return [
+              id,
+              {
+                ...persistedConnection,
+                isConnected: false,
+              },
+            ];
+          }),
+        ),
       }),
     },
   ),

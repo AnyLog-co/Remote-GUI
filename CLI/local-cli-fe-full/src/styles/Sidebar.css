@@ -30,18 +30,11 @@
   font-weight: 600;
 }
 
-/* Plugin section styling */
-.plugin-section {
-  margin-top: 20px;
-  padding-top: 20px;
+.sidebar-divider {
   border-top: 1px solid #4e4e6a;
+  margin: 4px 0 12px;
 }
 
-.plugin-section a {
-  margin-bottom: 12px;
-}
-
-/* License / About at bottom left */
 .sidebar-version {
   margin-top: auto;
   padding: 16px 4px 0;
@@ -64,7 +57,7 @@
   color: #c7c7d9 !important;
 }
 
-.sidebar-licensee {
+.sidebar-version-number {
   padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;

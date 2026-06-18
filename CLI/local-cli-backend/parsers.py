@@ -1,5 +1,6 @@
 # parsers.py
 import json
+from typing import Any
 
 def parse_table_fixed(text: str) -> list:
 
@@ -292,7 +293,7 @@ def parse_json(text: str) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def parse_response(raw: str) -> dict:
+def parse_response(raw: Any) -> dict:
     """
     Unified response parser.
     Checks if the response is JSON, table formatted, or a simple string,
@@ -301,8 +302,9 @@ def parse_response(raw: str) -> dict:
     try:
         print(f"=== PARSING RESPONSE ===")
         print(f"Raw response type: {type(raw)}")
-        print(f"Raw response length: {len(str(raw)) if raw else 0}")
-        print(f"Raw response preview: {str(raw)[:500] if raw else 'None'}...")
+        raw_preview = str(raw)[:500] if raw is not None else 'None'
+        print(f"Raw response length: {len(str(raw)) if raw is not None else 0}")
+        print(f"Raw response preview: {raw_preview}...")
         print(f"=== END PARSING RESPONSE ===")
     except Exception as e:
         print(f"Error in parse_response debugging: {e}")
@@ -329,6 +331,26 @@ def parse_response(raw: str) -> dict:
         if isinstance(raw, bool):
             return {"type": "string", "data": str(raw).lower()}
 
+        if raw is None:
+            return {"type": "string", "data": ""}
+
+        if isinstance(raw, (int, float)):
+            return {"type": "string", "data": str(raw)}
+
+        if type(raw) is list:
+            return {"type": "json", "data": raw}
+        
+        if type(raw) is dict:
+            return {"type": "json", "data": raw}
+
+        if isinstance(raw, str):
+            # Replace \r\n with \n and normalize line endings
+            raw = raw.replace('\r\n', '\n').replace('\r', '\n')
+            # Remove leading/trailing whitespace
+            raw = raw.strip()
+        else:
+            return {"type": "string", "data": str(raw)}
+
         if '|' in raw:
             print("FOUND TABLE")
             table_data = parse_table(raw)
@@ -343,22 +365,10 @@ def parse_response(raw: str) -> dict:
                     result["additional_content"] = table_result["additional_info"]
                 return result
             
-        if type(raw) is list:
-            return {"type": "json", "data": raw}
-        
-        if type(raw) is dict:
-            return {"type": "json", "data": raw}
-            
         # Try to parse as JSON first
         # parsed = parse_json(raw_text)
         # if parsed:
         #     return {"type": "json", "data": parsed}
-        
-        if isinstance(raw, str):
-            # Replace \r\n with \n and normalize line endings
-            raw = raw.replace('\r\n', '\n').replace('\r', '\n')
-            # Remove leading/trailing whitespace
-            raw = raw.strip()
             
         # Otherwise, treat it as a simple message
         return {"type": "string", "data": raw}
@@ -368,7 +378,7 @@ def parse_response(raw: str) -> dict:
         print(f"Error type: {type(e).__name__}")
         print(f"Error message: {str(e)}")
         print(f"Raw data type: {type(raw)}")
-        print(f"Raw data: {str(raw)[:1000] if raw else 'None'}")
+        print(f"Raw data: {str(raw)[:1000] if raw is not None else 'None'}")
         print(f"=== END PARSE_RESPONSE ERROR ===")
         
         return {
@@ -378,7 +388,7 @@ def parse_response(raw: str) -> dict:
                 "error_type": type(e).__name__,
                 "error_message": str(e),
                 "raw_data_type": str(type(raw)),
-                "raw_data_preview": str(raw)[:500] if raw else 'None'
+                "raw_data_preview": str(raw)[:500] if raw is not None else 'None'
             }
         }
 
