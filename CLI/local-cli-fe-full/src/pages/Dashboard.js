@@ -315,7 +315,7 @@ const Dashboard = () => {
         onClearStoredData={clearStoredData}
       />
       <div className="dashboard-content">
-        <Sidebar selectedNode={selectedNode} />
+        <Sidebar />
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}

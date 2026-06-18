@@ -13,22 +13,77 @@ except ImportError:
     def is_plugin_enabled(plugin_name: str) -> bool:
         return True
 
-def get_plugin_order(plugins_dir: str) -> Optional[List[str]]:
+def get_plugin_order_config(plugins_dir: str) -> Optional[Dict]:
     """
-    Reads plugin order from plugin_order.json if it exists.
+    Reads plugin order config from plugin_order.json if it exists.
     Returns None if no order file exists.
     """
     order_file = os.path.join(plugins_dir, 'plugin_order.json')
     if os.path.exists(order_file):
         try:
             with open(order_file, 'r') as f:
-                config = json.load(f)
-                order = config.get('plugin_order', [])
-                if isinstance(order, list):
-                    return order
+                return json.load(f)
         except Exception as e:
             print(f"⚠️  Warning: Could not read plugin_order.json: {e}")
     return None
+
+def _order_entry_name(entry) -> Optional[str]:
+    """Support legacy string entries and object entries with name/id/key."""
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        return entry.get("name") or entry.get("id") or entry.get("key")
+    return None
+
+def get_plugin_order(plugins_dir: str) -> Optional[List[str]]:
+    """
+    Reads plugin order from plugin_order.json if it exists.
+    Returns None if no order file exists.
+    """
+    config = get_plugin_order_config(plugins_dir)
+    if not config:
+        return None
+
+    order = config.get('plugin_order', [])
+    if isinstance(order, list):
+        return [
+            plugin_name
+            for plugin_name in (_order_entry_name(entry) for entry in order)
+            if plugin_name
+        ]
+    return None
+
+def get_plugin_label_overrides(plugins_dir: str) -> Dict[str, str]:
+    """Return plugin label overrides from plugin_order.json object entries."""
+    config = get_plugin_order_config(plugins_dir) or {}
+    overrides = {}
+
+    for section in ("plugin_order", "sidebar_order"):
+        entries = config.get(section, [])
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            plugin_name = _order_entry_name(entry)
+            label = entry.get("label") or entry.get("name_override") or entry.get("title")
+            if plugin_name and label:
+                overrides[plugin_name] = label
+
+    sidebar_sections = config.get("sidebar_sections", {})
+    if isinstance(sidebar_sections, dict):
+        for entries in sidebar_sections.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                plugin_name = _order_entry_name(entry)
+                label = entry.get("label") or entry.get("name_override") or entry.get("title")
+                if plugin_name and label:
+                    overrides[plugin_name] = label
+
+    return overrides
 
 def load_plugins(app):
     """
