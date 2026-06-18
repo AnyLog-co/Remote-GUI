@@ -26,9 +26,10 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 class _StreamToLogger:
     """Write‑protocol wrapper that sends each write() to a logger."""
 
-    def __init__(self, logger: logging.Logger, level: int = logging.INFO):
+    def __init__(self, logger: logging.Logger, level: int = logging.INFO, stream=None):
         self._logger = logger
         self._level = level
+        self._stream = stream
         self._buf = ""
 
     def write(self, msg: str):
@@ -40,6 +41,11 @@ class _StreamToLogger:
 
     def isatty(self):
         return False
+
+    def fileno(self):
+        if self._stream is None:
+            raise OSError("No underlying stream is available")
+        return self._stream.fileno()
 
 
 def setup_logging() -> str:
@@ -96,8 +102,10 @@ def setup_logging() -> str:
     # existing print() calls throughout the codebase are captured.
     stdout_logger = logging.getLogger("stdout")
     stderr_logger = logging.getLogger("stderr")
-    sys.stdout = _StreamToLogger(stdout_logger, logging.INFO)
-    sys.stderr = _StreamToLogger(stderr_logger, logging.ERROR)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = _StreamToLogger(stdout_logger, logging.INFO, original_stdout)
+    sys.stderr = _StreamToLogger(stderr_logger, logging.ERROR, original_stderr)
 
     logging.getLogger(__name__).info(
         "Logging initialised – dir=%s  level=%s  max_bytes=%s  backups=%s",
