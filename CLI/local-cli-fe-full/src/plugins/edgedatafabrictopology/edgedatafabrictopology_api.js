@@ -2,9 +2,9 @@ import { sendCommand } from '../../services/api';
 
 const MONITORING_DBMS = 'monitoring';
 const TABLES = {
-  docker: 'docker_insight',
   syslog: 'syslog'
 };
+const NODE_METRICS_QUERY = 'get monitored operators';
 
 function asArray(value) {
   if (!value) return [];
@@ -136,7 +136,7 @@ async function runAnyLog(connectInfo, command, method = 'GET') {
 }
 
 async function runMonitoredOperators(connectInfo) {
-  return runAnyLog(connectInfo, 'get monitored operators');
+  return runAnyLog(connectInfo, NODE_METRICS_QUERY);
 }
 
 function escapeSql(sql) {
@@ -271,18 +271,6 @@ function intervalQueries(table, refreshSeconds, hours, projection, limit) {
 }
 
 function tableQuery(table, hours, limit = 500, refreshSeconds = 60) {
-  if (table === TABLES.docker) {
-    return [
-      ...intervalQueries(
-        table,
-        refreshSeconds,
-        hours,
-        'node_name, node, host, hostname, container_name, container, name, status, state, timestamp, cpu_percent, memory_percent, mem_percent',
-        limit
-      ),
-      ...intervalQueries(table, refreshSeconds, hours, '*', limit)
-    ];
-  }
   return [
     `SELECT * FROM ${table} WHERE timestamp >= NOW() - ${hours} hours ORDER BY timestamp DESC LIMIT ${limit}`,
     `SELECT * FROM ${table} WHERE insert_timestamp >= NOW() - ${hours} hours ORDER BY insert_timestamp DESC LIMIT ${limit}`,
@@ -449,7 +437,6 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
     return {
       sites: [],
       catalog: [],
-      containers: [],
       issues: [],
       apiLog: [],
       error: 'Select an AnyLog node to load topology data.'
@@ -476,7 +463,7 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
   const companyFilter = cleanCompany(filters.company);
   const refreshSeconds = Math.max(1, Number(filters.refreshSeconds) || 60);
   const monitoringClientFilter = operatorIpPortCommand(companyFilter);
-  const [operatorsResult, operatorIpPortResult, mastersResult, dbsResult, monitoredOperatorsResult, dockerResult, syslogResult] = await Promise.all([
+  const [operatorsResult, operatorIpPortResult, mastersResult, dbsResult, monitoredOperatorsResult, syslogResult] = await Promise.all([
     tracked(
       companyFilter ? `metadata operators json company=${companyFilter}` : 'metadata operators',
       runAnyLog(connectInfo, operatorMetadataCommand(companyFilter))
@@ -490,7 +477,6 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
     tracked('metadata masters', runAnyLog(connectInfo, 'blockchain get master bring.ip_port')),
     tracked('network databases', runAnyLog(connectInfo, 'get network databases')),
     tracked('monitored operators', runMonitoredOperators(connectInfo)),
-    tracked('docker insight', queryMonitoringTable(connectInfo, TABLES.docker, hours, 800, monitoringClientFilter, refreshSeconds)),
     tracked('syslog', queryMonitoringTable(connectInfo, TABLES.syslog, hours, 300, monitoringClientFilter, refreshSeconds))
   ]);
 
@@ -552,7 +538,6 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
     catalog,
     monitorRows: monitoredOperatorRows,
     nodeRows: [],
-    dockerRows: dockerResult.rows,
     syslogRows: syslogResult.rows,
     apiLog,
     error: null

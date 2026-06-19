@@ -447,16 +447,14 @@
 }
 
 .edf-catalog-grid,
-.edf-kpi-grid,
-.edf-container-grid {
+.edf-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 12px;
 }
 
 .edf-catalog-card,
-.edf-kpi-grid article,
-.edf-container-grid article {
+.edf-kpi-grid article {
   padding: 13px 14px;
   border: 1px solid #dee2e6;
   border-left: 4px solid #007bff;
@@ -464,8 +462,7 @@
   background: #ffffff;
 }
 
-.edf-catalog-card.warn,
-.edf-container-grid article.warn {
+.edf-catalog-card.warn {
   border-left-color: #ffc107;
 }
 
@@ -476,7 +473,6 @@
 
 .edf-catalog-card span,
 .edf-kpi-grid span,
-.edf-container-grid span,
 .edf-modal-metrics span {
   display: block;
   color: #6c757d;
@@ -485,8 +481,7 @@
   text-transform: uppercase;
 }
 
-.edf-catalog-card strong,
-.edf-container-grid strong {
+.edf-catalog-card strong {
   display: block;
   margin-top: 4px;
   color: #333;
@@ -501,8 +496,7 @@
 }
 
 .edf-catalog-card small,
-.edf-kpi-grid small,
-.edf-container-grid small {
+.edf-kpi-grid small {
   display: block;
   color: #6c757d;
   font-size: 12px;
@@ -628,11 +622,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-}
-
-.edf-container-grid article {
-  display: grid;
-  gap: 8px;
 }
 
 .edf-mini-bar {
@@ -847,6 +836,19 @@
   font-size: 18px;
 }
 
+.edf-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edf-modal-shell header .edf-query-button {
+  width: auto;
+  min-width: 64px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
 .edf-modal-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -861,6 +863,30 @@
   border: 1px solid #dee2e6;
   border-radius: 6px;
   background: #ffffff;
+}
+
+.edf-removable-metric > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.edf-removable-metric button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #495057;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.edf-removable-metric button:hover {
+  border-color: #dc3545;
+  color: #dc3545;
 }
 
 .edf-modal-metric-picker {
@@ -932,6 +958,10 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
+}
+
+.edf-modal-grid.single {
+  grid-template-columns: 1fr;
 }
 
 .edf-modal-grid > div {

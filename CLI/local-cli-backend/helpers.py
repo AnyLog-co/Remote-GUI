@@ -8,6 +8,7 @@ import json
 import requests
 import os
 import time
+import uuid
 
 from classes import *
 
@@ -93,8 +94,38 @@ def _is_node_cpu_percent_command(command: str) -> bool:
     return " ".join(command.lower().split()) == "get node info cpu_percent"
 
 
+def _is_system_command(command: str) -> bool:
+    """Return True for direct system commands that need POST+GET handling."""
+    return " ".join((command or "").lower().split()).startswith("system ")
+
+
 def _is_zero_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+
+
+def _get_system_command_output(anylog_conn, command: str, destination: str = None):
+    """
+    AnyLog rejects direct `system ...` over REST GET. Execute it via a temporary
+    variable so the GUI can still return the command output as text.
+    """
+    temp_var = f"remote_gui_system_{uuid.uuid4().hex}"
+    try:
+        anylog_conn.post(
+            command=f"{temp_var} = {command}",
+            destination=destination,
+        )
+        return anylog_conn.get(
+            command=f"get !{temp_var}",
+            destination=destination,
+        )
+    finally:
+        try:
+            anylog_conn.post(
+                command=f'{temp_var} = ""',
+                destination=destination,
+            )
+        except Exception as cleanup_error:
+            print(f"Failed to clear temporary system cat variable {temp_var}: {cleanup_error}")
 
 
 def _get_with_cpu_percent_retry(anylog_conn, command: str, destination: str = None):
@@ -246,7 +277,13 @@ def make_request(conn, method, command, topic=None, destination=None, payload=No
     # }
     
     try:
-        if method.upper() == "GET":
+        if _is_system_command(command):
+            response = _get_system_command_output(
+                anylog_conn=anylog_conn,
+                command=command,
+                destination=destination
+            )
+        elif method.upper() == "GET":
             response = _get_with_cpu_percent_retry(
                 anylog_conn=anylog_conn,
                 command=command,

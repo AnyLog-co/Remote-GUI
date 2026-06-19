@@ -616,8 +616,14 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
               </div>
             </li>
           ) : (
-            displayedBookmarks.map(bookmark => (
-              <li key={bookmark.node}>
+            displayedBookmarks.map(bookmark => {
+              const isActiveNode = bookmark.node === node;
+
+              return (
+              <li
+                key={bookmark.node}
+                className={isActiveNode ? "active-bookmark" : ""}
+              >
                 <div className="bookmark-content">
                   <div className="bookmark-header">
                     {editingNodes[bookmark.node] ? (
@@ -742,12 +748,13 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
                     {bookmark.is_default ? '⭐ Default' : 'Set as default'}
                   </button>
                   <button
-                    className="use-node-btn"
-                    disabled={loading}
+                    className={`use-node-btn${isActiveNode ? " active-node-btn" : ""}`}
+                    disabled={loading || isActiveNode}
                     onClick={() => handleUseNode(bookmark.node)}
-                    title="Use this node as selected node"
+                    title={isActiveNode ? "This node is currently active" : "Use this node as selected node"}
+                    aria-current={isActiveNode ? "true" : undefined}
                   >
-                    ✅ Use Node
+                    {isActiveNode ? "Active Node" : "✅ Use Node"}
                   </button>
                   <button
                     className="delete-btn"
@@ -759,7 +766,8 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
                   </button>
                 </div>
               </li>
-            ))
+              );
+            })
           )}
         </ul>
       </section>

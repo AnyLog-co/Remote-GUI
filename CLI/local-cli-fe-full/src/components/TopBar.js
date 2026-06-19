@@ -1,7 +1,7 @@
 // src/components/TopBar.js
 import React, { useEffect, useState } from 'react';
 import '../styles/TopBar.css';
-import logo from '../assets/logo.png';
+import logo from '../assets/AnyLog_EDM_logo.png';
 import NodePicker from './NodePicker.js';
 import { NavLink } from 'react-router-dom';
 import { getLicenseInfo } from '../services/api';

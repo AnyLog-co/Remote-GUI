@@ -36,11 +36,12 @@ const POLL_UNIT_OPTIONS = [
 ];
 
 const NODE_ID_KEYS = ['node_name', 'node name', 'Node Name', 'Node', 'node', 'host', 'hostname', 'name', 'operator', 'member', 'id', 'ip_port', 'IP:Port', 'Address'];
-const CPU_KEYS = ['cpu_percent', 'CPU Percent', 'Cpu Percent', 'cpu percent', 'CPU %', 'cpu', 'CPU'];
+const CPU_KEYS = ['cpu_percent', 'CPU Percent', 'Cpu Percent', 'CPU Usage', 'cpu usage', 'cpu percent', 'CPU %', 'cpu', 'CPU'];
 const MEM_KEYS = ['mem_percent', 'memory_percent', 'Memory Percent', 'Mem Percent', 'MEM Percent', 'memory percent', 'mem percent', 'Memory %', 'Mem %', 'MEM %'];
-const DISK_FREE_KEYS = ['free_space_percent', 'disk_free_percent', 'Free Space Percent', 'free space percent', 'Disk Free Percent', 'Disk Free %'];
-const DISK_USAGE_KEYS = ['disk_percent', 'disk_usage_percent', 'disk_used_percent', 'Disk Percent', 'Disk Usage Percent', 'disk usage percent', 'Disk Used Percent', 'Disk Used %', 'Disk %'];
+const DISK_FREE_KEYS = ['free_space_percent', 'disk_free_percent', 'Free Space Percent', 'Free Space', 'free space', 'free space percent', 'Disk Free Percent', 'Disk Free %'];
+const DISK_USAGE_KEYS = ['disk_percent', 'disk_usage_percent', 'disk_used_percent', 'Disk Percent', 'Disk Usage', 'Disk Usage Percent', 'disk usage percent', 'Disk Used Percent', 'Disk Used %', 'Disk %'];
 const OPERATIONAL_TIME_KEYS = ['operational time', 'Operational Time', 'processing time', 'Processing Time', 'elapsed time', 'Elapsed time'];
+const NODE_METRICS_QUERY = 'get monitored operators';
 const DEFAULT_QUERY_FORM = {
   label: '',
   dbms: '',
@@ -231,6 +232,29 @@ function hostAliases(row) {
     .map(value => String(value).trim().toLowerCase());
 }
 
+function compactAlias(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function findLooseNodeKey(source, nodeMap) {
+  const sourceAliases = hostAliases(source)
+    .map(compactAlias)
+    .filter(alias => alias.length >= 4);
+  if (sourceAliases.length === 0) return null;
+
+  for (const [key, node] of nodeMap.entries()) {
+    const nodeAliases = hostAliases(node)
+      .map(compactAlias)
+      .filter(alias => alias.length >= 4);
+    if (sourceAliases.some(sourceAlias => (
+      nodeAliases.some(nodeAlias => sourceAlias === nodeAlias || sourceAlias.includes(nodeAlias) || nodeAlias.includes(sourceAlias))
+    ))) {
+      return key;
+    }
+  }
+  return null;
+}
+
 function nodeCpu(row) {
   return toNumber(firstValue(row, CPU_KEYS));
 }
@@ -289,24 +313,6 @@ function siteFromRow(row, fallbackSite) {
   );
 }
 
-function deriveContainerRows(dockerRows) {
-  return dockerRows
-    .map(row => {
-      const name = firstValue(row, ['container_name', 'container', 'name', 'service']);
-      const node = hostKey(row);
-      if (!name && !node) return null;
-      return {
-        node: node || 'unknown',
-        name: name || 'container',
-        status: firstValue(row, ['status', 'state', 'health']) || 'unknown',
-        cpu: nodeCpu(row),
-        mem: nodeMem(row),
-        diskUsage: nodeDiskUsage(row)
-      };
-    })
-    .filter(Boolean);
-}
-
 function syslogSeverity(row) {
   const priority = toNumber(firstValue(row, ['priority', 'severity']));
   const level = String(firstValue(row, ['level', 'severity_name', 'facility']) || '').toLowerCase();
@@ -317,7 +323,7 @@ function syslogSeverity(row) {
   return 'info';
 }
 
-function deriveIssues(nodeRows, dockerRows, syslogRows) {
+function deriveIssues(nodeRows, syslogRows) {
   const issues = [];
 
   nodeRows.forEach(row => {
@@ -331,21 +337,6 @@ function deriveIssues(nodeRows, dockerRows, syslogRows) {
     else if (mem !== null && mem >= 80) issues.push({ severity: 'warning', source: nodeName, type: 'Node', message: `Memory ${mem.toFixed(1)} percent` });
     if (diskUsage !== null && diskUsage >= 90) issues.push({ severity: 'critical', source: nodeName, type: 'Node', message: `Disk usage ${diskUsage.toFixed(1)} percent` });
     else if (diskUsage !== null && diskUsage >= 75) issues.push({ severity: 'warning', source: nodeName, type: 'Node', message: `Disk usage ${diskUsage.toFixed(1)} percent` });
-  });
-
-  dockerRows.forEach(row => {
-    const name = firstValue(row, ['container_name', 'container', 'name', 'service']) || 'container';
-    const nodeName = hostKey(row) || 'node';
-    const status = String(firstValue(row, ['status', 'state', 'health']) || '').toLowerCase();
-    const cpu = nodeCpu(row);
-    const mem = nodeMem(row);
-    const diskUsage = nodeDiskUsage(row);
-    if (status && !status.includes('up') && !status.includes('running') && status !== 'healthy') {
-      issues.push({ severity: 'warning', source: `${nodeName}/${name}`, type: 'Container', message: `Container status is ${status}` });
-    }
-    if (cpu !== null && cpu >= 90) issues.push({ severity: 'critical', source: `${nodeName}/${name}`, type: 'Container', message: `CPU ${cpu.toFixed(1)} percent` });
-    if (mem !== null && mem >= 90) issues.push({ severity: 'critical', source: `${nodeName}/${name}`, type: 'Container', message: `Memory ${mem.toFixed(1)} percent` });
-    if (diskUsage !== null && diskUsage >= 90) issues.push({ severity: 'critical', source: `${nodeName}/${name}`, type: 'Container', message: `Disk usage ${diskUsage.toFixed(1)} percent` });
   });
 
   syslogRows.slice(0, 60).forEach(row => {
@@ -365,7 +356,6 @@ function deriveIssues(nodeRows, dockerRows, syslogRows) {
 function deriveSites(raw) {
   const nodeMap = new Map();
   const aliasMap = new Map();
-  const containers = deriveContainerRows(raw.dockerRows || []);
   const companyList = raw.activeCompanyFilter
     ? [raw.activeCompanyFilter]
     : (raw.networkCompanies || []);
@@ -379,7 +369,7 @@ function deriveSites(raw) {
   const findNodeKey = source => {
     const key = hostKey(source);
     if (key && nodeMap.has(key)) return key;
-    return hostAliases(source).map(alias => aliasMap.get(alias)).find(Boolean);
+    return hostAliases(source).map(alias => aliasMap.get(alias)).find(Boolean) || findLooseNodeKey(source, nodeMap);
   };
 
   const addNode = (source, roleFallback) => {
@@ -403,7 +393,7 @@ function deriveSites(raw) {
       operationalTime: uptime || existing.operationalTime || '',
       tables: existing.tables ?? 0,
       inserts: existing.inserts ?? null,
-      containers: existing.containers ?? 0,
+      metricSource: cpu !== null || mem !== null || diskUsage !== null || uptime ? NODE_METRICS_QUERY : existing.metricSource || '',
       metrics: {
         ...(existing.metrics || {}),
         ...rowMetrics(source),
@@ -430,6 +420,7 @@ function deriveSites(raw) {
       mem: mem ?? existing.mem,
       diskUsage: diskUsage ?? existing.diskUsage,
       operationalTime: uptime || existing.operationalTime,
+      metricSource: cpu !== null || mem !== null || diskUsage !== null || uptime ? NODE_METRICS_QUERY : existing.metricSource,
       metrics: {
         ...(existing.metrics || {}),
         ...rowMetrics(source),
@@ -449,25 +440,10 @@ function deriveSites(raw) {
   if (metadataDefinedTopology) {
     (raw.monitorRows || []).forEach(enrichNode);
     (raw.nodeRows || []).forEach(enrichNode);
-    (raw.dockerRows || []).forEach(enrichNode);
   } else {
     (raw.monitorRows || []).forEach(row => addNode(row));
     (raw.nodeRows || []).forEach(row => addNode(row));
-    (raw.dockerRows || []).forEach(row => addNode(row));
   }
-
-  containers.forEach(container => {
-    const containerNodeKey = nodeMap.has(container.node)
-      ? container.node
-      : aliasMap.get(String(container.node || '').toLowerCase()) || aliasMap.get(String(embeddedIpPort(container.node) || '').toLowerCase());
-    const node = containerNodeKey ? nodeMap.get(containerNodeKey) : null;
-    if (node) {
-      node.containers += 1;
-      if (container.cpu !== null) node.cpu = node.cpu === null ? container.cpu : Math.max(node.cpu, container.cpu);
-      if (container.mem !== null) node.mem = node.mem === null ? container.mem : Math.max(node.mem, container.mem);
-      if (container.diskUsage !== null) node.diskUsage = node.diskUsage === null ? container.diskUsage : Math.max(node.diskUsage, container.diskUsage);
-    }
-  });
 
   const catalogByNode = new Map();
   (raw.catalog || []).forEach(table => {
@@ -534,9 +510,8 @@ function getSectionQueries(apiLog, section) {
   const patterns = {
     map: ['metadata operators', 'metadata masters', 'network databases', 'monitored operators'],
     catalog: ['virtual tables', 'network tables', 'tables ', 'count '],
-    kpis: ['metadata operators', 'metadata masters', 'network databases', 'monitored operators', 'docker insight', 'syslog', 'virtual tables', 'network tables', 'count '],
-    issues: ['monitored operators', 'docker insight', 'syslog'],
-    docker: ['docker insight'],
+    kpis: ['metadata operators', 'metadata masters', 'network databases', 'monitored operators', 'syslog', 'virtual tables', 'network tables', 'count '],
+    issues: ['monitored operators', 'syslog'],
     resources: ['monitored operators'],
     tables: ['monitored operators']
   }[section] || [];
@@ -771,7 +746,6 @@ function EdgeDataFabricTopologyPage({ node }) {
     networkDatabases: [],
     scopedNetworkDatabases: [],
     activeCompanyFilter: '',
-    containers: [],
     issues: [],
     apiLog: []
   });
@@ -780,7 +754,6 @@ function EdgeDataFabricTopologyPage({ node }) {
     catalog: false,
     kpis: true,
     issues: false,
-    docker: true,
     resources: true,
     tables: true
   });
@@ -794,7 +767,6 @@ function EdgeDataFabricTopologyPage({ node }) {
   const networkDatabases = topology.scopedNetworkDatabases?.length > 0
     ? topology.scopedNetworkDatabases
     : topology.networkDatabases;
-  const containers = topology.containers;
   const issues = topology.issues;
   const apiLog = topology.apiLog;
   const pollSeconds = useMemo(() => (
@@ -827,16 +799,13 @@ function EdgeDataFabricTopologyPage({ node }) {
 
   const allNodes = useMemo(() => sites.flatMap(site => site.nodes.map(item => ({ ...item, site: site.name }))), [sites]);
   const kpis = useMemo(() => {
-    const unhealthyContainers = containers.filter(item => !String(item.status).toLowerCase().includes('running')).length;
     return {
       sites: sites.length,
       nodes: allNodes.length,
-      containers: containers.length,
       warnings: issues.filter(item => item.severity === 'warning').length,
-      critical: issues.filter(item => item.severity === 'critical').length,
-      unhealthyContainers
+      critical: issues.filter(item => item.severity === 'critical').length
     };
-  }, [allNodes.length, containers, issues, sites.length]);
+  }, [allNodes.length, issues, sites.length]);
 
   const activeSelectedNode = useMemo(() => {
     if (!selectedNode) return null;
@@ -953,8 +922,7 @@ function EdgeDataFabricTopologyPage({ node }) {
       });
       if (requestId !== refreshSequence.current) return;
       const nextSites = deriveSites(raw);
-      const nextContainers = deriveContainerRows(raw.dockerRows || []);
-      const nextIssues = deriveIssues([...(raw.monitorRows || []), ...(raw.nodeRows || [])], raw.dockerRows || [], raw.syslogRows || []);
+      const nextIssues = deriveIssues([...(raw.monitorRows || []), ...(raw.nodeRows || [])], raw.syslogRows || []);
       let displaySites = nextSites;
       setTopology(prev => {
         const keepLastFilteredMap = companyFilter && (
@@ -968,7 +936,6 @@ function EdgeDataFabricTopologyPage({ node }) {
           networkDatabases: raw.networkDatabases || [],
           scopedNetworkDatabases: raw.scopedNetworkDatabases || [],
           activeCompanyFilter: raw.activeCompanyFilter || '',
-          containers: nextContainers,
           issues: nextIssues,
           apiLog: raw.apiLog || []
         };
@@ -1030,7 +997,6 @@ function EdgeDataFabricTopologyPage({ node }) {
       catalog: 'Network Databases and Tables',
       kpis: 'Summary KPIs',
       issues: 'Availability Issues',
-      docker: 'Docker Containers',
       resources: 'Node Resource Usage',
       tables: 'Node Insights'
     };
@@ -1153,6 +1119,23 @@ function EdgeDataFabricTopologyPage({ node }) {
   const addSelectedNodeMetric = value => {
     if (!value) return;
     setSelectedNodeMetrics(prev => prev.includes(value) ? prev : [...prev, value]);
+  };
+
+  const removeSelectedNodeMetric = value => {
+    setSelectedNodeMetrics(prev => prev.filter(metric => metric !== value));
+  };
+
+  const openNodeMetricQuery = () => {
+    if (!activeSelectedNode) return;
+    setQueryDialog({
+      title: `${activeSelectedNode.name} Metrics`,
+      queries: [{
+        kind: 'GET',
+        rows: 'all',
+        duration: '',
+        command: activeSelectedNode.metricSource || NODE_METRICS_QUERY
+      }]
+    });
   };
 
   const updatePollPreset = value => {
@@ -1372,7 +1355,6 @@ function EdgeDataFabricTopologyPage({ node }) {
           <div className="edf-kpi-grid">
             <article><span>Sites</span><strong>{kpis.sites}</strong><small>active locations</small></article>
             <article><span>Nodes</span><strong>{kpis.nodes}</strong><small>fabric members</small></article>
-            <article><span>Containers</span><strong>{kpis.containers}</strong><small>{kpis.unhealthyContainers} require attention</small></article>
             <article><span>Warnings</span><strong>{kpis.warnings}</strong><small>non-critical alerts</small></article>
             <article className="danger"><span>Critical</span><strong>{kpis.critical}</strong><small>immediate review</small></article>
           </div>
@@ -1406,33 +1388,17 @@ function EdgeDataFabricTopologyPage({ node }) {
           </div>
         </Panel>
 
-        <div className="edf-two-col">
-          <Panel id="docker" title="Docker Containers" tag={`${containers.length} recent`} collapsed={collapsed.docker} onToggle={() => togglePanel('docker')} querySection="docker" apiLog={apiLog} onOpenQueries={openQueries}>
-            <div className="edf-container-grid">
-              {containers.length === 0 && <div className="edf-empty">No docker_insight rows returned for the selected window.</div>}
-              {containers.map(container => (
-                <article className={container.status === 'running' ? '' : 'warn'} key={`${container.node}-${container.name}`}>
-                  <strong>{container.name}</strong>
-                  <span>{container.node}</span>
-                  <div><small>CPU {formatMetricValue(container.cpu)}</small><MetricBar value={container.cpu} /></div>
-                  <div><small>Disk {formatMetricValue(container.diskUsage)}</small><MetricBar value={container.diskUsage} /></div>
-                </article>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel id="resources" title="Node Resource Usage" tag={`${allNodes.length} nodes`} collapsed={collapsed.resources} onToggle={() => togglePanel('resources')} querySection="resources" apiLog={apiLog} onOpenQueries={openQueries}>
-            <div className="edf-resource-list">
-              {allNodes.map(item => (
-                <div className="edf-resource-row" key={item.id}>
-                  <span>{item.name}</span>
-                  <MetricBar value={item.diskUsage} />
-                  <b>{formatMetricValue(item.diskUsage)}</b>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
+        <Panel id="resources" title="Node Resource Usage" tag={`${allNodes.length} nodes`} collapsed={collapsed.resources} onToggle={() => togglePanel('resources')} querySection="resources" apiLog={apiLog} onOpenQueries={openQueries}>
+          <div className="edf-resource-list">
+            {allNodes.map(item => (
+              <div className="edf-resource-row" key={item.id}>
+                <span>{item.name}</span>
+                <MetricBar value={item.diskUsage} />
+                <b>{formatMetricValue(item.diskUsage)}</b>
+              </div>
+            ))}
+          </div>
+        </Panel>
 
         <Panel id="tables" title="Node Insights" tag={`${allNodes.length} rows`} collapsed={collapsed.tables} onToggle={() => togglePanel('tables')} querySection="tables" apiLog={apiLog} onOpenQueries={openQueries}>
           <div className="edf-table-wrap">
@@ -1504,7 +1470,10 @@ function EdgeDataFabricTopologyPage({ node }) {
                 <p>{activeSelectedNode.site} / {activeSelectedNode.region}</p>
                 <h2 id="edf-node-detail-title">{activeSelectedNode.name}</h2>
               </div>
-              <button type="button" onClick={() => setSelectedNode(null)} aria-label="Close">x</button>
+              <div className="edf-modal-header-actions">
+                <button type="button" className="edf-query-button" onClick={openNodeMetricQuery}>Query</button>
+                <button type="button" onClick={() => setSelectedNode(null)} aria-label="Close">x</button>
+              </div>
             </header>
             <div className="edf-modal-metrics">
               <article
@@ -1525,8 +1494,11 @@ function EdgeDataFabricTopologyPage({ node }) {
               <article><span>Inserts</span><strong>{formatNumber(activeSelectedNode.inserts)}</strong></article>
               <article><span>Operational Time</span><strong>{activeSelectedNode.operationalTime || 'N/A'}</strong></article>
               {selectedNodeMetrics.map(label => (
-                <article key={label}>
-                  <span>{label}</span>
+                <article className="edf-removable-metric" key={label}>
+                  <div>
+                    <span>{label}</span>
+                    <button type="button" onClick={() => removeSelectedNodeMetric(label)} aria-label={`Remove ${label}`}>x</button>
+                  </div>
                   <strong>{formatScalarValue(activeSelectedNode.metrics?.[label])}</strong>
                 </article>
               ))}
@@ -1542,16 +1514,7 @@ function EdgeDataFabricTopologyPage({ node }) {
                 </label>
               )}
             </div>
-            <div className="edf-modal-grid">
-              <div>
-                <h3>Docker insight</h3>
-                {containers.filter(container => container.node === activeSelectedNode.name || container.node === activeSelectedNode.id).map(container => (
-                  <article className="edf-modal-item" key={container.name}>
-                    <strong>{container.name}</strong>
-                    <span>{container.status} / CPU {formatMetricValue(container.cpu)} / Disk {formatMetricValue(container.diskUsage)}</span>
-                  </article>
-                ))}
-              </div>
+            <div className="edf-modal-grid single">
               <div>
                 <h3>Recommended actions</h3>
                 <article className="edf-modal-item">
