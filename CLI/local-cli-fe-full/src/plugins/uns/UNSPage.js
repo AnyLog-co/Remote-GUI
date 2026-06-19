@@ -3,10 +3,16 @@ import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
 import { getRoot, getChildren, checkChildren, queryTable, checkTable } from './uns_api';
 
+const ROOT_QUERY_UNS_DATA = 'blockchain get root policies exclude cluster';
+const ROOT_QUERY_UNS_CLUSTERS = 'blockchain get root policies include cluster';
+const UNS_NAVIGATION_STORAGE_KEY = 'uns-navigation-state';
+
+const isRootGroupItem = (item) => item?.__unsRootGroup === true;
+
 const UNSPage = ({ node }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentPath, setCurrentPath] = useState([]); // Array of {id, name, data}
+  const [currentPath, setCurrentPath] = useState([]); // Array of {id, key, name, data}
   const [layers, setLayers] = useState([]); // Array of arrays, each array is a layer of items
   const [expandedItems, setExpandedItems] = useState(new Set()); // Track which items are expanded
   const [itemsWithChildren, setItemsWithChildren] = useState(new Set()); // Cache which items have children
@@ -16,7 +22,9 @@ const UNSPage = ({ node }) => {
   const [hoverTimeout, setHoverTimeout] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null); // Selected item for side panel
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false); // Side panel visibility
-  const [rootQuery, setRootQuery] = useState('blockchain get root policies'); // Configurable root query
+  const [rootQuery, setRootQuery] = useState(ROOT_QUERY_UNS_DATA); // Configurable root query
+  const [executedRootQuery, setExecutedRootQuery] = useState(ROOT_QUERY_UNS_DATA);
+  const [showingClusters, setShowingClusters] = useState(false);
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
   const [timeColumn, setTimeColumn] = useState('insert_timestamp'); // Time column: insert_timestamp or timestamp
@@ -30,11 +38,14 @@ const UNSPage = ({ node }) => {
   const checkTimeoutsRef = useRef([]); // Track all pending timeout IDs for cleanup
   const [checkingChildren, setCheckingChildren] = useState(new Set()); // Track items currently being checked for children
   const childrenCheckTimeoutsRef = useRef([]); // Track all pending timeout IDs for children checks
+  const autoExpandedItemsRef = useRef(new Set());
 
   // Load root items on mount or when node changes
   useEffect(() => {
     if (node) {
-      loadRootItems();
+      if (!restoreNavigationState(node)) {
+        loadRootItems();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node]); // Only reload when node changes, not when rootQuery changes
@@ -47,6 +58,37 @@ const UNSPage = ({ node }) => {
       }
     };
   }, [hoverTimeout]);
+
+  useEffect(() => {
+    const handleStorageCleared = () => {
+      clearCachedNavigationState();
+      setCurrentPath([]);
+      setLayers([]);
+      setExpandedItems(new Set());
+      setItemsWithChildren(new Set());
+      setItemsWithoutChildren(new Set());
+      setSelectedItem(null);
+      setIsSidePanelOpen(false);
+      setRootQuery(ROOT_QUERY_UNS_DATA);
+      setExecutedRootQuery(ROOT_QUERY_UNS_DATA);
+      setShowingClusters(false);
+      autoExpandedItemsRef.current = new Set();
+    };
+
+    window.addEventListener('uns-storage-cleared', handleStorageCleared);
+    return () => {
+      window.removeEventListener('uns-storage-cleared', handleStorageCleared);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!node || layers.length === 0) {
+      return;
+    }
+
+    cacheNavigationState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node, executedRootQuery, showingClusters, layers, currentPath, expandedItems, itemsWithChildren, itemsWithoutChildren]);
 
   // Background check for table data when layers change
   useEffect(() => {
@@ -74,6 +116,10 @@ const UNSPage = ({ node }) => {
     // Build set of cache keys for items in current layer
     const currentLayerCacheKeys = new Set();
     for (const item of currentLayer) {
+      if (isRootGroupItem(item)) {
+        continue;
+      }
+
       const itemData = getItemData(item);
       if (itemData && itemData.dbms && itemData.table) {
         const cacheKey = `${itemData.dbms}:${itemData.table}`;
@@ -95,6 +141,10 @@ const UNSPage = ({ node }) => {
     // Find items with dbms and table that haven't been checked yet
     const itemsToCheck = [];
     for (const item of currentLayer) {
+      if (isRootGroupItem(item)) {
+        continue;
+      }
+
       const itemData = getItemData(item);
       if (itemData && itemData.dbms && itemData.table) {
         const cacheKey = `${itemData.dbms}:${itemData.table}`;
@@ -169,12 +219,12 @@ const UNSPage = ({ node }) => {
       return;
     }
 
-    // Build set of item IDs in current layer
-    const currentLayerItemIds = new Set();
+    // Build set of item keys in current layer
+    const currentLayerItemKeys = new Set();
     for (const item of currentLayer) {
-      const itemId = getItemId(item);
-      if (itemId) {
-        currentLayerItemIds.add(itemId);
+      const itemKey = getItemKey(item);
+      if (itemKey) {
+        currentLayerItemKeys.add(`${layers.length - 1}-${itemKey}`);
       }
     }
 
@@ -182,7 +232,7 @@ const UNSPage = ({ node }) => {
     setCheckingChildren((prev) => {
       const newSet = new Set();
       for (const itemId of prev) {
-        if (currentLayerItemIds.has(itemId)) {
+        if (currentLayerItemKeys.has(itemId)) {
           newSet.add(itemId);
         }
       }
@@ -192,14 +242,18 @@ const UNSPage = ({ node }) => {
     // Find items that haven't been checked for children yet
     const itemsToCheck = [];
     for (const item of currentLayer) {
+      if (isRootGroupItem(item)) {
+        continue;
+      }
+
       const itemId = getItemId(item);
       if (itemId) {
-        const itemKey = `${layers.length - 1}-${itemId}`;
+        const itemKey = `${layers.length - 1}-${getItemKey(item)}`;
         // Only check if not already cached and not currently checking
         if (
           !itemsWithChildren.has(itemKey) &&
           !itemsWithoutChildren.has(itemKey) &&
-          !checkingChildren.has(itemId)
+          !checkingChildren.has(itemKey)
         ) {
           itemsToCheck.push({ itemId, itemKey });
         }
@@ -244,22 +298,26 @@ const UNSPage = ({ node }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layers, node]); // Re-check when layers or node changes
 
-  const loadRootItems = async () => {
+  const loadRootItems = async (queryOverride) => {
     if (!node) {
       setError('No node selected. Please select a node first.');
       return;
     }
 
-    if (!rootQuery.trim()) {
+    const queryToRun = queryOverride ?? rootQuery;
+
+    if (!queryToRun.trim()) {
       setError('Root query cannot be empty.');
       return;
     }
 
+    clearCachedNavigationState();
+    autoExpandedItemsRef.current = new Set();
     setLoading(true);
     setError(null);
 
     try {
-      const result = await getRoot(node, rootQuery);
+      const result = await getRoot(node, queryToRun);
 
       if (result.success && result.data) {
         // Log the structure for debugging
@@ -268,10 +326,11 @@ const UNSPage = ({ node }) => {
           console.log('UNS: First item structure:', result.data[0]);
         }
 
-        // Initialize with root layer
-        setLayers([result.data]);
+        // Initialize with one root item per unique policy key returned.
+        setLayers([groupRootItems(result.data)]);
         setCurrentPath([]);
         setExpandedItems(new Set());
+        setExecutedRootQuery(queryToRun);
       } else {
         setError('Failed to load root items');
       }
@@ -283,8 +342,124 @@ const UNSPage = ({ node }) => {
     }
   };
 
+  const handleToggleRootQuery = () => {
+    const nextShowingClusters = !isClusterPath;
+    const nextRootQuery = isClusterPath
+      ? ROOT_QUERY_UNS_DATA
+      : ROOT_QUERY_UNS_CLUSTERS;
+
+    setShowingClusters(nextShowingClusters);
+    setRootQuery(nextRootQuery);
+    loadRootItems(nextRootQuery);
+  };
+
+  const isPathItemCluster = (pathItem) => {
+    const values = [
+      pathItem?.id,
+      pathItem?.key,
+      pathItem?.name,
+      pathItem?.data?.key,
+    ];
+
+    return values.some((value) => {
+      const normalized = String(value || '').toLowerCase();
+      return normalized === 'cluster' || normalized === 'root:cluster' || normalized.startsWith('cluster:');
+    });
+  };
+
+  const isClusterPath = currentPath.some(isPathItemCluster);
+
+  const clearCachedNavigationState = () => {
+    try {
+      window.localStorage.removeItem(UNS_NAVIGATION_STORAGE_KEY);
+    } catch {
+      // Ignore storage failures; navigation should still work in memory.
+    }
+  };
+
+  const cacheNavigationState = () => {
+    try {
+      window.localStorage.setItem(
+        UNS_NAVIGATION_STORAGE_KEY,
+        JSON.stringify({
+          node,
+          rootQuery: executedRootQuery,
+          showingClusters,
+          layers,
+          currentPath,
+          expandedItems: Array.from(expandedItems),
+          itemsWithChildren: Array.from(itemsWithChildren),
+          itemsWithoutChildren: Array.from(itemsWithoutChildren),
+        }),
+      );
+    } catch {
+      // Ignore storage failures; navigation should still work in memory.
+    }
+  };
+
+  const restoreNavigationState = (currentNode) => {
+    try {
+      const raw = window.localStorage.getItem(UNS_NAVIGATION_STORAGE_KEY);
+      if (!raw) {
+        return false;
+      }
+
+      const saved = JSON.parse(raw);
+      if (!saved || saved.node !== currentNode || !Array.isArray(saved.layers)) {
+        clearCachedNavigationState();
+        return false;
+      }
+
+      const savedRootQuery = saved.rootQuery || ROOT_QUERY_UNS_DATA;
+      setRootQuery(savedRootQuery);
+      setExecutedRootQuery(savedRootQuery);
+      setShowingClusters(Boolean(saved.showingClusters));
+      setLayers(saved.layers);
+      setCurrentPath(Array.isArray(saved.currentPath) ? saved.currentPath : []);
+      setExpandedItems(new Set(Array.isArray(saved.expandedItems) ? saved.expandedItems : []));
+      setItemsWithChildren(new Set(Array.isArray(saved.itemsWithChildren) ? saved.itemsWithChildren : []));
+      setItemsWithoutChildren(new Set(Array.isArray(saved.itemsWithoutChildren) ? saved.itemsWithoutChildren : []));
+      autoExpandedItemsRef.current = new Set(Array.isArray(saved.expandedItems) ? saved.expandedItems : []);
+      return true;
+    } catch {
+      clearCachedNavigationState();
+      return false;
+    }
+  };
+
+  const groupRootItems = (items) => {
+    if (!Array.isArray(items)) {
+      return [];
+    }
+
+    const groups = new Map();
+
+    for (const item of items) {
+      const itemType = getItemType(item);
+      if (itemType === 'unknown') {
+        continue;
+      }
+
+      if (!groups.has(itemType)) {
+        groups.set(itemType, {
+          __unsRootGroup: true,
+          key: itemType,
+          items: [],
+        });
+      }
+
+      groups.get(itemType).items.push(item);
+    }
+
+    return Array.from(groups.values());
+  };
+
   const getItemId = (item) => {
     if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    if (isRootGroupItem(item)) {
       return null;
     }
 
@@ -312,6 +487,10 @@ const UNSPage = ({ node }) => {
   const getItemName = (item) => {
     if (!item || typeof item !== 'object') {
       return String(item || 'Unknown');
+    }
+
+    if (isRootGroupItem(item)) {
+      return item.key;
     }
 
     // Handle structure: {key: {data}} - this is the main structure
@@ -391,6 +570,10 @@ const UNSPage = ({ node }) => {
       return 'unknown';
     }
 
+    if (isRootGroupItem(item)) {
+      return item.key;
+    }
+
     // Handle structure: {key: {data}} - use the key as the type
     const keys = Object.keys(item);
     if (
@@ -414,6 +597,13 @@ const UNSPage = ({ node }) => {
       return item;
     }
 
+    if (isRootGroupItem(item)) {
+      return {
+        key: item.key,
+        count: item.items.length,
+      };
+    }
+
     // Handle structure: {key: {data}} - return the nested data object
     const keys = Object.keys(item);
     if (
@@ -430,6 +620,20 @@ const UNSPage = ({ node }) => {
     if (item.sensor) return item.sensor;
 
     return item;
+  };
+
+  const getItemKey = (item) => {
+    if (isRootGroupItem(item)) {
+      return `root:${item.key}`;
+    }
+
+    const itemType = getItemType(item);
+    const itemId = getItemId(item);
+    if (itemId) {
+      return `${itemType}:${itemId}`;
+    }
+
+    return `${itemType}:${getItemName(item)}`;
   };
 
   const hasChildren = async (itemId) => {
@@ -453,12 +657,12 @@ const UNSPage = ({ node }) => {
     }
 
     // If currently checking, return null (don't check again)
-    if (checkingChildren.has(itemId)) {
+    if (checkingChildren.has(itemKey)) {
       return null;
     }
 
     // Mark as checking
-    setCheckingChildren((prev) => new Set(prev).add(itemId));
+    setCheckingChildren((prev) => new Set(prev).add(itemKey));
 
     try {
       const result = await checkChildren(node, itemId);
@@ -486,20 +690,52 @@ const UNSPage = ({ node }) => {
       // Remove from checking set
       setCheckingChildren((prev) => {
         const newSet = new Set(prev);
-        newSet.delete(itemId);
+        newSet.delete(itemKey);
         return newSet;
       });
     }
   };
 
   const expandItem = async (item, layerIndex) => {
+    if (isRootGroupItem(item)) {
+      const itemIdentity = getItemKey(item);
+      const expandedKey = `${layerIndex}-${itemIdentity}`;
+
+      if (expandedItems.has(expandedKey)) {
+        const newExpanded = new Set(expandedItems);
+        newExpanded.delete(expandedKey);
+        setExpandedItems(newExpanded);
+        setLayers(layers.slice(0, layerIndex + 1));
+        setCurrentPath(currentPath.slice(0, layerIndex));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      const itemKey = `${layerIndex}-${itemIdentity}`;
+      setItemsWithChildren((prev) => new Set(prev).add(itemKey));
+      setExpandedItems((prev) => new Set(prev).add(expandedKey));
+      setLayers([...layers.slice(0, layerIndex + 1), item.items]);
+      setCurrentPath([
+        ...currentPath.slice(0, layerIndex),
+        {
+          id: item.key,
+          key: itemIdentity,
+          name: item.key,
+          data: getItemData(item),
+        },
+      ]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     const itemId = getItemId(item);
     if (!itemId) {
       console.log('UNS: Cannot expand item - no ID found:', item);
       return;
     }
 
-    const expandedKey = `${layerIndex}-${itemId}`;
+    const itemIdentity = getItemKey(item);
+    const expandedKey = `${layerIndex}-${itemIdentity}`;
 
     // If already expanded, collapse it
     if (expandedItems.has(expandedKey)) {
@@ -542,7 +778,7 @@ const UNSPage = ({ node }) => {
         const children = result.data;
 
         // Cache whether this item has children
-        const itemKey = `${layerIndex}-${itemId}`;
+        const itemKey = `${layerIndex}-${itemIdentity}`;
         if (children && children.length > 0) {
           console.log(`UNS: Item ${itemId} has ${children.length} children`);
           const newHasChildren = new Set(itemsWithChildren);
@@ -563,6 +799,7 @@ const UNSPage = ({ node }) => {
             ...currentPath.slice(0, layerIndex),
             {
               id: itemId,
+              key: itemIdentity,
               name: getItemName(item),
               data: getItemData(item),
             },
@@ -605,7 +842,7 @@ const UNSPage = ({ node }) => {
     for (let i = 0; i < targetLayerIndex; i++) {
       if (i < currentPath.length) {
         const pathItem = currentPath[i];
-        const key = `${i}-${pathItem.id}`;
+        const key = `${i}-${pathItem.key || pathItem.id}`;
         newExpanded.add(key);
         newHasChildren.add(key);
       }
@@ -762,9 +999,8 @@ const UNSPage = ({ node }) => {
   };
 
   const toggleSidePanel = (item) => {
-    const itemId = getItemId(item);
     const isCurrentlySelected =
-      selectedItem && getItemId(selectedItem) === itemId;
+      selectedItem && getItemKey(selectedItem) === getItemKey(item);
 
     // If clicking on the already selected item and panel is open, close it
     if (isCurrentlySelected && isSidePanelOpen) {
@@ -801,17 +1037,18 @@ const UNSPage = ({ node }) => {
     const itemName = getItemName(item);
     const itemType = getItemType(item);
     const itemData = getItemData(item);
-    const expandedKey = `${layerIndex}-${itemId}`;
-    const itemKey = `${layerIndex}-${itemId}`;
+    const itemIdentity = getItemKey(item);
+    const expandedKey = `${layerIndex}-${itemIdentity}`;
+    const itemKey = `${layerIndex}-${itemIdentity}`;
     const isExpanded = expandedItems.has(expandedKey);
 
     // Check if this item has children
     // If we've already checked and it has no children, it's a leaf
-    const hasNoChildren = itemsWithoutChildren.has(itemKey);
+    const hasNoChildren = !isRootGroupItem(item) && itemsWithoutChildren.has(itemKey);
     // If we've already checked and it has children, or if it's expanded (meaning we loaded children), it has children
-    const hasChildren = itemsWithChildren.has(itemKey) || isExpanded;
+    const hasChildren = isRootGroupItem(item) || itemsWithChildren.has(itemKey) || isExpanded;
     // Check if currently checking for children
-    const isCheckingChildren = checkingChildren.has(itemId);
+    const isCheckingChildren = checkingChildren.has(itemKey);
 
     // Check if item has table data (for visual indicator)
     const hasTable = itemData && itemData.dbms && itemData.table;
@@ -863,7 +1100,7 @@ const UNSPage = ({ node }) => {
       toggleSidePanel(item);
     };
 
-    const isSelected = selectedItem && getItemId(selectedItem) === itemId;
+    const isSelected = selectedItem && getItemKey(selectedItem) === itemIdentity;
 
     // Add table indicator class only if the table schema is available.
     // Don't add any class if hasData is false or null (no table or not checked)
@@ -934,8 +1171,38 @@ const UNSPage = ({ node }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  useEffect(() => {
+    if (loading || layers.length === 0) {
+      return;
+    }
+
+    const currentLayerIndex = layers.length - 1;
+    const currentLayer = layers[currentLayerIndex];
+    if (!currentLayer || currentLayer.length !== 1) {
+      return;
+    }
+
+    const item = currentLayer[0];
+    const itemKey = `${currentLayerIndex}-${getItemKey(item)}`;
+    if (
+      autoExpandedItemsRef.current.has(itemKey) ||
+      expandedItems.has(itemKey) ||
+      itemsWithoutChildren.has(itemKey)
+    ) {
+      return;
+    }
+
+    if (!isRootGroupItem(item) && !getItemId(item)) {
+      return;
+    }
+
+    autoExpandedItemsRef.current.add(itemKey);
+    expandItem(item, currentLayerIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, layers, expandedItems, itemsWithoutChildren]);
+
   const renderBreadcrumb = () => {
-    if (currentPath.length === 0) return null;
+    if (layers.length === 0) return null;
 
     return (
       <div className="uns-breadcrumb">
@@ -995,17 +1262,26 @@ const UNSPage = ({ node }) => {
                   loadRootItems();
                 }
               }}
-              placeholder="blockchain get *"
+              placeholder={ROOT_QUERY_UNS_DATA}
               className="uns-query-input"
               disabled={loading}
             />
+            <button
+              type="button"
+              onClick={() => loadRootItems()}
+              disabled={loading || !node || !rootQuery.trim()}
+              className="uns-execute-btn"
+            >
+              Execute
+            </button>
           </div>
           <button
-            onClick={loadRootItems}
-            disabled={loading || !node || !rootQuery.trim()}
-            className="uns-refresh-btn"
+            type="button"
+            onClick={handleToggleRootQuery}
+            disabled={loading || !node}
+            className="uns-refresh-btn uns-cluster-toggle-btn"
           >
-            🔄 Refresh
+            {isClusterPath ? 'UNS Data' : 'UNS Cluster'}
           </button>
         </div>
       </div>

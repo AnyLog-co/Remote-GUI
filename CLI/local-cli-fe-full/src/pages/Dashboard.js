@@ -247,8 +247,10 @@ const Dashboard = () => {
       'mcpclient_chats_v2',
       'mcpclient_active_chat_id',
       'client-command-draft',
+      'uns-navigation-state',
     ].forEach((key) => localStorage.removeItem(key));
     window.dispatchEvent(new Event('mcpclient-storage-cleared'));
+    window.dispatchEvent(new Event('uns-storage-cleared'));
     setNodes([]);
     setSelectedNode(null);
     console.log('Cleared all stored dashboard data');
