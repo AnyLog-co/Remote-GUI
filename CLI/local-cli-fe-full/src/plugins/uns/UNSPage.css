@@ -64,6 +64,27 @@
   cursor: not-allowed;
 }
 
+.uns-execute-btn {
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.uns-execute-btn:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.uns-execute-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 .uns-main-content {
   flex: 1;
   display: flex;
@@ -1188,5 +1209,4 @@
   font-size: 11px;
   color: #6c757d;
 }
-
 

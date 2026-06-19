@@ -21,7 +21,7 @@ class BlockchainQueryRequest(BaseModel):
 
 class GetRootRequest(BaseModel):
     conn: str
-    query: Optional[str] = "blockchain get root policies"  # Default to blockchain get * if not provided
+    query: Optional[str] = "blockchain get root policies exclude cluster"
 
 class QueryTableRequest(BaseModel):
     conn: str
@@ -71,7 +71,7 @@ async def uns_info():
 async def get_root(request: GetRootRequest):
     """Get root items using configurable query"""
     try:
-        command = request.query or "blockchain get *"
+        command = request.query or "blockchain get root policies exclude cluster"
         print(f"UNS: Executing command: {command}")
         print(f"UNS: Connection: {request.conn}")
         print(f"UNS: Query: {request.query}")
