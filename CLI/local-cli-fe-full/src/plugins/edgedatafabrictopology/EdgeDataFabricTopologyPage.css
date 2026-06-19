@@ -54,6 +54,14 @@
   font-weight: 600;
 }
 
+.edf-field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+  flex-wrap: wrap;
+}
+
 .edf-field-small {
   min-width: 86px;
 }
@@ -820,9 +828,40 @@
 }
 
 .edf-modal-shell header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin: 0;
   color: #333;
   font-size: 22px;
+}
+
+.edf-monitoring-flag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid #f1c40f;
+  border-radius: 6px;
+  background: #fff8db;
+  color: #7a5b00;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.edf-monitoring-flag-compact {
+  min-height: 18px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.edf-monitoring-flag-error {
+  border-color: #dc3545;
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .edf-modal-shell header button {
@@ -849,9 +888,14 @@
   font-size: 13px;
 }
 
+.edf-modal-shell header .edf-query-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .edf-modal-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid #dee2e6;
@@ -863,6 +907,21 @@
   border: 1px solid #dee2e6;
   border-radius: 6px;
   background: #ffffff;
+}
+
+.edf-node-metric-card {
+  cursor: grab;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.edf-node-metric-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.12);
+}
+
+.edf-node-metric-card.is-dragging {
+  opacity: 0.62;
+  transform: scale(0.99);
 }
 
 .edf-removable-metric > div {
@@ -892,6 +951,8 @@
 .edf-modal-metric-picker {
   display: grid;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   padding: 10px 12px;
   border: 1px dashed #ced4da;
   border-radius: 6px;
@@ -899,6 +960,9 @@
 }
 
 .edf-modal-metric-picker select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: 34px;
   padding: 7px 9px;
   border: 1px solid #ced4da;

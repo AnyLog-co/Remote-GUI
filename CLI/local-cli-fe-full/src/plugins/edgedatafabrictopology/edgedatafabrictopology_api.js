@@ -5,6 +5,7 @@ const TABLES = {
   syslog: 'syslog'
 };
 const NODE_METRICS_QUERY = 'get monitored operators';
+const MONITORING_STATUS_QUERY = 'get monitored';
 
 function asArray(value) {
   if (!value) return [];
@@ -27,6 +28,7 @@ function rowsFromText(value) {
   if (typeof value !== 'string') return [];
   const text = value.trim();
   if (!text) return [];
+  if (isErrorValue(text)) return [];
   const matches = [...text.matchAll(/([A-Za-z0-9_.:@/-]+@)?((?:\d{1,3}\.){3}\d{1,3}:\d{2,5})/g)];
   if (matches.length > 0) {
     return matches.map((match, index) => {
@@ -108,6 +110,46 @@ function extractStatistics(payload) {
   return candidates.find(Array.isArray) || [];
 }
 
+function returnedDataLists(payload) {
+  const parsed = maybeJson(payload);
+  const lists = [];
+  const visit = (value, key = '') => {
+    const parsedValue = maybeJson(value);
+    if (Array.isArray(parsedValue)) {
+      if (!/statistics?/i.test(key)) lists.push(parsedValue);
+      return;
+    }
+    if (!parsedValue || typeof parsedValue !== 'object') return;
+    Object.entries(parsedValue).forEach(([childKey, childValue]) => visit(childValue, childKey));
+  };
+
+  visit(parsed);
+  return lists;
+}
+
+function responseText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function isNetworkConnectionError(value) {
+  const text = responseText(value).toLowerCase();
+  return (
+    text.includes('failed to execute get for "get monitored"') ||
+    text.includes("failed to execute get for 'get monitored'") ||
+    (text.includes('get monitored') && text.includes('failed to execute get')) ||
+    text.includes('httpconnectionpool') ||
+    text.includes('max retries exceeded') ||
+    text.includes('connection refused') ||
+    text.includes('failed to establish a new connection')
+  );
+}
+
 async function runAnyLog(connectInfo, command, method = 'GET') {
   const startedAt = performance.now();
   try {
@@ -137,6 +179,45 @@ async function runAnyLog(connectInfo, command, method = 'GET') {
 
 async function runMonitoredOperators(connectInfo) {
   return runAnyLog(connectInfo, NODE_METRICS_QUERY);
+}
+
+export async function fetchEdgeDataFabricNodeMetrics(connectInfo) {
+  if (!connectInfo) {
+    return {
+      ok: false,
+      command: NODE_METRICS_QUERY,
+      rows: [],
+      statistics: [],
+      rowCount: 0,
+      durationMs: 0,
+      error: 'Node is required.'
+    };
+  }
+  return runMonitoredOperators(connectInfo);
+}
+
+export async function fetchEdgeDataFabricMonitoringStatus(connectInfo) {
+  if (!connectInfo) {
+    return {
+      ok: false,
+      command: MONITORING_STATUS_QUERY,
+      rows: [],
+      statistics: [],
+      rowCount: 0,
+      durationMs: 0,
+      networkDisconnected: false,
+      monitoringDisabled: false,
+      error: 'Node is required.'
+    };
+  }
+  const result = await runAnyLog(connectInfo, MONITORING_STATUS_QUERY);
+  const lists = returnedDataLists(result.response);
+  const networkDisconnected = isNetworkConnectionError(result.error || result.response);
+  return {
+    ...result,
+    networkDisconnected,
+    monitoringDisabled: !networkDisconnected && result.ok && (result.rows.length === 0 || lists.some(list => list.length === 0))
+  };
 }
 
 function escapeSql(sql) {

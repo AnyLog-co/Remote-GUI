@@ -4,11 +4,15 @@ import '../styles/TopBar.css';
 import logo from '../assets/AnyLog_EDM_logo.png';
 import NodePicker from './NodePicker.js';
 import { NavLink } from 'react-router-dom';
-import { getLicenseInfo } from '../services/api';
+import { checkNodeReachable, getLicenseInfo } from '../services/api';
 
 
 const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode, restoredFromStorage, onClearStoredData }) => {
   const [license, setLicense] = useState(null);
+  const [nodeReachability, setNodeReachability] = useState({
+    checking: false,
+    networkDisconnected: false,
+  });
 
   useEffect(() => {
     let isCurrent = true;
@@ -30,6 +34,28 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
     };
   }, [selectedNode]);
 
+  useEffect(() => {
+    if (!selectedNode) {
+      setNodeReachability({ checking: false, networkDisconnected: false });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setNodeReachability({ checking: true, networkDisconnected: false });
+
+    checkNodeReachable(selectedNode, { signal: controller.signal }).then((result) => {
+      if (controller.signal.aborted) return;
+      setNodeReachability({
+        checking: false,
+        networkDisconnected: !result.ok,
+      });
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedNode]);
+
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -37,6 +63,7 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
         <NodePicker 
           nodes={nodes} 
           selectedNode={selectedNode} 
+          networkDisconnected={nodeReachability.networkDisconnected}
           onAddNode={onAddNode} 
           onRemoveNode={onRemoveNode}
           onEditNode={onEditNode}

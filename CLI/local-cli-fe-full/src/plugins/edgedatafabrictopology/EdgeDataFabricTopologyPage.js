@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './EdgeDataFabricTopologyPage.css';
-import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
+import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
 
 export const pluginMetadata = {
   name: 'Edge Data Fabric Topology',
@@ -50,7 +50,8 @@ const DEFAULT_QUERY_FORM = {
   columnType: '',
   aggregation: 'count'
 };
-const DEFAULT_NODE_METRICS = new Set(['Status', 'Role', 'CPU', 'Disk', 'Inserts', 'Operational Time']);
+const DEFAULT_NODE_METRIC_ORDER = ['Status', 'Role', 'CPU', 'Disk', 'Inserts', 'Operational Time'];
+const DEFAULT_NODE_METRICS = new Set(DEFAULT_NODE_METRIC_ORDER);
 const AGGREGATION_OPTIONS = ['count', 'min', 'max', 'avg', 'sum'];
 
 function normalizeFieldName(value) {
@@ -255,6 +256,18 @@ function findLooseNodeKey(source, nodeMap) {
   return null;
 }
 
+function aliasesOverlap(left, right) {
+  const leftAliases = hostAliases(left)
+    .map(compactAlias)
+    .filter(alias => alias.length >= 4);
+  const rightAliases = hostAliases(right)
+    .map(compactAlias)
+    .filter(alias => alias.length >= 4);
+  return leftAliases.some(leftAlias => (
+    rightAliases.some(rightAlias => leftAlias === rightAlias || leftAlias.includes(rightAlias) || rightAlias.includes(leftAlias))
+  ));
+}
+
 function nodeCpu(row) {
   return toNumber(firstValue(row, CPU_KEYS));
 }
@@ -293,6 +306,46 @@ function rowMetrics(row) {
     acc[readableMetricName(key)] = value;
     return acc;
   }, {});
+}
+
+function nodeStatusFromMetrics(node) {
+  return (node.cpu !== null && node.cpu >= 90) || (node.mem !== null && node.mem >= 90) || (node.diskUsage !== null && node.diskUsage >= 90)
+    ? 'crit'
+    : (node.cpu !== null && node.cpu >= 75) || (node.mem !== null && node.mem >= 80) || (node.diskUsage !== null && node.diskUsage >= 75)
+      ? 'warn'
+      : 'ok';
+}
+
+function findMetricRowForNode(rows, node) {
+  return rows.find(row => aliasesOverlap(row, node)) || null;
+}
+
+function mergeMetricRowIntoNode(node, row) {
+  if (!node || !row) return node;
+  const cpu = nodeCpu(row);
+  const mem = nodeMem(row);
+  const diskUsage = nodeDiskUsage(row);
+  const uptime = operationalTime(row);
+  const next = {
+    ...node,
+    cpu: cpu ?? node.cpu ?? null,
+    mem: mem ?? node.mem ?? null,
+    diskUsage: diskUsage ?? node.diskUsage ?? null,
+    operationalTime: uptime || node.operationalTime || '',
+    metricSource: cpu !== null || mem !== null || diskUsage !== null || uptime ? NODE_METRICS_QUERY : node.metricSource || '',
+    metrics: {
+      ...(node.metrics || {}),
+      ...rowMetrics(row),
+      CPU: cpu ?? node.metrics?.CPU,
+      Memory: mem ?? node.metrics?.Memory,
+      Disk: diskUsage ?? node.metrics?.Disk,
+      'Operational Time': uptime || node.metrics?.['Operational Time']
+    }
+  };
+  return {
+    ...next,
+    status: nodeStatusFromMetrics(next)
+  };
 }
 
 function roleFromName(name, fallback) {
@@ -456,14 +509,7 @@ function deriveSites(raw) {
     });
   });
 
-  const nodes = [...nodeMap.values()].map(node => {
-    const status = (node.cpu !== null && node.cpu >= 90) || (node.mem !== null && node.mem >= 90) || (node.diskUsage !== null && node.diskUsage >= 90)
-      ? 'crit'
-      : (node.cpu !== null && node.cpu >= 75) || (node.mem !== null && node.mem >= 80) || (node.diskUsage !== null && node.diskUsage >= 75)
-        ? 'warn'
-        : 'ok';
-    return { ...node, status };
-  });
+  const nodes = [...nodeMap.values()].map(node => ({ ...node, status: nodeStatusFromMetrics(node) }));
 
   const grouped = new Map();
   companyList.forEach(company => {
@@ -718,7 +764,15 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [selectedSite, setSelectedSite] = useState(null);
   const [companyFilter, setCompanyFilter] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
-  const [selectedNodeMetrics, setSelectedNodeMetrics] = useState([]);
+  const [nodeMetricOrder, setNodeMetricOrder] = useState(DEFAULT_NODE_METRIC_ORDER);
+  const [draggedNodeMetric, setDraggedNodeMetric] = useState('');
+  const [nodeMetricRefreshing, setNodeMetricRefreshing] = useState(false);
+  const [monitoringStatus, setMonitoringStatus] = useState({
+    checking: false,
+    networkDisconnected: false,
+    disabled: false,
+    error: ''
+  });
   const [queryDialog, setQueryDialog] = useState(null);
   const [catalogQueryForm, setCatalogQueryForm] = useState(DEFAULT_QUERY_FORM);
   const [editingCatalogQueryId, setEditingCatalogQueryId] = useState(null);
@@ -737,6 +791,7 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [draggedQueryId, setDraggedQueryId] = useState(null);
   const catalogQueryCardsRef = useRef([]);
   const refreshSequence = useRef(0);
+  const monitoringStatusSequence = useRef(0);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [loading, setLoading] = useState(false);
   const [apiLogOpen, setApiLogOpen] = useState(false);
@@ -817,11 +872,15 @@ function EdgeDataFabricTopologyPage({ node }) {
   }, [allNodes, selectedNode]);
   const activeStatusReasons = useMemo(() => statusReasons(activeSelectedNode), [activeSelectedNode]);
   const activeNodeMetricOptions = useMemo(() => {
-    if (!activeSelectedNode?.metrics) return [];
-    return Object.entries(activeSelectedNode.metrics)
-      .filter(([label, value]) => !DEFAULT_NODE_METRICS.has(label) && hasMetricValue(value))
-      .sort(([left], [right]) => left.localeCompare(right));
-  }, [activeSelectedNode]);
+    const defaultOptions = DEFAULT_NODE_METRIC_ORDER.map(label => [label, '']);
+    const dynamicOptions = activeSelectedNode?.metrics
+      ? Object.entries(activeSelectedNode.metrics)
+        .filter(([label, value]) => !DEFAULT_NODE_METRICS.has(label) && hasMetricValue(value))
+        .sort(([left], [right]) => left.localeCompare(right))
+      : [];
+    return [...defaultOptions, ...dynamicOptions]
+      .filter(([label]) => !nodeMetricOrder.includes(label));
+  }, [activeSelectedNode, nodeMetricOrder]);
 
   useEffect(() => {
     window.localStorage.setItem('edfTopologyQueryCards', JSON.stringify(catalogQueryCards));
@@ -881,8 +940,56 @@ function EdgeDataFabricTopologyPage({ node }) {
   }, [catalogQueryForm.column, columnOptions]);
 
   useEffect(() => {
-    setSelectedNodeMetrics([]);
+    setNodeMetricOrder(DEFAULT_NODE_METRIC_ORDER);
+    setDraggedNodeMetric('');
   }, [activeSelectedNode?.id]);
+
+  useEffect(() => {
+    if (!nodeAddress) {
+      monitoringStatusSequence.current += 1;
+      setMonitoringStatus({ checking: false, networkDisconnected: false, disabled: false, error: '' });
+      return undefined;
+    }
+
+    const requestId = monitoringStatusSequence.current + 1;
+    monitoringStatusSequence.current = requestId;
+    setMonitoringStatus(prev => ({ ...prev, checking: true, error: '' }));
+
+    fetchEdgeDataFabricMonitoringStatus(nodeAddress)
+      .then(result => {
+        if (requestId !== monitoringStatusSequence.current) return;
+        if (result.networkDisconnected) {
+          setSelectedNode(null);
+          setSelectedSite(null);
+          setTopology({
+            sites: [],
+            catalog: [],
+            networkDatabases: [],
+            scopedNetworkDatabases: [],
+            activeCompanyFilter: '',
+            issues: [],
+            apiLog: []
+          });
+        }
+        setMonitoringStatus({
+          checking: false,
+          networkDisconnected: Boolean(result.networkDisconnected),
+          disabled: Boolean(result.monitoringDisabled),
+          error: result.ok ? '' : (result.error || 'Unable to check monitoring status.')
+        });
+      })
+      .catch(error => {
+        if (requestId !== monitoringStatusSequence.current) return;
+        setMonitoringStatus({
+          checking: false,
+          networkDisconnected: false,
+          disabled: false,
+          error: error.message || String(error)
+        });
+      });
+
+    return undefined;
+  }, [lastRefresh, nodeAddress]);
 
   const runCatalogQueries = useCallback(async (cards = catalogQueryCardsRef.current) => {
     const runnableCards = cards
@@ -1118,11 +1225,73 @@ function EdgeDataFabricTopologyPage({ node }) {
 
   const addSelectedNodeMetric = value => {
     if (!value) return;
-    setSelectedNodeMetrics(prev => prev.includes(value) ? prev : [...prev, value]);
+    setNodeMetricOrder(prev => prev.includes(value) ? prev : [...prev, value]);
   };
 
   const removeSelectedNodeMetric = value => {
-    setSelectedNodeMetrics(prev => prev.filter(metric => metric !== value));
+    setNodeMetricOrder(prev => prev.filter(metric => metric !== value));
+  };
+
+  const dropSelectedNodeMetric = targetMetric => {
+    if (!draggedNodeMetric || draggedNodeMetric === targetMetric) return;
+    setNodeMetricOrder(prev => {
+      const draggedIndex = prev.indexOf(draggedNodeMetric);
+      const targetIndex = prev.indexOf(targetMetric);
+      if (draggedIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [dragged] = next.splice(draggedIndex, 1);
+      next.splice(targetIndex, 0, dragged);
+      return next;
+    });
+    setDraggedNodeMetric('');
+  };
+
+  const selectedNodeMetricValue = label => {
+    if (!activeSelectedNode) return 'N/A';
+    if (label === 'Status') return statusLabel(activeSelectedNode.status);
+    if (label === 'Role') return activeSelectedNode.role || 'N/A';
+    if (label === 'CPU') return formatMetricValue(activeSelectedNode.cpu);
+    if (label === 'Disk') return formatMetricValue(activeSelectedNode.diskUsage);
+    if (label === 'Inserts') return formatNumber(activeSelectedNode.inserts);
+    if (label === 'Operational Time') return activeSelectedNode.operationalTime || 'N/A';
+    return formatScalarValue(activeSelectedNode.metrics?.[label]);
+  };
+
+  const refreshSelectedNodeMetrics = async () => {
+    if (!nodeAddress || !activeSelectedNode || nodeMetricRefreshing) return;
+    setNodeMetricRefreshing(true);
+    const result = await fetchEdgeDataFabricNodeMetrics(nodeAddress);
+    const metricRow = result.ok ? findMetricRowForNode(result.rows || [], activeSelectedNode) : null;
+    const logEntry = {
+      time: new Date().toLocaleTimeString(),
+      kind: result.ok && metricRow ? 'OK' : 'ERR',
+      detail: `selected node metrics: ${result.command || NODE_METRICS_QUERY}`,
+      rows: result.rowCount ?? result.rows?.length ?? 0,
+      duration: `${result.durationMs ?? 0}ms`,
+      error: result.error || (!metricRow ? `No metrics row matched ${activeSelectedNode.name}.` : '')
+    };
+
+    if (metricRow) {
+      setSelectedNode(prev => prev ? mergeMetricRowIntoNode(prev, metricRow) : prev);
+      setTopology(prev => ({
+        ...prev,
+        sites: prev.sites.map(site => ({
+          ...site,
+          nodes: site.nodes.map(item => (
+            aliasesOverlap(item, activeSelectedNode) ? mergeMetricRowIntoNode(item, metricRow) : item
+          ))
+        })),
+        apiLog: [...(prev.apiLog || []), logEntry]
+      }));
+      setLoadError(null);
+    } else {
+      setTopology(prev => ({
+        ...prev,
+        apiLog: [...(prev.apiLog || []), logEntry]
+      }));
+      setLoadError(logEntry.error || 'Unable to refresh selected node metrics.');
+    }
+    setNodeMetricRefreshing(false);
   };
 
   const openNodeMetricQuery = () => {
@@ -1154,7 +1323,18 @@ function EdgeDataFabricTopologyPage({ node }) {
         </div>
         <div className="edf-header-controls">
           <label className="edf-field">
-            <span>Node</span>
+            <span className="edf-field-label">
+              <span>Node</span>
+              {monitoringStatus.networkDisconnected ? (
+                <span className="edf-monitoring-flag edf-monitoring-flag-error edf-monitoring-flag-compact" title="The connected node failed the get monitored network request.">
+                  Not network connected
+                </span>
+              ) : monitoringStatus.disabled && (
+                <span className="edf-monitoring-flag edf-monitoring-flag-compact" title="The connected node returned an empty list for get monitored.">
+                  Monitoring not enabled
+                </span>
+              )}
+            </span>
             <input value={nodeAddress} onChange={event => setNodeAddress(event.target.value)} />
           </label>
           <div className="edf-segment" aria-label="Time range">
@@ -1206,6 +1386,7 @@ function EdgeDataFabricTopologyPage({ node }) {
         </div>
       </header>
 
+      {!monitoringStatus.networkDisconnected && (
       <main className="edf-main">
         <section className="edf-panel">
           <div className="edf-panel-title-row">
@@ -1460,46 +1641,54 @@ function EdgeDataFabricTopologyPage({ node }) {
           <span>{lastRefresh ? `Last refresh ${lastRefresh.toLocaleTimeString()}` : 'Waiting for first refresh'}</span>
         </div>
       </main>
+      )}
 
-      {activeSelectedNode && (
+      {activeSelectedNode && !monitoringStatus.networkDisconnected && (
         <div className="edf-modal" role="dialog" aria-modal="true" aria-labelledby="edf-node-detail-title">
           <button className="edf-modal-backdrop" type="button" aria-label="Close node detail" onClick={() => setSelectedNode(null)} />
           <section className="edf-modal-shell">
             <header>
               <div>
                 <p>{activeSelectedNode.site} / {activeSelectedNode.region}</p>
-                <h2 id="edf-node-detail-title">{activeSelectedNode.name}</h2>
+                <h2 id="edf-node-detail-title">
+                  <span>{activeSelectedNode.name}</span>
+                  {monitoringStatus.disabled && (
+                    <span className="edf-monitoring-flag" title="The connected node returned an empty list for get monitored.">
+                      Monitoring not enabled
+                    </span>
+                  )}
+                </h2>
               </div>
               <div className="edf-modal-header-actions">
+                <button type="button" className="edf-query-button" onClick={refreshSelectedNodeMetrics} disabled={nodeMetricRefreshing}>
+                  {nodeMetricRefreshing ? 'Refreshing...' : 'Refresh'}
+                </button>
                 <button type="button" className="edf-query-button" onClick={openNodeMetricQuery}>Query</button>
                 <button type="button" onClick={() => setSelectedNode(null)} aria-label="Close">x</button>
               </div>
             </header>
             <div className="edf-modal-metrics">
-              <article
-                className={`edf-status-metric ${activeStatusReasons.length > 0 ? 'has-tooltip' : ''}`}
-                tabIndex={activeStatusReasons.length > 0 ? 0 : undefined}
-              >
-                <span>Status</span>
-                <strong>{statusLabel(activeSelectedNode.status)}</strong>
-                {activeStatusReasons.length > 0 && (
-                  <div className="edf-status-tooltip" role="tooltip">
-                    {activeStatusReasons.map(reason => <p key={reason}>{reason}</p>)}
-                  </div>
-                )}
-              </article>
-              <article><span>Role</span><strong>{activeSelectedNode.role}</strong></article>
-              <article><span>CPU</span><strong>{formatMetricValue(activeSelectedNode.cpu)}</strong></article>
-              <article><span>Disk</span><strong>{formatMetricValue(activeSelectedNode.diskUsage)}</strong></article>
-              <article><span>Inserts</span><strong>{formatNumber(activeSelectedNode.inserts)}</strong></article>
-              <article><span>Operational Time</span><strong>{activeSelectedNode.operationalTime || 'N/A'}</strong></article>
-              {selectedNodeMetrics.map(label => (
-                <article className="edf-removable-metric" key={label}>
+              {nodeMetricOrder.map(label => (
+                <article
+                  className={`edf-node-metric-card edf-removable-metric ${draggedNodeMetric === label ? 'is-dragging' : ''} ${label === 'Status' && activeStatusReasons.length > 0 ? 'edf-status-metric has-tooltip' : ''}`}
+                  draggable
+                  key={label}
+                  onDragStart={() => setDraggedNodeMetric(label)}
+                  onDragEnd={() => setDraggedNodeMetric('')}
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={() => dropSelectedNodeMetric(label)}
+                  tabIndex={label === 'Status' && activeStatusReasons.length > 0 ? 0 : undefined}
+                >
                   <div>
                     <span>{label}</span>
                     <button type="button" onClick={() => removeSelectedNodeMetric(label)} aria-label={`Remove ${label}`}>x</button>
                   </div>
-                  <strong>{formatScalarValue(activeSelectedNode.metrics?.[label])}</strong>
+                  <strong>{selectedNodeMetricValue(label)}</strong>
+                  {label === 'Status' && activeStatusReasons.length > 0 && (
+                    <div className="edf-status-tooltip" role="tooltip">
+                      {activeStatusReasons.map(reason => <p key={reason}>{reason}</p>)}
+                    </div>
+                  )}
                 </article>
               ))}
               {activeNodeMetricOptions.length > 0 && (
@@ -1507,9 +1696,7 @@ function EdgeDataFabricTopologyPage({ node }) {
                   <span>Add metric</span>
                   <select value="" onChange={event => addSelectedNodeMetric(event.target.value)}>
                     <option value="">Select metric</option>
-                    {activeNodeMetricOptions
-                      .filter(([label]) => !selectedNodeMetrics.includes(label))
-                      .map(([label]) => <option key={label} value={label}>{label}</option>)}
+                    {activeNodeMetricOptions.map(([label]) => <option key={label} value={label}>{label}</option>)}
                   </select>
                 </label>
               )}

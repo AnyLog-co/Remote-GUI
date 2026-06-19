@@ -3,12 +3,12 @@
     "mcpclient",
     {
       "name": "uns",
-      "label": "Unified Namespace"
+      "label": "Unified Namespace (UNS)"
     },
+    "edgedatafabrictopology",
     "policycreator",
     "sshclient",
     "grafana",
-    "edgedatafabrictopology",
     "reportgenerator",
     "nodecheck",
     "videostreamviewer"
@@ -18,8 +18,9 @@
     "mcpclient",
     {
       "name": "uns",
-      "label": "Unified Namespace"
+      "label": "Unified Namespace (UNS)"
     },
+    "edgedatafabrictopology",
     "monitor",
     "sqlquery",
     "blockchain",
@@ -35,8 +36,9 @@
       "mcpclient",
       {
         "name": "uns",
-        "label": "Unified Namespace"
+        "label": "Unified Namespace (UNS)"
       },
+      "edgedatafabrictopology",
       "monitor",
       "sqlquery",
       "blockchain",
