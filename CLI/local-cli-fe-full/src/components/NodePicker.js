@@ -6,7 +6,7 @@ import '../styles/NodePicker.css';
 import { useEffect } from 'react';
 import { validateNodeConnection } from '../utils/connectionAddress';
 
-const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode }) => {
+const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNode, onRemoveNode, onEditNode, onSelectNode }) => {
   const navigate = useNavigate();
   const [newNode, setNewNode] = useState('');
   const [connectionError, setConnectionError] = useState(null);
@@ -216,6 +216,11 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
           {onEditNode && <option value="edit-node">~ Edit Current Node</option>}
           {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
         </select>
+        {networkDisconnected && (
+          <span className="node-picker-status-error" title="The selected node failed the get status network request.">
+            Not network connected
+          </span>
+        )}
         <button
           className="node-picker-btn secondary"
           onClick={() => navigate('/dashboard/bookmarks')}

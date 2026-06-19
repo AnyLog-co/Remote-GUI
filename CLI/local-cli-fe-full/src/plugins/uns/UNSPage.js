@@ -1120,7 +1120,7 @@ const UNSPage = ({ node }) => {
 
 // Plugin metadata
 export const pluginMetadata = {
-  name: 'Unified Namespace',
+  name: 'Unified Namespace (UNS)',
   icon: null,
 };
 
