@@ -519,10 +519,22 @@
 
 .edf-query-builder {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) minmax(118px, 0.7fr) minmax(160px, 1fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   align-items: end;
   margin-bottom: 14px;
+}
+
+.edf-query-builder .edf-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.edf-query-builder .edf-field input,
+.edf-query-builder .edf-field select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .edf-query-sql-field {
@@ -534,6 +546,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .edf-generated-query {

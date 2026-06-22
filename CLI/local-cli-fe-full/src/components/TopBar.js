@@ -60,6 +60,9 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
     <header className="topbar">
       <div className="topbar-left">
         <img src={logo} alt="App Logo" className="logo" />
+        <NavLink to="about" className="topbar-license-btn">
+          Licensed to: {license?.company ?? '—'}
+        </NavLink>
         <NodePicker 
           nodes={nodes} 
           selectedNode={selectedNode} 
@@ -69,11 +72,6 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
           onEditNode={onEditNode}
           onSelectNode={onSelectNode} 
         />
-      </div>
-      <div className="topbar-center">
-        <NavLink to="about" className="topbar-license-btn">
-          Licensee: {license?.company ?? '—'}
-        </NavLink>
       </div>
       <div className="topbar-right">
         {restoredFromStorage && (
