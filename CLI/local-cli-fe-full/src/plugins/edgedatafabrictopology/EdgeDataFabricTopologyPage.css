@@ -45,6 +45,14 @@
   gap: 10px;
 }
 
+.edf-control-group {
+  display: grid;
+  gap: 5px;
+  color: #495057;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .edf-field {
   display: grid;
   gap: 5px;
@@ -142,7 +150,20 @@
   flex-wrap: wrap;
 }
 
-.edf-poll-unit-segment button {
+.edf-custom-range {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.edf-date-time-field {
+  min-width: 190px;
+}
+
+.edf-poll-unit-segment button,
+.edf-range-unit-segment button {
   min-width: 70px;
 }
 
