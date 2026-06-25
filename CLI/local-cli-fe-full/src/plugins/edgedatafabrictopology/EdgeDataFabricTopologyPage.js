@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './EdgeDataFabricTopologyPage.css';
-import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
+import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTables, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
 
 export const pluginMetadata = {
   name: 'Edge Data Fabric Topology',
@@ -8,10 +8,11 @@ export const pluginMetadata = {
 };
 
 const RANGE_OPTIONS = [
-  { label: '1h', hours: 1 },
-  { label: '6h', hours: 6 },
-  { label: '24h', hours: 24 },
-  { label: '3d', hours: 72 }
+  { label: '1h', value: '1h', amount: 1, unit: 'hours', hours: 1 },
+  { label: '6h', value: '6h', amount: 6, unit: 'hours', hours: 6 },
+  { label: '24h', value: '24h', amount: 24, unit: 'hours', hours: 24 },
+  { label: '3d', value: '3d', amount: 3, unit: 'days', hours: 72 },
+  { label: 'Custom', value: 'custom' }
 ];
 
 const SIZE_OPTIONS = [
@@ -170,13 +171,55 @@ function formatPollInterval(seconds) {
   return `${amount} ${unit[0]}${amount === 1 ? '' : 's'}`;
 }
 
-function buildAggregationSql({ table, column, aggregation }, pollSeconds) {
+function formatSqlTimestamp(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const normalized = text.replace('T', ' ');
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(normalized)
+    ? `${normalized}:00`
+    : normalized;
+}
+
+function timeRangeWhereClause(range) {
+  if (!range) return '';
+  if (range.preset !== 'custom') {
+    const option = RANGE_OPTIONS.find(item => item.value === range.preset);
+    return option ? `timestamp >= NOW() - ${option.amount} ${option.unit}` : '';
+  }
+
+  if (range.mode === 'timestamps') {
+    const start = formatSqlTimestamp(range.start);
+    const end = formatSqlTimestamp(range.end);
+    if (!start || !end || start >= end) return '';
+    return `timestamp > '${start}' AND timestamp < '${end}'`;
+  }
+
+  const amount = Math.max(1, Number(range.value) || 1);
+  const unit = POLL_UNIT_OPTIONS.some(option => option.value === range.unit) ? range.unit : 'hours';
+  return `timestamp >= NOW() - ${amount} ${unit}`;
+}
+
+function rangeHoursForTopology(range) {
+  if (range?.preset !== 'custom') {
+    return RANGE_OPTIONS.find(item => item.value === range?.preset)?.hours || 24;
+  }
+  if (range.mode === 'timestamps') {
+    const start = new Date(range.start);
+    const end = new Date(range.end);
+    const duration = end.getTime() - start.getTime();
+    return Number.isFinite(duration) && duration > 0 ? Math.max(1, Math.ceil(duration / 3600000)) : 24;
+  }
+  const seconds = pollSecondsFromCustom(range.value, range.unit);
+  return Math.max(1, Math.ceil(seconds / 3600));
+}
+
+function buildAggregationSql({ table, column, aggregation }, range) {
   const tableName = cleanIdentifier(table);
   const columnName = cleanIdentifier(column);
   const functionName = AGGREGATION_OPTIONS.includes(aggregation) ? aggregation : 'count';
-  const seconds = Math.max(1, Number(pollSeconds) || 60);
-  if (!tableName || !columnName) return '';
-  return `SELECT ${functionName}(${columnName}) as value FROM ${tableName} WHERE timestamp >= NOW() - ${seconds} seconds`;
+  const whereClause = timeRangeWhereClause(range);
+  if (!tableName || !columnName || !whereClause) return '';
+  return `SELECT ${functionName}(${columnName}) as value FROM ${tableName} WHERE ${whereClause}`;
 }
 
 function columnLabel(column) {
@@ -186,9 +229,9 @@ function columnLabel(column) {
   return type ? `${name} (${type})` : name;
 }
 
-function sqlForCatalogCard(card, pollSeconds) {
+function sqlForCatalogCard(card, range) {
   if (card?.aggregation && card?.column && card?.table) {
-    return buildAggregationSql(card, pollSeconds);
+    return buildAggregationSql(card, range);
   }
   return card?.sql || '';
 }
@@ -612,26 +655,26 @@ function nodeCountFromStatistics(statistics) {
 function buildCatalogOptions(catalog, networkDatabases) {
   const dbmsSet = new Set();
   const tableMap = new Map();
+  const canonicalDbms = new Map();
 
   const addDbms = dbms => {
     const name = cleanIdentifier(dbms);
     if (!name) return;
     dbmsSet.add(name);
+    canonicalDbms.set(name.toLowerCase(), name);
     if (!tableMap.has(name)) tableMap.set(name, []);
   };
 
   const addTable = (dbms, table) => {
-    const dbmsName = cleanIdentifier(dbms);
+    const dbmsName = canonicalDbms.get(cleanIdentifier(dbms).toLowerCase());
     const tableName = cleanIdentifier(table);
-    if (!dbmsName) return;
-    addDbms(dbmsName);
-    if (!tableName) return;
+    if (!dbmsName || !tableName) return;
     const tables = tableMap.get(dbmsName);
     if (!tables.includes(tableName)) tables.push(tableName);
   };
 
-  catalog.forEach(item => addTable(item.dbms, item.table));
   networkDatabases.forEach(item => addDbms(item.dbms || item.DBMS || item.database || item.Database));
+  catalog.forEach(item => addTable(item.dbms, item.table));
 
   tableMap.forEach(tables => tables.sort((a, b) => a.localeCompare(b)));
 
@@ -754,7 +797,12 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
 
 function EdgeDataFabricTopologyPage({ node }) {
   const [nodeAddress, setNodeAddress] = useState(node || '');
-  const [rangeHours, setRangeHours] = useState(24);
+  const [rangePreset, setRangePreset] = useState('24h');
+  const [customRangeMode, setCustomRangeMode] = useState('relative');
+  const [customRangeValue, setCustomRangeValue] = useState(24);
+  const [customRangeUnit, setCustomRangeUnit] = useState('hours');
+  const [customRangeStart, setCustomRangeStart] = useState('');
+  const [customRangeEnd, setCustomRangeEnd] = useState('');
   const [pollPreset, setPollPreset] = useState('60');
   const [customPollValue, setCustomPollValue] = useState(60);
   const [customPollUnit, setCustomPollUnit] = useState('seconds');
@@ -786,6 +834,8 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [catalogQueryResults, setCatalogQueryResults] = useState({});
   const [catalogQueryRunning, setCatalogQueryRunning] = useState(false);
   const [catalogQueryFormError, setCatalogQueryFormError] = useState('');
+  const [tablesByDbms, setTablesByDbms] = useState({});
+  const [tablesLoadingDbms, setTablesLoadingDbms] = useState('');
   const [columnsByTable, setColumnsByTable] = useState({});
   const [columnsLoadingKey, setColumnsLoadingKey] = useState('');
   const [draggedQueryId, setDraggedQueryId] = useState(null);
@@ -819,7 +869,7 @@ function EdgeDataFabricTopologyPage({ node }) {
 
   const sites = topology.sites;
   const catalog = topology.catalog;
-  const networkDatabases = topology.scopedNetworkDatabases?.length > 0
+  const networkDatabases = companyFilter
     ? topology.scopedNetworkDatabases
     : topology.networkDatabases;
   const issues = topology.issues;
@@ -827,15 +877,25 @@ function EdgeDataFabricTopologyPage({ node }) {
   const pollSeconds = useMemo(() => (
     pollPreset === 'custom' ? pollSecondsFromCustom(customPollValue, customPollUnit) : Number(pollPreset)
   ), [customPollUnit, customPollValue, pollPreset]);
+  const catalogTimeRange = useMemo(() => ({
+    preset: rangePreset,
+    mode: customRangeMode,
+    value: customRangeValue,
+    unit: customRangeUnit,
+    start: customRangeStart,
+    end: customRangeEnd
+  }), [customRangeEnd, customRangeMode, customRangeStart, customRangeUnit, customRangeValue, rangePreset]);
+  const rangeHours = useMemo(() => rangeHoursForTopology(catalogTimeRange), [catalogTimeRange]);
   const activeCompanyScope = companyScopeKey(companyFilter);
   const catalogOptions = useMemo(() => buildCatalogOptions(catalog, networkDatabases || []), [catalog, networkDatabases]);
   const dbmsOptions = catalogOptions.dbmsOptions;
   const visibleCatalogQueryCards = useMemo(() => (
     catalogQueryCards.filter(card => companyScopeKey(card.company) === activeCompanyScope)
   ), [activeCompanyScope, catalogQueryCards]);
-  const tableOptions = useMemo(() => (
-    catalogOptions.tableMap.get(catalogQueryForm.dbms) || []
-  ), [catalogOptions, catalogQueryForm.dbms]);
+  const tableOptions = useMemo(() => {
+    const fetchedTables = tablesByDbms[catalogQueryForm.dbms];
+    return fetchedTables || catalogOptions.tableMap.get(catalogQueryForm.dbms) || [];
+  }, [catalogOptions, catalogQueryForm.dbms, tablesByDbms]);
   const selectedTableKey = catalogQueryForm.dbms && catalogQueryForm.table
     ? catalogKey(catalogQueryForm.dbms, catalogQueryForm.table)
     : '';
@@ -843,8 +903,8 @@ function EdgeDataFabricTopologyPage({ node }) {
   const selectedColumn = columnOptions.find(column => column.name === catalogQueryForm.column);
   const selectedColumnType = selectedColumn?.type || '';
   const generatedCatalogQuerySql = useMemo(() => (
-    buildAggregationSql(catalogQueryForm, pollSeconds)
-  ), [catalogQueryForm, pollSeconds]);
+    buildAggregationSql(catalogQueryForm, catalogTimeRange)
+  ), [catalogQueryForm, catalogTimeRange]);
   const currentSelectedSite = selectedSite
     ? sites.find(site => (
       (selectedSite.company && site.company === selectedSite.company) ||
@@ -906,6 +966,36 @@ function EdgeDataFabricTopologyPage({ node }) {
     if (visibleCatalogQueryCards.some(card => card.id === editingCatalogQueryId)) return;
     resetCatalogQueryForm();
   }, [editingCatalogQueryId, visibleCatalogQueryCards]);
+
+  useEffect(() => {
+    setTablesByDbms({});
+    setTablesLoadingDbms('');
+    setColumnsByTable({});
+    setColumnsLoadingKey('');
+  }, [activeCompanyScope, nodeAddress]);
+
+  useEffect(() => {
+    const dbms = catalogQueryForm.dbms;
+    if (!nodeAddress || !dbms || Object.prototype.hasOwnProperty.call(tablesByDbms, dbms)) return undefined;
+    let cancelled = false;
+    setTablesLoadingDbms(dbms);
+    fetchEdgeDataFabricTables(nodeAddress, dbms, companyFilter)
+      .then(tables => {
+        if (cancelled) return;
+        setTablesByDbms(prev => ({ ...prev, [dbms]: tables }));
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setTablesByDbms(prev => ({ ...prev, [dbms]: [] }));
+        setCatalogQueryFormError(error.message || String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setTablesLoadingDbms('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogQueryForm.dbms, companyFilter, nodeAddress, tablesByDbms]);
 
   useEffect(() => {
     if (!catalogQueryForm.dbms || catalogQueryForm.table || tableOptions.length === 0) return;
@@ -993,7 +1083,7 @@ function EdgeDataFabricTopologyPage({ node }) {
 
   const runCatalogQueries = useCallback(async (cards = catalogQueryCardsRef.current) => {
     const runnableCards = cards
-      .map(card => ({ ...card, sql: sqlForCatalogCard(card, pollSeconds) }))
+      .map(card => ({ ...card, sql: sqlForCatalogCard(card, catalogTimeRange) }))
       .filter(card => card.dbms && card.sql);
     if (!nodeAddress || runnableCards.length === 0) return;
     setCatalogQueryRunning(true);
@@ -1015,7 +1105,7 @@ function EdgeDataFabricTopologyPage({ node }) {
     }));
     setCatalogQueryResults(prev => ({ ...prev, ...Object.fromEntries(entries) }));
     setCatalogQueryRunning(false);
-  }, [nodeAddress, pollSeconds]);
+  }, [catalogTimeRange, nodeAddress]);
 
   const refresh = useCallback(async () => {
     const requestId = refreshSequence.current + 1;
@@ -1142,9 +1232,9 @@ function EdgeDataFabricTopologyPage({ node }) {
     const aggregation = AGGREGATION_OPTIONS.includes(catalogQueryForm.aggregation)
       ? catalogQueryForm.aggregation
       : 'count';
-    const sql = buildAggregationSql({ table, column, aggregation }, pollSeconds);
+    const sql = buildAggregationSql({ table, column, aggregation }, catalogTimeRange);
     if (!dbms || !table || !column || !sql) {
-      setCatalogQueryFormError('Choose a DBMS, table, column, and aggregation.');
+      setCatalogQueryFormError('Choose a DBMS, table, column, aggregation, and valid time range. Timestamp ranges require an end after the start.');
       return;
     }
 
@@ -1314,6 +1404,17 @@ function EdgeDataFabricTopologyPage({ node }) {
     setPollPreset(value);
   };
 
+  const updateRangePreset = value => {
+    if (value === 'custom' && rangePreset !== 'custom') {
+      const currentOption = RANGE_OPTIONS.find(option => option.value === rangePreset);
+      if (currentOption) {
+        setCustomRangeValue(currentOption.amount);
+        setCustomRangeUnit(currentOption.unit);
+      }
+    }
+    setRangePreset(value);
+  };
+
   return (
     <div className="edf-page">
       <header className="edf-header">
@@ -1337,13 +1438,63 @@ function EdgeDataFabricTopologyPage({ node }) {
             </span>
             <input value={nodeAddress} onChange={event => setNodeAddress(event.target.value)} />
           </label>
-          <div className="edf-segment" aria-label="Time range">
-            {RANGE_OPTIONS.map(option => (
-              <button key={option.hours} className={rangeHours === option.hours ? 'active' : ''} type="button" onClick={() => setRangeHours(option.hours)}>
-                {option.label}
-              </button>
-            ))}
+          <div className="edf-control-group edf-time-range-control">
+            <span>Time Range</span>
+            <div className="edf-segment" aria-label="Time Range">
+              {RANGE_OPTIONS.map(option => (
+                <button key={option.value} className={rangePreset === option.value ? 'active' : ''} type="button" onClick={() => updateRangePreset(option.value)}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
+          {rangePreset === 'custom' && (
+            <div className="edf-custom-range">
+              <label className="edf-field edf-field-small">
+                <span>Custom range</span>
+                <select value={customRangeMode} onChange={event => setCustomRangeMode(event.target.value)}>
+                  <option value="relative">Relative</option>
+                  <option value="timestamps">Timestamps</option>
+                </select>
+              </label>
+              {customRangeMode === 'relative' ? (
+                <>
+                  <label className="edf-field edf-field-small">
+                    <span>Last</span>
+                    <input
+                      min="1"
+                      type="number"
+                      value={customRangeValue}
+                      onChange={event => setCustomRangeValue(event.target.value)}
+                    />
+                  </label>
+                  <div className="edf-segment edf-range-unit-segment" aria-label="Custom time range unit">
+                    {POLL_UNIT_OPTIONS.map(option => (
+                      <button
+                        key={option.value}
+                        className={customRangeUnit === option.value ? 'active' : ''}
+                        type="button"
+                        onClick={() => setCustomRangeUnit(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="edf-field edf-date-time-field">
+                    <span>From</span>
+                    <input type="datetime-local" value={customRangeStart} onChange={event => setCustomRangeStart(event.target.value)} />
+                  </label>
+                  <label className="edf-field edf-date-time-field">
+                    <span>To</span>
+                    <input type="datetime-local" value={customRangeEnd} onChange={event => setCustomRangeEnd(event.target.value)} />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
           <label className="edf-field edf-field-small">
             <span>Poll</span>
             <select value={pollPreset} onChange={event => updatePollPreset(event.target.value)}>
@@ -1454,8 +1605,14 @@ function EdgeDataFabricTopologyPage({ node }) {
             </label>
             <label className="edf-field">
               <span>Table</span>
-              <select value={catalogQueryForm.table} onChange={event => updateCatalogQueryForm('table', event.target.value)} disabled={tableOptions.length === 0}>
-                {tableOptions.length === 0 ? (
+              <select
+                value={catalogQueryForm.table}
+                onChange={event => updateCatalogQueryForm('table', event.target.value)}
+                disabled={!catalogQueryForm.dbms || tablesLoadingDbms === catalogQueryForm.dbms || tableOptions.length === 0}
+              >
+                {tablesLoadingDbms === catalogQueryForm.dbms ? (
+                  <option value="">Loading tables</option>
+                ) : tableOptions.length === 0 ? (
                   <option value="">No tables returned</option>
                 ) : tableOptions.map(table => (
                   <option key={table} value={table}>{table}</option>
@@ -1502,7 +1659,7 @@ function EdgeDataFabricTopologyPage({ node }) {
             {visibleCatalogQueryCards.length === 0 && <div className="edf-empty">Add a labeled query to display DBMS values returned by the network.</div>}
             {visibleCatalogQueryCards.map(card => {
               const result = catalogQueryResults[card.id] || {};
-              const cardSql = sqlForCatalogCard(card, pollSeconds);
+              const cardSql = sqlForCatalogCard(card, catalogTimeRange);
               return (
                 <article
                   className={`edf-catalog-card edf-query-result-card ${draggedQueryId === card.id ? 'is-dragging' : ''}`}

@@ -1,4 +1,4 @@
-import { sendCommand } from '../../services/api';
+import { getColumns, getTables, sendCommand } from '../../services/api';
 
 const MONITORING_DBMS = 'monitoring';
 const TABLES = {
@@ -275,6 +275,29 @@ export async function runEdgeDataFabricQuery(connectInfo, dbms, sql) {
   return runSql(connectInfo, dbms, sql);
 }
 
+export async function fetchEdgeDataFabricTables(connectInfo, dbms, company = '') {
+  if (!connectInfo || !dbms) return [];
+  let rows = [];
+  if (company) {
+    const result = await runAnyLog(
+      connectInfo,
+      `get data nodes where format=json and company="${escapeAnyLogQuoted(company)}" and dbms="${escapeAnyLogQuoted(dbms)}"`
+    );
+    if (!result.ok) {
+      throw new Error(result.error || 'Failed to fetch company tables.');
+    }
+    rows = parseTableRows(result.rows, { dbms, company });
+  } else {
+    const response = await getTables({ connectInfo, database: dbms });
+    rows = Array.isArray(response?.data) ? response.data : [];
+  }
+  return rows
+    .map(item => cleanMetadataName(item?.table_name || item?.table || item?.Table || item?.name))
+    .filter(Boolean)
+    .filter((table, index, tables) => tables.indexOf(table) === index)
+    .sort((left, right) => left.localeCompare(right));
+}
+
 function parseColumnRows(rows) {
   const columns = rows.flatMap(row => {
     if (!row) return [];
@@ -319,14 +342,9 @@ function parseColumnRows(rows) {
 
 export async function fetchEdgeDataFabricColumns(connectInfo, dbms, table) {
   if (!connectInfo || !dbms || !table) return [];
-  const result = await runAnyLog(
-    connectInfo,
-    `get columns where dbms = ${dbms} and table = ${table}`
-  );
-  if (!result.ok) {
-    throw new Error(result.error || 'Failed to fetch columns.');
-  }
-  return parseColumnRows(result.rows);
+  const response = await getColumns({ connectInfo, database: dbms, table });
+  const rows = Array.isArray(response?.data) ? response.data : [];
+  return parseColumnRows(rows);
 }
 
 async function firstSuccessfulSql(connectInfo, dbms, sqlCandidates, clientFilterCommand = '') {
@@ -580,33 +598,72 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
   const masterPolicies = companyFilter ? [] : normalizePolicyRows(mastersResult.rows);
   const networkDatabases = parseNetworkDatabaseRows(dbsResult.rows);
   const networkCompanies = [...new Set(networkDatabases.map(item => item.company).filter(Boolean))];
-  const scopedDatabases = companyFilter
+  let scopedDatabases = companyFilter
     ? networkDatabases.filter(db => sameCompany(db.company, companyFilter))
     : networkDatabases;
 
   let catalog = [];
   if (companyFilter) {
-    const virtualTablesResult = await tracked(
-      `virtual tables company=${companyFilter}`,
-      runAnyLog(connectInfo, virtualTablesCommand(companyFilter))
+    const [virtualTablesResult, companyDataNodesResult] = await Promise.all([
+      tracked(
+        `virtual tables company=${companyFilter}`,
+        runAnyLog(connectInfo, virtualTablesCommand(companyFilter))
+      ),
+      tracked(
+        `data nodes company=${companyFilter}`,
+        runAnyLog(connectInfo, `get data nodes where format=json and company="${escapeAnyLogQuoted(companyFilter)}"`)
+      )
+    ]);
+    const companyCatalog = [
+      ...parseTableRows(virtualTablesResult.rows, { company: companyFilter }),
+      ...parseTableRows(companyDataNodesResult.rows, { company: companyFilter })
+    ];
+    const uniqueCompanyCatalog = new Map();
+    companyCatalog.forEach(item => {
+      const key = `${cleanMetadataName(item.dbms).toLowerCase()}.${cleanMetadataName(item.table).toLowerCase()}`;
+      if (key !== '.') uniqueCompanyCatalog.set(key, item);
+    });
+    catalog = [...uniqueCompanyCatalog.values()];
+
+    const scopedDatabaseMap = new Map(
+      scopedDatabases.map(item => [cleanMetadataName(item.dbms).toLowerCase(), item])
     );
-    catalog = parseTableRows(virtualTablesResult.rows, { company: companyFilter });
+    catalog.forEach(item => {
+      const dbms = cleanMetadataName(item.dbms);
+      if (!dbms) return;
+      scopedDatabaseMap.set(dbms.toLowerCase(), {
+        company: companyFilter,
+        dbms
+      });
+    });
+    scopedDatabases = [...scopedDatabaseMap.values()];
   } else {
     const tablesResult = await tracked(
       'network tables',
       runAnyLog(connectInfo, 'get tables where dbms=* and format=json')
     );
     catalog = parseTableRows(tablesResult.rows);
+  }
 
-    if (catalog.length === 0 && scopedDatabases.length > 0) {
-      const tableLists = await Promise.all(scopedDatabases.slice(0, 20).map(db =>
-        tracked(`tables ${db.dbms}`, runAnyLog(connectInfo, `get tables where dbms=${db.dbms} and format=json`))
-          .then(result => ({ result, db }))
-      ));
-      catalog = tableLists.flatMap(({ result, db }) => (
-        parseTableRows(result.rows, { dbms: db.dbms, company: db.company })
-      ));
-    }
+  const catalogDbms = new Set(catalog.map(item => cleanMetadataName(item.dbms).toLowerCase()).filter(Boolean));
+  const missingDatabases = scopedDatabases.filter(db => !catalogDbms.has(cleanMetadataName(db.dbms).toLowerCase()));
+  if (missingDatabases.length > 0) {
+    const tableLists = await Promise.all(missingDatabases.slice(0, 50).map(db =>
+      tracked(
+        `tables ${db.dbms}`,
+        runAnyLog(connectInfo, `get tables where dbms="${escapeAnyLogQuoted(db.dbms)}" and format=json`)
+      )
+        .then(result => ({ result, db }))
+    ));
+    const fallbackCatalog = tableLists.flatMap(({ result, db }) => (
+      parseTableRows(result.rows, { dbms: db.dbms, company: db.company })
+    ));
+    const mergedCatalog = new Map();
+    [...catalog, ...fallbackCatalog].forEach(item => {
+      const key = `${cleanMetadataName(item.dbms).toLowerCase()}.${cleanMetadataName(item.table).toLowerCase()}`;
+      if (key !== '.') mergedCatalog.set(key, item);
+    });
+    catalog = [...mergedCatalog.values()];
   }
 
   return {
