@@ -329,12 +329,62 @@
   }
 
   @media (max-width: 720px) {
+    .node-picker-container,
+    .connection-box,
     .connected-node-section {
-      flex-wrap: wrap;
+      width: 100%;
+    }
+
+    .connection-box,
+    .connected-node-section,
+    .add-node-section {
+      align-items: stretch;
+    }
+
+    .node-picker-select,
+    .node-picker-input {
+      min-width: 0;
+      max-width: none;
+      flex: 1 1 180px;
+    }
+
+    .node-picker-btn {
+      min-height: 44px;
     }
 
     .bookmark-upload-options {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .connection-box,
+    .connected-node-section,
+    .add-node-section {
+      flex-direction: column;
+    }
+
+    .node-picker-select,
+    .node-picker-input,
+    .node-picker-btn {
+      width: 100%;
+      box-sizing: border-box;
+      flex-basis: auto;
+    }
+
+    .node-picker-select,
+    .node-picker-input {
+      font-size: 16px;
+    }
+
+    .bookmark-upload-backdrop {
+      padding: 10px;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .connected-node-section .node-picker-btn.secondary {
+      display: none;
     }
   }
   

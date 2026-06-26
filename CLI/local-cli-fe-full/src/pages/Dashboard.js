@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import Client from './Client';
@@ -53,6 +53,9 @@ function uniqueNodes(nodeList) {
 }
 
 const Dashboard = () => {
+  const location = useLocation();
+  const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+
   // Load plugin pages
   const pluginPages = getPluginPages();
 
@@ -192,6 +195,23 @@ const Dashboard = () => {
     }
   }, []);
 
+  useEffect(() => {
+    setIsNavigationOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isNavigationOpen) return undefined;
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsNavigationOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isNavigationOpen]);
+
   // Keep the dropdown in sync with saved bookmarks.
   useEffect(() => {
     const syncBookmarksToNodes = async (event) => {
@@ -315,9 +335,20 @@ const Dashboard = () => {
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
+        isNavigationOpen={isNavigationOpen}
+        onNavigationToggle={() => setIsNavigationOpen((isOpen) => !isOpen)}
       />
       <div className="dashboard-content">
-        <Sidebar />
+        <Sidebar
+          isOpen={isNavigationOpen}
+          onNavigate={() => setIsNavigationOpen(false)}
+        />
+        <button
+          className={`sidebar-backdrop${isNavigationOpen ? ' visible' : ''}`}
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setIsNavigationOpen(false)}
+        />
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}

@@ -718,3 +718,75 @@
   background-color: #adb5bd;
   cursor: not-allowed;
 }
+
+@media (max-width: 600px) {
+  .client-container {
+    margin: 0;
+    padding: 16px;
+  }
+
+  .client-container h2 {
+    margin-top: 4px;
+    font-size: 1.35rem;
+  }
+
+  .client-form {
+    margin-top: 16px;
+  }
+
+  .presets-panel {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+
+  .preset-group {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .command-buttons {
+    position: static;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .raw-text-button,
+  .paste-button,
+  .bookmark-button-small,
+  .command-info-button,
+  .send-button,
+  .view-blobs-button {
+    min-height: 44px;
+  }
+
+  .command-buttons > button {
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 16px;
+  }
+
+  .command-error-details dl {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    width: calc(100% - 20px);
+    padding: 16px;
+  }
+
+  .group-select-container,
+  .new-group-input-container {
+    flex-direction: column;
+  }
+
+  .group-select,
+  .group-name-input,
+  .new-group-button,
+  .create-group-button {
+    width: 100%;
+  }
+}

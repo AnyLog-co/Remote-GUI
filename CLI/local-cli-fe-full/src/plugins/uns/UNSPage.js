@@ -27,7 +27,7 @@ const UNSPage = ({ node }) => {
   const [showingClusters, setShowingClusters] = useState(false);
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
-  const [timeColumn, setTimeColumn] = useState('insert_timestamp'); // Time column: insert_timestamp or timestamp
+  const [timeColumn, setTimeColumn] = useState('timestamp'); // Time column: timestamp or insert_timestamp
   const [sqlData, setSqlData] = useState(null); // SQL query results
   const [sqlColumns, setSqlColumns] = useState([]); // SQL table columns
   const [sqlLoading, setSqlLoading] = useState(false); // SQL query loading state
@@ -39,6 +39,7 @@ const UNSPage = ({ node }) => {
   const [checkingChildren, setCheckingChildren] = useState(new Set()); // Track items currently being checked for children
   const childrenCheckTimeoutsRef = useRef([]); // Track all pending timeout IDs for children checks
   const autoExpandedItemsRef = useRef(new Set());
+  const sidePanelAnchorRef = useRef(null);
 
   // Load root items on mount or when node changes
   useEffect(() => {
@@ -89,6 +90,26 @@ const UNSPage = ({ node }) => {
     cacheNavigationState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node, executedRootQuery, showingClusters, layers, currentPath, expandedItems, itemsWithChildren, itemsWithoutChildren]);
+
+  useEffect(() => {
+    if (!isSidePanelOpen || !selectedItem || !sidePanelAnchorRef.current) {
+      return undefined;
+    }
+
+    const phoneLayout = window.matchMedia('(max-width: 600px)');
+    if (!phoneLayout.matches) {
+      return undefined;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      sidePanelAnchorRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isSidePanelOpen, selectedItem]);
 
   // Background check for table data when layers change
   useEffect(() => {
@@ -1017,7 +1038,7 @@ const UNSPage = ({ node }) => {
       setSqlColumns([]);
       setSqlError(null);
       setChartYKey(null); // Reset so chart defaults to policy column for new item
-      setTimeColumn('insert_timestamp'); // Reset time column when opening new item
+      setTimeColumn('timestamp'); // Reset time column when opening new item
 
       const itemData = getItemData(item);
       const hasTableMeta = itemData && itemData.dbms && itemData.table;
@@ -1340,35 +1361,37 @@ const UNSPage = ({ node }) => {
         </div>
 
         {/* Side Panel for detailed view */}
-        <UNSSidePanel
-          isOpen={isSidePanelOpen}
-          selectedItem={selectedItem}
-          conn={node}
-          sqlData={sqlData}
-          sqlColumns={sqlColumns}
-          sqlLoading={sqlLoading}
-          sqlError={sqlError}
-          timeRangeValue={timeRangeValue}
-          timeRangeUnit={timeRangeUnit}
-          timeColumn={timeColumn}
-          onTimeColumnChange={setTimeColumn}
-          onClose={() => {
-            setIsSidePanelOpen(false);
-            setSelectedItem(null);
-            setSqlData(null);
-            setSqlColumns([]);
-            setSqlError(null);
-          }}
-          onTimeRangeValueChange={setTimeRangeValue}
-          onTimeRangeUnitChange={setTimeRangeUnit}
-          onFetchTimeRange={fetchSqlData}
-          getItemName={getItemName}
-          getItemType={getItemType}
-          getItemId={getItemId}
-          getItemData={getItemData}
-          chartYKey={chartYKey}
-          onChartYKeyChange={setChartYKey}
-        />
+        <div ref={sidePanelAnchorRef} className="uns-side-panel-anchor">
+          <UNSSidePanel
+            isOpen={isSidePanelOpen}
+            selectedItem={selectedItem}
+            conn={node}
+            sqlData={sqlData}
+            sqlColumns={sqlColumns}
+            sqlLoading={sqlLoading}
+            sqlError={sqlError}
+            timeRangeValue={timeRangeValue}
+            timeRangeUnit={timeRangeUnit}
+            timeColumn={timeColumn}
+            onTimeColumnChange={setTimeColumn}
+            onClose={() => {
+              setIsSidePanelOpen(false);
+              setSelectedItem(null);
+              setSqlData(null);
+              setSqlColumns([]);
+              setSqlError(null);
+            }}
+            onTimeRangeValueChange={setTimeRangeValue}
+            onTimeRangeUnitChange={setTimeRangeUnit}
+            onFetchTimeRange={fetchSqlData}
+            getItemName={getItemName}
+            getItemType={getItemType}
+            getItemId={getItemId}
+            getItemData={getItemData}
+            chartYKey={chartYKey}
+            onChartYKeyChange={setChartYKey}
+          />
+        </div>
       </div>
 
       {hoveredItem && (
