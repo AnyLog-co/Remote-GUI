@@ -804,6 +804,7 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [customRangeStart, setCustomRangeStart] = useState('');
   const [customRangeEnd, setCustomRangeEnd] = useState('');
   const [pollPreset, setPollPreset] = useState('60');
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [customPollValue, setCustomPollValue] = useState(60);
   const [customPollUnit, setCustomPollUnit] = useState('seconds');
   const [paused, setPaused] = useState(false);
@@ -1415,14 +1416,31 @@ function EdgeDataFabricTopologyPage({ node }) {
     setRangePreset(value);
   };
 
+  const rangeSummary = rangePreset === 'custom'
+    ? 'Custom'
+    : (RANGE_OPTIONS.find(option => option.value === rangePreset)?.label || rangePreset);
+
   return (
     <div className="edf-page">
       <header className="edf-header">
-        <div>
+        <div className="edf-header-title">
           <p className="edf-eyebrow">Monitoring / topology / fabric health</p>
           <h1>Edge Data Fabric Topology</h1>
+          <button
+            className="edf-mobile-controls-toggle"
+            type="button"
+            aria-expanded={mobileControlsOpen}
+            aria-controls="edf-header-controls"
+            onClick={() => setMobileControlsOpen(value => !value)}
+          >
+            <span>Range {rangeSummary} · Poll {formatPollInterval(pollSeconds)}</span>
+            <b>{mobileControlsOpen ? 'Hide' : 'Change'}</b>
+          </button>
         </div>
-        <div className="edf-header-controls">
+        <div
+          id="edf-header-controls"
+          className={`edf-header-controls${mobileControlsOpen ? ' mobile-open' : ''}`}
+        >
           <label className="edf-field">
             <span className="edf-field-label">
               <span>Node</span>

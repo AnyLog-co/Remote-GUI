@@ -7,8 +7,20 @@ import { NavLink } from 'react-router-dom';
 import { checkNodeReachable, getLicenseInfo } from '../services/api';
 
 
-const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode, restoredFromStorage, onClearStoredData }) => {
+const TopBar = ({
+  nodes,
+  selectedNode,
+  onAddNode,
+  onRemoveNode,
+  onEditNode,
+  onSelectNode,
+  restoredFromStorage,
+  onClearStoredData,
+  isNavigationOpen = false,
+  onNavigationToggle,
+}) => {
   const [license, setLicense] = useState(null);
+  const [areMobileToolsOpen, setAreMobileToolsOpen] = useState(false);
   const [nodeReachability, setNodeReachability] = useState({
     checking: false,
     networkDisconnected: false,
@@ -58,6 +70,16 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
 
   return (
     <header className="topbar">
+      <button
+        className="navigation-toggle"
+        type="button"
+        aria-label={isNavigationOpen ? 'Close navigation' : 'Open navigation'}
+        aria-controls="dashboard-navigation"
+        aria-expanded={isNavigationOpen}
+        onClick={onNavigationToggle}
+      >
+        <span aria-hidden="true">{isNavigationOpen ? '✕' : '☰'}</span>
+      </button>
       <div className="topbar-left">
         <img src={logo} alt="App Logo" className="logo" />
         <NavLink to="about" className="topbar-license-btn">
@@ -73,13 +95,22 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
           onSelectNode={onSelectNode} 
         />
       </div>
-      <div className="topbar-right">
-        {restoredFromStorage && (
-          <div className="restoration-message">
-            <span className="restoration-icon">🔄</span>
-            <span className="restoration-text">Data restored from previous session</span>
-          </div>
-        )}
+      <button
+        className="mobile-tools-toggle"
+        type="button"
+        aria-label={areMobileToolsOpen ? 'Close header options' : 'Open header options'}
+        aria-expanded={areMobileToolsOpen}
+        onClick={() => setAreMobileToolsOpen((isOpen) => !isOpen)}
+      >
+        <span aria-hidden="true">•••</span>
+      </button>
+      <div className={`topbar-right${areMobileToolsOpen ? ' mobile-open' : ''}`}>
+        <NavLink to="about" className="mobile-license-link">
+          Licensed to: {license?.company ?? '—'}
+        </NavLink>
+        <NavLink to="bookmarks" className="mobile-header-link">
+          Update Bookmarks
+        </NavLink>
         {onClearStoredData && (
           <button 
             onClick={onClearStoredData}
@@ -94,6 +125,12 @@ const TopBar = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSe
               <NavLink to="userprofile" className={({ isActive }) => isActive ? 'active' : ''}>User Profile</NavLink>
         </nav> */}
       </div>
+      {restoredFromStorage && (
+        <div className="restoration-message" role="status">
+          <span className="restoration-icon">🔄</span>
+          <span className="restoration-text">Data restored from previous session</span>
+        </div>
+      )}
     </header>
   );
 };

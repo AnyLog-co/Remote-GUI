@@ -6,11 +6,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceArea,
   ResponsiveContainer,
 } from 'recharts';
 import './UNSPage.css';
 
-const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn, timeColumnKey = 'insert_timestamp' }, ref) => {
+const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn, timeColumnKey = 'timestamp' }, ref) => {
   const [chartViewStart, setChartViewStart] = useState(0);
   const [chartViewEnd, setChartViewEnd] = useState(null);
   const chartContainerRef = useRef(null);
@@ -139,7 +140,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
     return null;
   }
 
-  const desiredTimeKey = timeColumnKey || 'insert_timestamp';
+  const desiredTimeKey = timeColumnKey || 'timestamp';
   const timeKey = desiredTimeKey in firstRow
     ? desiredTimeKey
     : Object.keys(firstRow).find((k) => k.toLowerCase() === (desiredTimeKey || '').toLowerCase());
@@ -164,24 +165,27 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
       ? preferredColumn
       : valueCandidates[0];
 
-  // Build chart data for Recharts: [{ time, value, fullTime }] sorted by time
+  const formatTimestamp = (timestamp) => new Date(timestamp).toLocaleTimeString(
+    [],
+    { hour: '2-digit', minute: '2-digit', second: '2-digit' },
+  );
+
+  // Each plotted point is an exact { timestamp, value } observation.
   const chartData = sqlData
     .map((row) => {
       const tsRaw = row[timeKey];
-      const t = Date.parse(tsRaw);
+      const timestamp = Date.parse(tsRaw);
       const vRaw = row[effectiveYKey];
-      const v = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
-      if (Number.isNaN(t) || Number.isNaN(v)) return null;
-      const d = new Date(t);
-      const timeLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const value = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
+      if (Number.isNaN(timestamp) || Number.isNaN(value)) return null;
       return {
-        time: timeLabel,
-        value: v,
-        fullTime: d.toLocaleString(),
+        timestamp,
+        value,
+        fullTime: new Date(timestamp).toLocaleString(),
       };
     })
     .filter((p) => p !== null)
-    .sort((a, b) => new Date(a.fullTime) - new Date(b.fullTime));
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   if (chartData.length === 0) {
     return null;
@@ -194,23 +198,86 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   const startIndex = Math.max(0, Math.min(chartViewStart, endIndex - 1));
   const displayedData = canZoom ? chartData.slice(startIndex, endIndex + 1) : chartData;
   const viewRange = endIndex - startIndex + 1;
+  const { dataMin, dataMax } = chartData.reduce(
+    (bounds, point) => ({
+      dataMin: Math.min(bounds.dataMin, point.value),
+      dataMax: Math.max(bounds.dataMax, point.value),
+    }),
+    { dataMin: Infinity, dataMax: -Infinity },
+  );
+  const displayedMetricName = effectiveYKey;
+  const positiveIntervals = chartData
+    .slice(1)
+    .map((point, index) => point.timestamp - chartData[index].timestamp)
+    .filter((interval) => interval > 0)
+    .sort((a, b) => a - b);
+  const medianInterval = positiveIntervals.length > 0
+    ? positiveIntervals[Math.floor(positiveIntervals.length / 2)]
+    : null;
+  const gapThreshold = medianInterval == null
+    ? Infinity
+    : Math.max(medianInterval * 3, medianInterval + 1000);
+  const gapAreas = [];
+  const plottedData = [];
+
+  displayedData.forEach((point, index) => {
+    const previousPoint = displayedData[index - 1];
+    if (previousPoint) {
+      const interval = point.timestamp - previousPoint.timestamp;
+      const isGap = interval > gapThreshold;
+
+      if (isGap) {
+        gapAreas.push({
+          start: previousPoint.timestamp,
+          end: point.timestamp,
+        });
+        plottedData.push({
+          timestamp: previousPoint.timestamp + interval / 2,
+          value: null,
+          isGap: true,
+        });
+      }
+    }
+
+    plottedData.push({
+      ...point,
+      rawValue: point.value,
+      value: point.value,
+    });
+  });
+
+  const paddedMin = dataMin - 1;
+  const paddedMax = dataMax + 1;
+  const yDomain = [paddedMin, paddedMax];
+  const visibleTimeMin = displayedData[0].timestamp;
+  const visibleTimeMax = displayedData[displayedData.length - 1].timestamp;
+  const xDomain = visibleTimeMin === visibleTimeMax
+    ? [visibleTimeMin - 1000, visibleTimeMax + 1000]
+    : [visibleTimeMin, visibleTimeMax];
+  const xTicks = visibleTimeMin === visibleTimeMax
+    ? [visibleTimeMin]
+    : Array.from(
+        { length: 6 },
+        (_, index) => visibleTimeMin + ((visibleTimeMax - visibleTimeMin) * index) / 5,
+      );
   
   // Update refs for mouse handlers
   chartDataRef.current = chartData;
   chartViewRef.current = { start: startIndex, end: endIndex, range: viewRange, total: totalPoints };
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (!active || !payload || !payload.length) return null;
-    const point = payload[0].payload;
-    return (
-      <div className="uns-chart-tooltip">
-        <div className="uns-chart-tooltip-time">{point.fullTime}</div>
-        <div className="uns-chart-tooltip-value">
-          {effectiveYKey}: <strong>{Number(point.value).toLocaleString()}</strong>
-        </div>
-      </div>
-    );
+  const formatAxisValue = (value) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return value;
+    const absoluteValue = Math.abs(numericValue);
+    if ((absoluteValue > 0 && absoluteValue < 0.001) || absoluteValue >= 1000000) {
+      return numericValue.toExponential(2);
+    }
+    return numericValue.toLocaleString(undefined, {
+      maximumFractionDigits: absoluteValue < 10 ? 4 : 2,
+    });
   };
+
+  const formatYAxisValue = (value) => formatAxisValue(value);
 
   // Zoom in/out centered on current view
   const ZOOM_FACTOR = 1.4;
@@ -245,7 +312,12 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   return (
     <div className="uns-sql-chart">
       <div className="uns-sql-chart-header">
-        <span>Line Chart</span>
+        <span>
+          Line Chart · {displayedMetricName}
+          {gapAreas.length > 0 && (
+            <small className="uns-chart-gap-legend">Shaded gaps = no data</small>
+          )}
+        </span>
         <div className="uns-sql-chart-controls">
           <label htmlFor="uns-sql-chart-ykey">Value column:</label>
           <select
@@ -272,7 +344,9 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
                   −
                 </button>
               </div>
-              <span className="uns-sql-chart-zoom-hint">Hold and drag to move</span>
+              {viewRange < totalPoints && (
+                <span className="uns-sql-chart-zoom-hint">Drag chart to pan</span>
+              )}
             </>
           )}
         </div>
@@ -294,28 +368,60 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
       >
         <ResponsiveContainer width="100%" height={220} aspect={undefined}>
           <LineChart
-            data={displayedData}
+            data={plottedData}
             margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
             <XAxis
-              dataKey="time"
+              type="number"
+              scale="time"
+              dataKey="timestamp"
+              domain={xDomain}
+              ticks={xTicks}
               tick={{ fontSize: 11 }}
               stroke="#6c757d"
-              interval="preserveStartEnd"
+              tickFormatter={formatTimestamp}
+              minTickGap={36}
             />
             <YAxis
+              type="number"
+              domain={yDomain}
+              allowDataOverflow
               tick={{ fontSize: 11 }}
               stroke="#6c757d"
-              tickFormatter={(v) => (Number.isInteger(v) ? v : v.toFixed(2))}
+              tickFormatter={formatYAxisValue}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#007bff', strokeWidth: 1 }} />
+            {gapAreas.map((gap) => (
+              <ReferenceArea
+                key={`${gap.start}-${gap.end}`}
+                x1={gap.start}
+                x2={gap.end}
+                fill="#e9ecef"
+                fillOpacity={0.72}
+                strokeOpacity={0}
+                label={{
+                  value: 'No data',
+                  position: 'insideTop',
+                  fill: '#6c757d',
+                  fontSize: 10,
+                }}
+              />
+            ))}
+            <Tooltip
+              isAnimationActive={false}
+              labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
+              formatter={(value) => [formatAxisValue(value), displayedMetricName]}
+              cursor={{ stroke: '#007bff', strokeWidth: 1 }}
+            />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="value"
+              name={displayedMetricName}
               stroke="#007bff"
               strokeWidth={2}
-              dot={displayedData.length <= 80 ? { r: 3, fill: '#007bff' } : false}
+              isAnimationActive={false}
+              connectNulls={false}
+              dot={plottedData.length <= 80 ? { r: 3, fill: '#007bff' } : false}
               activeDot={{ r: 5, fill: '#0056b3', stroke: '#fff', strokeWidth: 2 }}
             />
           </LineChart>

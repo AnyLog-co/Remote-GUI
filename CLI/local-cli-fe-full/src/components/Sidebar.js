@@ -22,7 +22,7 @@ const formatVersion = (version) => {
   return `v${cleanVersion}`;
 };
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen = false, onNavigate }) => {
   const [pluginItems, setPluginItems] = useState(() => getPluginSidebarItems());
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
@@ -152,13 +152,18 @@ const Sidebar = () => {
       key={item.path}
       to={item.path}
       className={({ isActive }) => isActive ? 'active' : ''}
+      onClick={onNavigate}
     >
       {item.icon && `${item.icon} `}{item.name}
     </NavLink>
   );
   
   return (
-    <nav className="sidebar">
+    <nav
+      id="dashboard-navigation"
+      className={`sidebar${isOpen ? ' open' : ''}`}
+      aria-label="Main navigation"
+    >
       {topNavItems.map(renderNavItem)}
       {hasSidebarSections && topNavItems.length > 0 && bottomNavItems.length > 0 && (
         <div className="sidebar-divider" role="separator" />
@@ -166,7 +171,7 @@ const Sidebar = () => {
       {bottomNavItems.map(renderNavItem)}
 
       <div className="sidebar-version">
-        <NavLink to="about" className="sidebar-about-link">About</NavLink>
+        <NavLink to="about" className="sidebar-about-link" onClick={onNavigate}>About</NavLink>
         <span className="sidebar-version-number">
           {formatVersion(remoteGuiVersion)}
         </span>
