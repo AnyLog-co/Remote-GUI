@@ -70,6 +70,10 @@
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
     },
+    "fileuploader": {
+      "enabled": true,
+      "description": "File Uploader Plugin"
+    },
     "sshclient": {
       "enabled": true,
       "description": "SSH Client Plugin"
