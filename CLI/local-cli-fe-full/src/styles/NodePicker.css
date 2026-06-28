@@ -3,6 +3,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
   }
   
   .connection-box {
@@ -15,6 +16,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
   }
   
   .add-node-section {
@@ -34,6 +37,23 @@
     border-radius: 4px;
     background-color: white;
     min-width: 200px;
+    max-width: 360px;
+  }
+
+  .node-picker-status-error {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 8px;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    background: #f8d7da;
+    color: #721c24;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
   
   .node-picker-input {
@@ -73,6 +93,7 @@
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s;
+    flex-shrink: 0;
   }
   
   .node-picker-btn.primary {
@@ -164,5 +185,206 @@
 
   .node-picker-warning-dismiss:hover {
     color: #533f03;
+  }
+
+  .bookmark-upload-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .bookmark-upload-modal {
+    width: min(760px, 100%);
+    max-height: calc(100vh - 40px);
+    overflow: auto;
+    color: #212529;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  }
+
+  .bookmark-upload-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .bookmark-upload-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .bookmark-upload-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 4px;
+    color: #495057;
+    background: #f1f3f5;
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .bookmark-upload-close:hover {
+    background: #e9ecef;
+  }
+
+  .bookmark-upload-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .bookmark-drop-zone,
+  .bookmark-paste-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .bookmark-drop-zone {
+    min-height: 220px;
+    justify-content: center;
+    padding: 18px;
+    text-align: center;
+    border: 2px dashed #adb5bd;
+    border-radius: 6px;
+    background: #f8f9fa;
+  }
+
+  .bookmark-drop-zone.dragging {
+    border-color: #007bff;
+    background: #e7f1ff;
+  }
+
+  .bookmark-drop-zone h3,
+  .bookmark-paste-zone h3 {
+    margin: 0;
+    color: #212529;
+    font-size: 16px;
+  }
+
+  .bookmark-drop-zone p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .bookmark-drop-zone input {
+    max-width: 100%;
+    margin: 4px auto 0;
+  }
+
+  .bookmark-paste-zone textarea {
+    width: 100%;
+    min-height: 180px;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .bookmark-paste-zone textarea:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+  }
+
+  .bookmark-upload-error,
+  .bookmark-upload-status {
+    margin: 0 18px 18px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .bookmark-upload-error {
+    color: #721c24;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+  }
+
+  .bookmark-upload-status {
+    color: #155724;
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+  }
+
+  @media (max-width: 720px) {
+    .node-picker-container,
+    .connection-box,
+    .connected-node-section {
+      width: 100%;
+    }
+
+    .connection-box,
+    .connected-node-section,
+    .add-node-section {
+      align-items: stretch;
+    }
+
+    .node-picker-select,
+    .node-picker-input {
+      min-width: 0;
+      max-width: none;
+      flex: 1 1 180px;
+    }
+
+    .node-picker-btn {
+      min-height: 44px;
+    }
+
+    .bookmark-upload-options {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .connection-box,
+    .connected-node-section,
+    .add-node-section {
+      flex-direction: column;
+    }
+
+    .node-picker-select,
+    .node-picker-input,
+    .node-picker-btn {
+      width: 100%;
+      box-sizing: border-box;
+      flex-basis: auto;
+    }
+
+    .node-picker-select,
+    .node-picker-input {
+      font-size: 16px;
+    }
+
+    .bookmark-upload-backdrop {
+      padding: 10px;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .connected-node-section .node-picker-btn.secondary {
+      display: none;
+    }
   }
   

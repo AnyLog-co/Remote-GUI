@@ -6,8 +6,9 @@ import FileViewerAuto      from '../components/FileViewerAuto';
 import StreamingPlayer     from '../components/StreamingPlayer';
 import StreamingGrid       from '../components/StreamingGrid';
 import '../styles/ViewFiles.css';  // <-- import the new stylesheet
+import { getApiBaseUrl } from '../utils/runtimeConfig';
 
-const BACKEND_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+const BACKEND_URL = getApiBaseUrl();
 
 const ViewFiles = () => {
 

@@ -254,6 +254,86 @@
     margin-right: 5px;
   }
 
+  .command-error-panel {
+    position: relative;
+    margin-top: 20px;
+    padding: 14px 44px 14px 16px;
+    background-color: #fff8e6;
+    border: 1px solid #ecd391;
+    border-left: 4px solid #d69e2e;
+    border-radius: 6px;
+    color: #4f3b12;
+    box-sizing: border-box;
+  }
+
+  .command-error-heading {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .command-error-body {
+    font-size: 14px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .command-error-dismiss {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #6b571f;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .command-error-dismiss:hover {
+    background-color: rgba(107, 87, 31, 0.1);
+  }
+
+  .command-error-details {
+    margin-top: 12px;
+    font-size: 13px;
+  }
+
+  .command-error-details summary {
+    cursor: pointer;
+    color: #66501a;
+    font-weight: 600;
+  }
+
+  .command-error-details dl {
+    display: grid;
+    grid-template-columns: minmax(90px, 160px) 1fr;
+    gap: 8px 12px;
+    margin: 10px 0 0;
+    padding: 12px;
+    background-color: #fffdf6;
+    border: 1px solid #eadcae;
+    border-radius: 4px;
+    max-height: 260px;
+    overflow: auto;
+  }
+
+  .command-error-details dt {
+    color: #6b5a2a;
+    font-weight: 600;
+  }
+
+  .command-error-details dd {
+    margin: 0;
+    color: #3f3420;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   /* Streaming data styling */
   .streaming-data {
     margin-top: 20px;
@@ -637,4 +717,76 @@
 .cancel-button:disabled {
   background-color: #adb5bd;
   cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .client-container {
+    margin: 0;
+    padding: 16px;
+  }
+
+  .client-container h2 {
+    margin-top: 4px;
+    font-size: 1.35rem;
+  }
+
+  .client-form {
+    margin-top: 16px;
+  }
+
+  .presets-panel {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+
+  .preset-group {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .command-buttons {
+    position: static;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .raw-text-button,
+  .paste-button,
+  .bookmark-button-small,
+  .command-info-button,
+  .send-button,
+  .view-blobs-button {
+    min-height: 44px;
+  }
+
+  .command-buttons > button {
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 16px;
+  }
+
+  .command-error-details dl {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    width: calc(100% - 20px);
+    padding: 16px;
+  }
+
+  .group-select-container,
+  .new-group-input-container {
+    flex-direction: column;
+  }
+
+  .group-select,
+  .group-name-input,
+  .new-group-button,
+  .create-group-button {
+    width: 100%;
+  }
 }

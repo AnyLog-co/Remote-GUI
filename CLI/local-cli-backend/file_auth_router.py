@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict
 import file_auth
-from classes import BookmarkUpdateRequest, PresetGroup, PresetGroupID, Preset, PresetID
+from classes import BookmarkNodeUpdateRequest, BookmarkUpdateRequest, PresetGroup, PresetGroupID, Preset, PresetID
 
 # Create router
 file_auth_router = APIRouter(prefix="/auth", tags=["file-auth"])
@@ -35,6 +35,12 @@ def delete_bookmarked_node(conn: Dict):
 def update_bookmark_description(request: BookmarkUpdateRequest):
     """Update bookmark description for the default user"""
     response = file_auth.file_update_bookmark_description(request.node, request.description)
+    return {"data": response}
+
+@file_auth_router.post("/update-bookmark-node/")
+def update_bookmark_node(request: BookmarkNodeUpdateRequest):
+    """Update bookmark node address for the default user"""
+    response = file_auth.file_update_bookmark_node(request.old_node, request.new_node)
     return {"data": response}
 
 @file_auth_router.post("/set-default-bookmark/")

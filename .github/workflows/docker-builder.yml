@@ -27,7 +27,11 @@ jobs:
 
       - name: Get setup.cfg
         run: |
-          git checkout origin/os-dev -- setup.cfg
+          if git show origin/${{ github.ref_name }}:setup.cfg > /dev/null 2>&1; then
+            git checkout origin/${{ github.ref_name }} -- setup.cfg
+          else
+            git checkout origin/pre-develop -- setup.cfg
+          fi
 
       - name: Run version update script
         run: python .github/scripts/generate_git_id.py

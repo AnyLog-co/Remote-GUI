@@ -1,7 +1,9 @@
 // File-based service (no authentication required)
 // Simplified version that works without user authentication
 
-const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+import { getApiBaseUrl } from '../utils/runtimeConfig';
+
+const API_URL = getApiBaseUrl();
 
 // Default user ID for all operations
 const DEFAULT_USER_ID = "default-user-12345";
@@ -158,8 +160,8 @@ export async function deleteBookmarkedNode({ node }) {
 }
 
 export async function updateBookmarkDescription({ node, description }) {
-    if (!node || !description) {
-        throw new Error('Missing node or description parameter');
+    if (!node) {
+        throw new Error('Missing node parameter');
     }
 
     try {
@@ -184,6 +186,40 @@ export async function updateBookmarkDescription({ node, description }) {
         return data;
     } catch (error) {
         console.error('Error updating bookmark description:', error);
+        throw error;
+    }
+}
+
+export async function updateBookmarkNode({ oldNode, newNode }) {
+    if (!oldNode || !newNode) {
+        throw new Error('Missing old or new node parameter');
+    }
+
+    try {
+        const requestBody = {
+            old_node: oldNode,
+            new_node: newNode
+        };
+
+        const response = await fetch(`${API_URL}/auth/update-bookmark-node/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server responded with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data?.data?.error) {
+            throw new Error(data.data.error);
+        }
+        return data;
+    } catch (error) {
+        console.error('Error updating bookmark node:', error);
         throw error;
     }
 }

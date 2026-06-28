@@ -1,35 +1,24 @@
 // src/components/NodePicker.js
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getConnectedNodes, checkNodeReachable } from '../services/api';
-import { bookmarkNode } from '../services/file_auth';
 import '../styles/NodePicker.css';
-import { isLoggedIn } from '../services/file_auth';
 import { useEffect } from 'react';
 import { validateNodeConnection } from '../utils/connectionAddress';
 
-const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, onSelectNode, onBookmarkAdded }) => {
+const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNode, onRemoveNode, onEditNode, onSelectNode }) => {
+  const navigate = useNavigate();
   const [newNode, setNewNode] = useState('');
   const [connectionError, setConnectionError] = useState(null);
   const [connectWarning, setConnectWarning] = useState(null);
   const [error, setError] = useState(null);
   const [local, setLocal] = useState(false);
-  const [bookmarkMsg, setBookmarkMsg] = useState(null);
   const [showAddNode, setShowAddNode] = useState(false);
   const [checking, setChecking] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState(null);
   const abortRef = useRef(null);
-
-  useEffect(() => {
-    if (!bookmarkMsg) return;
-
-    const timer = setTimeout(() => {
-      setBookmarkMsg(null);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [bookmarkMsg]);
 
   useEffect(() => {
     if (!connectWarning) return;
@@ -46,7 +35,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
     setConnectWarning(null);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const check = validateNodeConnection(newNode);
     if (!check.ok) {
       setConnectionError(check.message);
@@ -55,7 +44,13 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
     setConnectionError(null);
     setConnectWarning(null);
 
-    onAddNode(check.value);
+    try {
+      await onAddNode(check.value);
+    } catch (err) {
+      console.error('Failed to add node:', err);
+      setConnectionError(err.message || 'Failed to add node.');
+      return;
+    }
     onSelectNode(check.value);
     setNewNode('');
     setShowAddNode(false);
@@ -85,7 +80,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       const fetchedNodes = await getConnectedNodes({ selectedNode });
       for (const node of fetchedNodes.data) {
         console.log(node);
-        onAddNode(node);
+        await onAddNode(node);
       }
 
     } catch (err) {
@@ -111,34 +106,7 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
     onSelectNode(makeLocal(selectedNode, isLocal));
   }
 
-  const handleBookmark = async () => {
-    if (!selectedNode) {
-      setBookmarkMsg('No node selected to bookmark.');
-      return;
-    }
-    setError(null);
-    setBookmarkMsg(null);
-
-    try {
-      if (isLoggedIn()) {
-        await bookmarkNode({ node: selectedNode });
-        setBookmarkMsg(`Bookmarked ${selectedNode}!`);
-        
-        // Dispatch event to refresh bookmarks globally
-        window.dispatchEvent(new Event('bookmark-refresh'));
-        
-        // Call the callback to refresh bookmarks in parent component
-        if (onBookmarkAdded) {
-          onBookmarkAdded();
-        }
-      }
-    } catch (err) {
-      console.error('Bookmark failed:', err);
-      setError('Could not bookmark node. Try again.');
-    }
-  };
-
-  const handleEditSave = () => {
+  const handleEditSave = async () => {
     const check = validateNodeConnection(editValue);
     if (!check.ok) {
       setEditError(check.message);
@@ -148,7 +116,13 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       setEditError('That node is already in the list.');
       return;
     }
-    onEditNode(editingNode, check.value);
+    try {
+      await onEditNode(editingNode, check.value);
+    } catch (err) {
+      console.error('Failed to edit node:', err);
+      setEditError(err.message || 'Failed to edit node.');
+      return;
+    }
     setEditingNode(null);
     setEditValue('');
     setEditError(null);
@@ -160,13 +134,20 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
     setEditError(null);
   };
 
-  const handleDropdownChange = (e) => {
+  const handleDropdownChange = async (e) => {
     const value = e.target.value;
     if (value === 'add-node') {
       setShowAddNode(true);
       setEditingNode(null);
     } else if (value === 'remove-node') {
-      if (onRemoveNode) onRemoveNode(selectedNode);
+      if (onRemoveNode) {
+        try {
+          await onRemoveNode(selectedNode);
+        } catch (err) {
+          console.error('Failed to remove node:', err);
+          setError(err.message || 'Failed to remove node.');
+        }
+      }
     } else if (value === 'edit-node') {
       setEditingNode(selectedNode);
       setEditValue(selectedNode);
@@ -178,6 +159,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
       setEditingNode(null);
     }
   };
+
+  const displayedNodes = [...new Set(nodes.filter(Boolean))];
 
   // If no node is selected, show connection input
   if (!selectedNode) {
@@ -205,11 +188,6 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
             {connectionError}
           </div>
         )}
-        {bookmarkMsg && (
-          <div className="bookmark-msg">
-            {bookmarkMsg}
-          </div>
-        )}
         {error && (
           <div className="error">
             <span className="error-dismiss" onClick={() => setError(null)}>×</span>
@@ -229,8 +207,8 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
           value={selectedNode}
           onChange={handleDropdownChange}
         >
-          {nodes.map((node, index) => (
-            <option key={index} value={node}>
+          {displayedNodes.map((node) => (
+            <option key={node} value={node}>
               {node}
             </option>
           ))}
@@ -238,9 +216,17 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
           {onEditNode && <option value="edit-node">~ Edit Current Node</option>}
           {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
         </select>
-        
-        <button className="node-picker-btn secondary" onClick={handleBookmark}>
-          Bookmark
+        {networkDisconnected && (
+          <span className="node-picker-status-error" title="The selected node failed the get status network request.">
+            Not network connected
+          </span>
+        )}
+        <button
+          className="node-picker-btn secondary"
+          onClick={() => navigate('/dashboard/bookmarks')}
+          type="button"
+        >
+          Update Bookmarks
         </button>
       </div>
 
@@ -317,11 +303,6 @@ const NodePicker = ({ nodes, selectedNode, onAddNode, onRemoveNode, onEditNode, 
         </div>
       )}
 
-      {bookmarkMsg && (
-        <div className="bookmark-msg">
-          {bookmarkMsg}
-        </div>
-      )}
       {error && (
         <div className="error">
           <span className="error-dismiss" onClick={() => setError(null)}>×</span>

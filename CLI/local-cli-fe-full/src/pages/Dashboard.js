@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import Client from './Client';
@@ -26,9 +26,36 @@ import {
 import PolicyGeneratorPage from './Security';
 // import Presets from './Presets';
 import '../styles/Dashboard.css'; // dashboard-specific styles
-import { getBookmarks } from '../services/file_auth';
+import {
+  bookmarkNode,
+  deleteBookmarkedNode,
+  getBookmarks,
+  setDefaultBookmark,
+  updateBookmarkNode,
+} from '../services/file_auth';
+
+const DEFAULT_BOOKMARK_PORT = '32149';
+
+function getBrowserDefaultNode() {
+  const host = window.location.hostname;
+  if (!host || host === '0.0.0.0') {
+    return null;
+  }
+  return `${host}:${DEFAULT_BOOKMARK_PORT}`;
+}
+
+function uniqueNodes(nodeList) {
+  if (!Array.isArray(nodeList)) {
+    return [];
+  }
+
+  return [...new Set(nodeList.filter(Boolean))];
+}
 
 const Dashboard = () => {
+  const location = useLocation();
+  const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+
   // Load plugin pages
   const pluginPages = getPluginPages();
 
@@ -40,7 +67,16 @@ const Dashboard = () => {
   // Load initial state from localStorage
   const [nodes, setNodes] = useState(() => {
     const savedNodes = localStorage.getItem('dashboard-nodes');
-    return savedNodes ? JSON.parse(savedNodes) : [];
+    if (!savedNodes) {
+      return [];
+    }
+
+    try {
+      return uniqueNodes(JSON.parse(savedNodes));
+    } catch (error) {
+      console.warn('Failed to parse saved dashboard nodes:', error);
+      return [];
+    }
   });
 
   const [selectedNode, setSelectedNode] = useState(() => {
@@ -114,7 +150,13 @@ const Dashboard = () => {
 
   // Save nodes to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('dashboard-nodes', JSON.stringify(nodes));
+    const dedupedNodes = uniqueNodes(nodes);
+    if (dedupedNodes.length !== nodes.length) {
+      setNodes(dedupedNodes);
+      return;
+    }
+
+    localStorage.setItem('dashboard-nodes', JSON.stringify(dedupedNodes));
   }, [nodes]);
 
   // Save selectedNode to localStorage whenever it changes
@@ -132,7 +174,9 @@ const Dashboard = () => {
   useEffect(() => {
     if (selectedNode && !nodes.includes(selectedNode)) {
       console.log('Selected node not in nodes list, adding it:', selectedNode);
-      setNodes((prevNodes) => [...prevNodes, selectedNode]);
+      setNodes((prevNodes) => (
+        prevNodes.includes(selectedNode) ? prevNodes : [...prevNodes, selectedNode]
+      ));
     }
   }, [selectedNode, nodes]);
 
@@ -151,63 +195,134 @@ const Dashboard = () => {
     }
   }, []);
 
-  // On first load, if no selected node, use default bookmark if present
   useEffect(() => {
-    (async () => {
+    setIsNavigationOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isNavigationOpen) return undefined;
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsNavigationOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isNavigationOpen]);
+
+  // Keep the dropdown in sync with saved bookmarks.
+  useEffect(() => {
+    const syncBookmarksToNodes = async (event) => {
       try {
-        if (!selectedNode) {
-          const res = await getBookmarks();
-          const list = Array.isArray(res.data) ? res.data : [];
-          const def = list.find((b) => b.is_default);
-          if (def && def.node) {
-            setSelectedNode(def.node);
-            if (!nodes.includes(def.node)) {
-              setNodes((prev) => [...prev, def.node]);
-            }
+        const preferDefault = event?.detail?.preferDefault === true;
+        const res = await getBookmarks();
+        let list = Array.isArray(res.data) ? res.data : [];
+
+        if (list.length === 0) {
+          const browserDefaultNode = getBrowserDefaultNode();
+          if (browserDefaultNode) {
+            await bookmarkNode({ node: browserDefaultNode });
+            await setDefaultBookmark({ node: browserDefaultNode });
+            list = [{ node: browserDefaultNode, is_default: true }];
           }
         }
+
+        const bookmarkNodes = uniqueNodes(list.map((bookmark) => bookmark.node));
+        setNodes((prev) => uniqueNodes([...prev, ...bookmarkNodes]));
+
+        setSelectedNode((currentSelectedNode) => {
+          const defaultBookmark = list.find((bookmark) => bookmark.is_default && bookmark.node);
+          if (preferDefault && defaultBookmark?.node) {
+            return defaultBookmark.node;
+          }
+
+          if (currentSelectedNode) {
+            return currentSelectedNode;
+          }
+
+          return defaultBookmark?.node || bookmarkNodes[0] || null;
+        });
       } catch (e) {
         // ignore failures silently
       }
-    })();
-    // run only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    };
+
+    syncBookmarksToNodes({ detail: { preferDefault: true } });
+    window.addEventListener('bookmark-refresh', syncBookmarksToNodes);
+
+    return () => {
+      window.removeEventListener('bookmark-refresh', syncBookmarksToNodes);
+    };
   }, []);
 
   // Utility function to clear all stored data
   const clearStoredData = () => {
     localStorage.removeItem('dashboard-nodes');
     localStorage.removeItem('dashboard-selected-node');
+    [
+      'mcpclient_chat_history',
+      'mcpclient_config',
+      'mcpclient_chats_v2',
+      'mcpclient_active_chat_id',
+      'client-command-draft',
+      'uns-navigation-state',
+    ].forEach((key) => localStorage.removeItem(key));
+    window.dispatchEvent(new Event('mcpclient-storage-cleared'));
+    window.dispatchEvent(new Event('uns-storage-cleared'));
     setNodes([]);
     setSelectedNode(null);
     console.log('Cleared all stored dashboard data');
   };
 
   // Adds a new node (if valid and not already in the list)
-  const handleAddNode = (newNode) => {
-    if (newNode && !nodes.includes(newNode)) {
-      setNodes((nodes) => [...nodes, newNode]);
-      // Optionally set it as selected:
-      // setSelectedNode(newNode);
+  const handleAddNode = async (newNode) => {
+    if (!newNode) {
+      return;
     }
+
+    setNodes((prevNodes) => (
+      prevNodes.includes(newNode) ? prevNodes : [...prevNodes, newNode]
+    ));
+    await bookmarkNode({ node: newNode });
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
-  const handleRemoveNode = (nodeToRemove) => {
+  const handleRemoveNode = async (nodeToRemove) => {
+    if (!nodeToRemove) {
+      return;
+    }
+
     setNodes((prev) => prev.filter((n) => n !== nodeToRemove));
     if (selectedNode === nodeToRemove) {
       const remaining = nodes.filter((n) => n !== nodeToRemove);
       setSelectedNode(remaining.length > 0 ? remaining[0] : null);
     }
+    await deleteBookmarkedNode({ node: nodeToRemove });
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
-  const handleEditNode = (oldNode, newNode) => {
+  const handleEditNode = async (oldNode, newNode) => {
+    if (!oldNode || !newNode) {
+      return;
+    }
+
     setNodes((prev) => prev.map((n) => (n === oldNode ? newNode : n)));
     if (selectedNode === oldNode) {
       setSelectedNode(newNode);
     }
+    try {
+      await updateBookmarkNode({ oldNode, newNode });
+    } catch (error) {
+      if (error.message === 'Bookmark not found') {
+        await bookmarkNode({ node: newNode });
+      } else {
+        throw error;
+      }
+    }
+    window.dispatchEvent(new Event('bookmark-refresh'));
   };
-
-
 
   return (
     <div className="dashboard-container">
@@ -220,9 +335,20 @@ const Dashboard = () => {
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
+        isNavigationOpen={isNavigationOpen}
+        onNavigationToggle={() => setIsNavigationOpen((isOpen) => !isOpen)}
       />
       <div className="dashboard-content">
-        <Sidebar selectedNode={selectedNode} />
+        <Sidebar
+          isOpen={isNavigationOpen}
+          onNavigate={() => setIsNavigationOpen(false)}
+        />
+        <button
+          className={`sidebar-backdrop${isNavigationOpen ? ' visible' : ''}`}
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setIsNavigationOpen(false)}
+        />
         <div className="dashboard-main">
           <Routes>
             {/* Core Feature Routes - Filtered by feature config */}
@@ -237,6 +363,10 @@ const Dashboard = () => {
                       element={
                         <route.component
                           node={selectedNode}
+                          nodes={nodes}
+                          onAddNode={handleAddNode}
+                          onRemoveNode={handleRemoveNode}
+                          onEditNode={handleEditNode}
                           onSelectNode={(node) => {
                             console.log('Selecting node from bookmarks:', node);
                             // Add node to nodes list if not already present
@@ -304,6 +434,7 @@ const Dashboard = () => {
                 ))}
 
             {/* Default view - Use first enabled feature or Client */}
+            
             <Route
               path="*"
               element={(() => {

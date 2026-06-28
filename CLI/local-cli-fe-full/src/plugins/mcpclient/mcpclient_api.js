@@ -1,7 +1,9 @@
 // MCP Client Plugin API
 // API client for MCP Client plugin
 
-const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
+
+const API_URL = getApiBaseUrl();
 
 /**
  * Get MCP client information
@@ -38,12 +40,16 @@ export const getMCPStatus = async () => {
 /**
  * List available models from Docker Ollama container or local Ollama
  */
-export const listModels = async (llmEndpoint = null) => {
+export const listModels = async (llmEndpoint = null, llmApiType = 'auto', llmBearerToken = '') => {
   try {
-    const url = llmEndpoint 
-      ? `${API_URL}/mcpclient/models?llm_endpoint=${encodeURIComponent(llmEndpoint)}`
-      : `${API_URL}/mcpclient/models`;
-    const response = await fetch(url);
+    const params = new URLSearchParams();
+    if (llmEndpoint) params.set('llm_endpoint', llmEndpoint);
+    if (llmApiType) params.set('llm_api_type', llmApiType);
+    const query = params.toString();
+    const url = `${API_URL}/mcpclient/models${query ? `?${query}` : ''}`;
+    const headers = {};
+    if (llmBearerToken?.trim()) headers['X-LLM-Bearer-Token'] = llmBearerToken.trim();
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || `HTTP error! status: ${response.status}`);
@@ -66,7 +72,7 @@ export const listModelsFromDocker = async (llmEndpoint) => {
 /**
  * Connect to AnyLog MCP
  */
-export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEndpoint = null) => {
+export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEndpoint = null, llmApiType = 'auto', llmBearerToken = '') => {
   try {
     const response = await fetch(`${API_URL}/mcpclient/connect`, {
       method: 'POST',
@@ -77,6 +83,8 @@ export const connectMCP = async (anylogSseUrl = null, ollamaModel = null, llmEnd
         anylog_sse_url: anylogSseUrl,
         ollama_model: ollamaModel,
         llm_endpoint: llmEndpoint,
+        llm_api_type: llmApiType,
+        llm_bearer_token: llmBearerToken?.trim() || null,
       }),
     });
     if (!response.ok) {
@@ -146,7 +154,7 @@ export const listMCPTools = async () => {
 /**
  * Ask a question to the MCP agent
  */
-export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, conversationHistory = null, llmEndpoint = null, abortSignal = null) => {
+export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, conversationHistory = null, llmEndpoint = null, llmApiType = 'auto', abortSignal = null, timeoutSeconds = null, llmBearerToken = '') => {
   try {
     console.log('🌐 Sending request to MCP...');
     const response = await fetch(`${API_URL}/mcpclient/ask`, {
@@ -160,6 +168,9 @@ export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, co
         ollama_model: ollamaModel,
         conversation_history: conversationHistory,
         llm_endpoint: llmEndpoint,
+        llm_api_type: llmApiType,
+        timeout_seconds: timeoutSeconds,
+        llm_bearer_token: llmBearerToken?.trim() || null,
       }),
       signal: abortSignal,
     });
@@ -182,3 +193,153 @@ export const askMCP = async (prompt, anylogSseUrl = null, ollamaModel = null, co
   }
 };
 
+/**
+ * Ask a question and stream progress/answer events from the MCP agent.
+ */
+export const askMCPStream = async ({
+  prompt,
+  anylogSseUrl = null,
+  ollamaModel = null,
+  conversationHistory = null,
+  llmEndpoint = null,
+  llmApiType = 'auto',
+  streamRequestId = null,
+  timeoutSeconds = null,
+  llmBearerToken = '',
+  abortSignal = null,
+  onEvent = () => {},
+  maxReconnects = 5,
+}) => {
+  let buffer = '';
+  let finalAnswer = '';
+  let lastSeq = 0;
+  let sawTerminalEvent = false;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const processBuffer = (flush = false) => {
+    const events = buffer.split('\n\n');
+    buffer = flush ? '' : events.pop() || '';
+
+    events.forEach((eventText) => {
+      const dataLine = eventText
+        .split('\n')
+        .find((line) => line.startsWith('data: '));
+
+      if (!dataLine) return;
+
+      try {
+        const event = JSON.parse(dataLine.slice(6));
+        if (event.seq && event.seq <= lastSeq) return;
+        if (event.seq) lastSeq = event.seq;
+        if (event.type === 'delta') {
+          finalAnswer += event.content || '';
+        } else if (event.type === 'done') {
+          finalAnswer = event.answer || finalAnswer;
+          sawTerminalEvent = true;
+        } else if (event.type === 'error') {
+          sawTerminalEvent = true;
+        }
+        onEvent(event);
+      } catch (error) {
+        console.warn('Failed to parse MCP stream event:', error, eventText);
+      }
+    });
+  };
+
+  for (let attempt = 0; attempt <= maxReconnects; attempt += 1) {
+    try {
+      const response = await fetch(`${API_URL}/mcpclient/ask-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify({
+          prompt,
+          anylog_sse_url: anylogSseUrl,
+          ollama_model: ollamaModel,
+          conversation_history: conversationHistory,
+          llm_endpoint: llmEndpoint,
+          llm_api_type: llmApiType,
+          stream_request_id: streamRequestId,
+          timeout_seconds: timeoutSeconds,
+          llm_bearer_token: llmBearerToken?.trim() || null,
+        }),
+        signal: abortSignal,
+      });
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.detail || error.message || errorMessage;
+        } catch (_) {
+          try {
+            const text = await response.text();
+            if (text) errorMessage = text;
+          } catch (_) {
+            // Use default error message.
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (!response.body) {
+        throw new Error('Streaming response is not available in this browser.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        processBuffer(false);
+      }
+
+      buffer += decoder.decode();
+      processBuffer(true);
+
+      if (sawTerminalEvent) {
+        return { success: true, answer: finalAnswer };
+      }
+      throw new Error('Stream disconnected before the request completed.');
+    } catch (error) {
+      if (abortSignal?.aborted || error.name === 'AbortError') {
+        throw error;
+      }
+      if (attempt >= maxReconnects) {
+        error.streamDisconnected = true;
+        throw error;
+      }
+      buffer = '';
+      onEvent({
+        type: 'status',
+        message: `Stream disconnected. Reconnecting (${attempt + 1}/${maxReconnects})...`,
+      });
+      await sleep(Math.min(1000 * (attempt + 1), 5000));
+    }
+  }
+
+  return { success: true, answer: finalAnswer };
+};
+
+export const cancelMCPStream = async (streamRequestId) => {
+  if (!streamRequestId) return { success: true, cancelled: false };
+  const response = await fetch(`${API_URL}/mcpclient/ask-stream/${encodeURIComponent(streamRequestId)}/cancel`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    try {
+      const error = await response.json();
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch (_) {
+      // Use default error message.
+    }
+    throw new Error(errorMessage);
+  }
+  return response.json();
+};

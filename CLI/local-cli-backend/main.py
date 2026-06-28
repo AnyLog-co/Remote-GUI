@@ -1,6 +1,8 @@
 # (venv) ➜  Remote-GUI git:(bchain-optimz) ✗ uvicorn CLI.local-cli-backend.main:app --reload
 import configparser
+import importlib
 import os
+import re
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,16 +30,21 @@ from parsers import parse_response, check_format_table_sql_query
 from classes import *
 from sql_router import sql_router
 from file_auth_router import file_auth_router
-from file_auth import file_bookmark_node, file_set_default_bookmark
+from file_auth import (
+    file_bookmark_node,
+    file_ensure_default_bookmark,
+    file_set_default_bookmark,
+)
 # Import plugin loader
-from plugins.loader import load_plugins, get_plugin_order
+from plugins.loader import load_plugins, get_plugin_order, get_plugin_order_config, get_plugin_label_overrides
 # Import feature config loader
 from feature_config_loader import (
     is_feature_enabled, 
     is_plugin_enabled,
     get_enabled_features,
     get_enabled_plugins,
-    load_feature_config
+    load_feature_config,
+    reload_config
 )
 
 
@@ -156,6 +163,7 @@ async def feature_check_middleware(request: Request, call_next):
     
     # Check main endpoints
     endpoint_feature_map = {
+        "/send-command": "client",
         "/send-command/": "client",
         "/get-network-nodes/": "client",
         "/monitor/": "monitor",
@@ -201,8 +209,9 @@ else:
 # Load plugins (will respect feature config internally)
 load_plugins(app)
 
-# Bootstrap default connection from REST_CONN env var
-REST_CONN = os.getenv("REST_CONN")
+# Bootstrap default connection from REST_CONN env var.
+# REMOTE_CONN is accepted as a legacy/generator alias.
+REST_CONN = os.getenv("REST_CONN") or os.getenv("REMOTE_CONN")
 if REST_CONN:
     REST_CONN = REST_CONN.strip()
     print(f"🔗 REST_CONN detected: {REST_CONN}")
@@ -211,7 +220,9 @@ if REST_CONN:
     result = file_set_default_bookmark(REST_CONN)
     print(f"   Set default result: {result}")
 else:
-    print("ℹ️  No REST_CONN env var set — skipping default connection bootstrap")
+    print("ℹ️  No REST_CONN env var set — checking empty bookmarks fallback")
+    result = file_ensure_default_bookmark()
+    print(f"   Empty bookmarks fallback result: {result}")
 
 def _get_remote_gui_version() -> str:
     """Read Remote-GUI version from setup.cfg [metadata] version (fallback: version)."""
@@ -233,10 +244,18 @@ def _get_remote_gui_version() -> str:
     return '—'
 
 
+def _clean_version(version: str) -> str:
+    """Return only the version number, omitting branch/build suffixes."""
+    if not version or version == '—':
+        return '—'
+    match = re.match(r'^\s*v?([0-9]+(?:\.[0-9]+)*(?:[-+][0-9A-Za-z.-]+)?)', version)
+    return match.group(1) if match else version.strip().split()[0]
+
+
 @app.get("/version")
 def get_version_endpoint():
     """Return Remote-GUI version from setup.cfg for the About page."""
-    rg = _get_remote_gui_version()
+    rg = _clean_version(_get_remote_gui_version())
     return {"version": rg, "remote_gui_version": rg}
 
 
@@ -249,6 +268,7 @@ def get_env_config_endpoint():
         ("FRONTEND_URL", "Allowed CORS origin(s)", "* (all origins)"),
         ("ALLOWED_HOSTS", "Allowed hosts", "*"),
         ("REST_CONN", "Default AnyLog node connection", None),
+        ("REMOTE_CONN", "Default AnyLog node connection alias", None),
         ("REMOTE_GUI_FE", "Frontend port", "31800"),
         ("REMOTE_GUI_BE", "Backend port", "8080"),
         ("GRAFANA_URL", "Grafana dashboard URL", "http://23.239.12.151:3100/dashboards/f/ddu0qc65783r4a/smart-city"),
@@ -277,7 +297,7 @@ def get_env_config_endpoint():
 @app.get("/feature-config")
 def get_feature_config_endpoint():
     """Get the feature configuration for frontend"""
-    config = load_feature_config()
+    config = reload_config()
     # Return only enabled status for each feature/plugin
     features_status = {
         name: {"enabled": data.get("enabled", True)}
@@ -294,13 +314,42 @@ def get_feature_config_endpoint():
     }
 
 # Plugin order endpoint for frontend
+def get_plugin_router_labels(plugins_dir: str) -> Dict[str, str]:
+    """Discover plugin display labels from each plugin router's first FastAPI tag."""
+    labels = {}
+    if not os.path.isdir(plugins_dir):
+        return labels
+
+    for plugin_name in sorted(os.listdir(plugins_dir)):
+        plugin_path = os.path.join(plugins_dir, plugin_name)
+        router_path = os.path.join(plugin_path, f"{plugin_name}_router.py")
+        if not os.path.isdir(plugin_path) or not os.path.exists(router_path):
+            continue
+
+        try:
+            module = importlib.import_module(f"plugins.{plugin_name}.{plugin_name}_router")
+            router = getattr(module, "api_router", None)
+            tags = getattr(router, "tags", None) or []
+            if tags:
+                labels[plugin_name] = str(tags[0])
+        except Exception as exc:
+            print(f"⚠️  Warning: Could not inspect plugin router label for {plugin_name}: {exc}")
+
+    return labels
+
 @app.get("/plugins/order")
 def get_plugin_order_endpoint():
     """Get the plugin order configuration for frontend display"""
     plugins_dir = os.path.join(BASE_DIR, 'plugins')
+    plugin_config = get_plugin_order_config(plugins_dir) or {}
     plugin_order = get_plugin_order(plugins_dir)
+    plugin_labels = get_plugin_router_labels(plugins_dir)
+    plugin_labels.update(get_plugin_label_overrides(plugins_dir))
     return {
         "plugin_order": plugin_order if plugin_order else [],
+        "sidebar_order": plugin_config.get("sidebar_order", []),
+        "sidebar_sections": plugin_config.get("sidebar_sections", {}),
+        "plugin_labels": plugin_labels,
         "has_custom_order": plugin_order is not None
     }
 
@@ -340,6 +389,7 @@ def should_force_raw_text(command_text: str) -> bool:
 
 # NODE API ENDPOINTS
 
+@app.post("/send-command", include_in_schema=False)
 @app.post("/send-command/")
 def send_command(conn: Connection, command: Command):
     # Feature check (also handled by middleware, but double-check for safety)
