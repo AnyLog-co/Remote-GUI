@@ -3,6 +3,231 @@
   background: #f5f5f5;
   color: #333;
   font-family: "Segoe UI", Arial, sans-serif;
+  --edf-map-stop-1: #f8fbff;
+  --edf-map-stop-2: #edf4fb;
+  --edf-map-land: #e5edf5;
+  --edf-map-land-alt: #dbe8f5;
+  --edf-map-grid: #d8e2ee;
+  --edf-map-hub-fill: #e7f3ff;
+  --edf-map-hub-stroke: #8fc5ff;
+  --edf-map-connector: #9db9d6;
+  --edf-map-label: #333333;
+  --edf-map-muted-label: #6c757d;
+  --edf-map-hub-label: #004085;
+}
+
+:root[data-theme='dark'] .edf-page {
+  background: var(--color-bg);
+  color: var(--color-text);
+  --edf-map-stop-1: #0b1627;
+  --edf-map-stop-2: #101f35;
+  --edf-map-land: #15243a;
+  --edf-map-land-alt: #1b2c45;
+  --edf-map-grid: #2b3f5c;
+  --edf-map-hub-fill: rgba(102, 179, 255, 0.12);
+  --edf-map-hub-stroke: #66b3ff;
+  --edf-map-connector: #6d8bb1;
+  --edf-map-label: #f7fbff;
+  --edf-map-muted-label: #c4cfdf;
+  --edf-map-hub-label: #92c9ff;
+}
+
+:root[data-theme='dark'] .edf-header,
+:root[data-theme='dark'] .edf-panel,
+:root[data-theme='dark'] .edf-api-log {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .edf-header h1,
+:root[data-theme='dark'] .edf-panel-title-row h2,
+:root[data-theme='dark'] .edf-panel-header,
+:root[data-theme='dark'] .edf-api-log-header,
+:root[data-theme='dark'] .edf-mobile-controls-toggle {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .edf-eyebrow,
+:root[data-theme='dark'] .edf-control-group,
+:root[data-theme='dark'] .edf-field,
+:root[data-theme='dark'] .edf-field-hint,
+:root[data-theme='dark'] .edf-panel-title-row span,
+:root[data-theme='dark'] .edf-map-nav span,
+:root[data-theme='dark'] .edf-map-toolbar span,
+:root[data-theme='dark'] .edf-footer-status,
+:root[data-theme='dark'] .edf-panel-header b,
+:root[data-theme='dark'] .edf-api-log-header b {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .edf-panel-title-row,
+:root[data-theme='dark'] .edf-panel-header,
+:root[data-theme='dark'] .edf-api-log-header,
+:root[data-theme='dark'] .edf-empty,
+:root[data-theme='dark'] .edf-map-wrap,
+:root[data-theme='dark'] .edf-mobile-controls-toggle {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .edf-field input,
+:root[data-theme='dark'] .edf-field select,
+:root[data-theme='dark'] .edf-field textarea,
+:root[data-theme='dark'] .edf-modal-metric-picker select,
+:root[data-theme='dark'] .edf-segment,
+:root[data-theme='dark'] .edf-action,
+:root[data-theme='dark'] .edf-map-nav button,
+:root[data-theme='dark'] .edf-map-toolbar button {
+  background: #07111f;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-segment button,
+:root[data-theme='dark'] .edf-map-toolbar button,
+:root[data-theme='dark'] .edf-map-nav button,
+:root[data-theme='dark'] .edf-action {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-segment button {
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .edf-segment button.active,
+:root[data-theme='dark'] .edf-map-toolbar button.active {
+  background: rgba(102, 179, 255, 0.2);
+  color: var(--color-primary-hover);
+}
+
+:root[data-theme='dark'] .edf-action:hover,
+:root[data-theme='dark'] .edf-map-toolbar button:hover,
+:root[data-theme='dark'] .edf-map-nav button:hover,
+:root[data-theme='dark'] .edf-panel-header i,
+:root[data-theme='dark'] .edf-api-log-header i,
+:root[data-theme='dark'] .edf-mobile-controls-toggle b {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .edf-action.primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+:root[data-theme='dark'] .edf-action.is-paused {
+  border-color: #d6a82f;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+:root[data-theme='dark'] .edf-error {
+  background: var(--color-error-bg);
+  border-color: #b84250;
+  color: var(--color-error-text);
+}
+
+:root[data-theme='dark'] .edf-query-button,
+:root[data-theme='dark'] .edf-table-wrap,
+:root[data-theme='dark'] .edf-modal-shell,
+:root[data-theme='dark'] .edf-modal-metric-picker,
+:root[data-theme='dark'] .edf-query-item,
+:root[data-theme='dark'] .edf-status-tooltip {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-query-button:hover {
+  background: var(--component-hover-bg);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .edf-table th,
+:root[data-theme='dark'] .edf-modal-shell header,
+:root[data-theme='dark'] .edf-query-item > div {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .edf-table td {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-table tr:hover td {
+  background: var(--component-hover-bg);
+}
+
+:root[data-theme='dark'] .edf-generated-query,
+:root[data-theme='dark'] .edf-query-item pre {
+  background: #07111f;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-removable-metric button,
+:root[data-theme='dark'] .edf-query-card-head button,
+:root[data-theme='dark'] .edf-modal-shell header button {
+  background: var(--component-button-secondary-bg);
+  border-color: var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}
+
+:root[data-theme='dark'] .edf-node-label,
+:root[data-theme='dark'] .edf-topology-hub {
+  fill: var(--edf-map-label);
+}
+
+:root[data-theme='dark'] .edf-node-sub {
+  fill: var(--edf-map-muted-label);
+}
+
+:root[data-theme='dark'] .edf-topology-hub {
+  fill: var(--edf-map-hub-label);
+}
+
+:root[data-theme='dark'] .edf-topology-list button {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .edf-topology-list button:hover {
+  background: var(--component-hover-bg);
+  border-color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .edf-topology-list small {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .edf-catalog-card,
+:root[data-theme='dark'] .edf-kpi-grid article,
+:root[data-theme='dark'] .edf-node-metric-card,
+:root[data-theme='dark'] .edf-modal-item {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-catalog-card strong,
+:root[data-theme='dark'] .edf-modal-item strong {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .edf-catalog-card span,
+:root[data-theme='dark'] .edf-catalog-card small,
+:root[data-theme='dark'] .edf-kpi-grid span,
+:root[data-theme='dark'] .edf-kpi-grid small,
+:root[data-theme='dark'] .edf-modal-metrics span {
+  color: var(--color-text-muted);
 }
 
 .edf-page * {
@@ -729,12 +954,15 @@
 
 .edf-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .edf-table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: auto;
 }
 
 .edf-table th {
@@ -745,12 +973,14 @@
   font-size: 12px;
   text-align: left;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .edf-table td {
   padding: 11px 12px;
   border-bottom: 1px solid #e9ecef;
   color: #333;
+  white-space: nowrap;
 }
 
 .edf-table tr:hover td {
@@ -1276,9 +1506,52 @@
   }
 
   .edf-map-wrap {
-    height: 320px;
-    margin-left: 12px;
-    margin-right: 12px;
+    height: 280px;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .edf-modal {
+    align-items: flex-start;
+    justify-content: center;
+    padding: 10px;
+    overflow-y: auto;
+  }
+
+  .edf-modal-shell,
+  .edf-query-modal-shell {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 10px;
+  }
+
+  .edf-modal-shell header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px;
+  }
+
+  .edf-modal-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .edf-modal-metrics {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .edf-modal-grid > div,
+  .edf-query-list {
+    padding: 12px;
+  }
+
+  .edf-table {
+    min-width: 720px;
+  }
+
+  .edf-topology-list {
+    grid-template-columns: 1fr;
   }
 
   .edf-resource-row,

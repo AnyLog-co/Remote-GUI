@@ -358,17 +358,17 @@
 }
 
 .uns-layer-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface-muted, #f1f1f1);
   border-radius: 4px;
 }
 
 .uns-layer-content::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--color-border-strong, #888);
   border-radius: 4px;
 }
 
 .uns-layer-content::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-primary, #555);
 }
 
 /* Side Panel Styles */
@@ -552,17 +552,17 @@
 }
 
 .uns-side-panel-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface-muted, #f1f1f1);
   border-radius: 4px;
 }
 
 .uns-side-panel-content::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--color-border-strong, #888);
   border-radius: 4px;
 }
 
 .uns-side-panel-content::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-primary, #555);
 }
 
 .uns-side-panel-json pre::-webkit-scrollbar {
@@ -571,17 +571,17 @@
 }
 
 .uns-side-panel-json pre::-webkit-scrollbar-track {
-  background: #e9ecef;
+  background: var(--color-surface-muted, #e9ecef);
   border-radius: 4px;
 }
 
 .uns-side-panel-json pre::-webkit-scrollbar-thumb {
-  background: #adb5bd;
+  background: var(--color-border-strong, #adb5bd);
   border-radius: 4px;
 }
 
 .uns-side-panel-json pre::-webkit-scrollbar-thumb:hover {
-  background: #868e96;
+  background: var(--color-primary, #868e96);
 }
 
 /* SQL Query Section Styles */
@@ -903,17 +903,17 @@
 }
 
 .uns-sql-table-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface-muted, #f1f1f1);
   border-radius: 4px;
 }
 
 .uns-sql-table-container::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--color-border-strong, #888);
   border-radius: 4px;
 }
 
 .uns-sql-table-container::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-primary, #555);
 }
 
 
@@ -921,9 +921,9 @@
 .uns-sql-chart {
   margin-top: 16px;
   padding: 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--color-border, #dee2e6);
   border-radius: 4px;
-  background-color: #ffffff;
+  background-color: var(--color-surface, #ffffff);
 }
 
 .uns-sql-chart-header {
@@ -932,13 +932,13 @@
   justify-content: space-between;
   margin-bottom: 8px;
   font-size: 13px;
-  color: #495057;
+  color: var(--color-text, #495057);
 }
 
 .uns-chart-gap-legend {
   display: inline-block;
   margin-left: 8px;
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
   font-size: 11px;
   font-weight: 400;
 }
@@ -951,35 +951,37 @@
 
 .uns-sql-chart-controls label {
   font-size: 12px;
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
 }
 
 .uns-sql-chart-controls select {
   padding: 4px 8px;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--color-border, #ced4da);
   border-radius: 4px;
   font-size: 12px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #212529);
 }
 
 .uns-sql-chart-export-btn {
   margin-left: 8px;
   padding: 4px 10px;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--color-border, #ced4da);
   border-radius: 4px;
-  background: #fff;
+  background: var(--color-surface, #fff);
   font-size: 12px;
-  color: #495057;
+  color: var(--color-text, #495057);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .uns-sql-chart-export-btn:hover {
-  background: #e9ecef;
-  border-color: #adb5bd;
+  background: var(--color-surface-muted, #e9ecef);
+  border-color: var(--color-border-strong, #adb5bd);
 }
 
 .uns-sql-chart-export-btn:active {
-  background: #dee2e6;
+  background: var(--color-border, #dee2e6);
 }
 
 .uns-sql-chart-zoom-btns {
@@ -993,12 +995,12 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--color-border, #ced4da);
   border-radius: 4px;
-  background: #fff;
+  background: var(--color-surface, #fff);
   font-size: 18px;
   line-height: 1;
-  color: #495057;
+  color: var(--color-text, #495057);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1007,17 +1009,17 @@
 }
 
 .uns-sql-chart-zoom-btn:hover {
-  background: #e9ecef;
-  border-color: #adb5bd;
+  background: var(--color-surface-muted, #e9ecef);
+  border-color: var(--color-border-strong, #adb5bd);
 }
 
 .uns-sql-chart-zoom-btn:active {
-  background: #dee2e6;
+  background: var(--color-border, #dee2e6);
 }
 
 .uns-sql-chart-zoom-hint {
   font-size: 11px;
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
   margin-left: 8px;
 }
 
@@ -1037,7 +1039,7 @@
   margin-top: 8px;
   height: 12px;
   width: 100%;
-  background: #e9ecef;
+  background: var(--color-surface-muted, #e9ecef);
   border-radius: 6px;
   position: relative;
   cursor: pointer;
@@ -1048,7 +1050,7 @@
   top: 2px;
   bottom: 2px;
   min-width: 24px;
-  background: #6c757d;
+  background: var(--color-border-strong, #6c757d);
   border-radius: 4px;
   cursor: grab;
   pointer-events: auto;
@@ -1056,11 +1058,11 @@
 
 .uns-sql-chart-scrollbar-thumb:active {
   cursor: grabbing;
-  background: #495057;
+  background: var(--color-primary, #495057);
 }
 
 .uns-sql-chart-scrollbar-thumb:hover {
-  background: #5a6268;
+  background: var(--color-primary-hover, #5a6268);
 }
 
 /* Recharts container – fixed height keeps aspect ratio, no stretch */
@@ -1071,8 +1073,8 @@
 /* Tooltip on hover over data points */
 .uns-chart-tooltip {
   padding: 8px 12px;
-  background: #fff;
-  border: 1px solid #dee2e6;
+  background: var(--chart-tooltip-bg, #fff);
+  border: 1px solid var(--chart-tooltip-border, #dee2e6);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   font-size: 12px;
@@ -1080,16 +1082,16 @@
 }
 
 .uns-chart-tooltip-time {
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
   margin-bottom: 4px;
 }
 
 .uns-chart-tooltip-value {
-  color: #212529;
+  color: var(--color-text, #212529);
 }
 
 .uns-chart-tooltip-value strong {
-  color: #007bff;
+  color: var(--color-primary, #007bff);
 }
 
 /* Data Nodes section */
@@ -1146,42 +1148,43 @@
 }
 
 .uns-data-nodes-table-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--color-surface-muted, #f1f1f1);
   border-radius: 4px;
 }
 
 .uns-data-nodes-table-container::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--color-border-strong, #888);
   border-radius: 4px;
 }
 
 .uns-data-nodes-table-container::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-primary, #555);
 }
 
 /* Column details below chart */
 .uns-column-details {
   margin-top: 16px;
   padding: 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--color-border, #dee2e6);
   border-radius: 4px;
-  background: #f8f9fa;
+  background: var(--color-surface, #f8f9fa);
+  color: var(--color-text, #212529);
 }
 
 .uns-column-details-title {
   margin: 0 0 10px 0;
   font-size: 14px;
-  color: #495057;
+  color: var(--color-heading, #495057);
 }
 
 .uns-column-details-loading {
   font-size: 12px;
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
 }
 
 .uns-column-details-error {
   font-size: 12px;
-  color: #dc3545;
+  color: var(--color-danger, #dc3545);
 }
 
 .uns-column-details-stats {
@@ -1192,11 +1195,11 @@
 
 .uns-column-details-stat {
   font-size: 13px;
-  color: #212529;
+  color: var(--color-text, #212529);
 }
 
 .uns-column-details-label {
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
   margin-right: 4px;
 }
 
@@ -1223,7 +1226,7 @@
 
 .uns-column-details-ts {
   font-size: 11px;
-  color: #6c757d;
+  color: var(--color-text-muted, #6c757d);
 }
 
 @media (max-width: 600px) {

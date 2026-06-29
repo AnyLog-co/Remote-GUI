@@ -614,3 +614,129 @@
 .custom-policy-type-input:hover {
   border-color: #cbd5e1;
 }
+
+/* Dark mode: Policy Creator */
+:root[data-theme='dark'] .policy-generator {
+  background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 34%),
+    var(--color-bg) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(h1, h2, h3, h4, label, strong, .dynamic-policy-form-label) {
+  color: var(--color-heading) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(.subtitle, .node-info, .node-warning, .description, p) {
+  color: var(--color-text-muted) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(
+  .container,
+  .policy-selector,
+  .dynamic-policy-form,
+  .custom-policy-layout,
+  .authenticated-node-info,
+  .policy-details,
+  .node-change-interface,
+  .assignment-manager-section,
+  .loading-content,
+  .response,
+  .member-policy-signing-info,
+  .info-box
+) {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(
+  .policy-preview,
+  .response pre,
+  .policy-details pre,
+  .custom-policy-layout .policy-preview,
+  .array-fallback,
+  .text-input-fallback,
+  .array-fallback .array-input
+) {
+  background: var(--component-code-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--component-code-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(
+  input,
+  select,
+  textarea,
+  .custom-policy-type-input,
+  .dynamic-policy-form input,
+  .dynamic-policy-form select,
+  .dynamic-policy-form textarea,
+  .node-change-interface .form-group input,
+  .fallback-input
+) {
+  background-color: var(--component-input-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(select option) {
+  background-color: var(--component-input-bg) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(input:focus, select:focus, textarea:focus, .custom-policy-type-input:focus) {
+  border-color: var(--color-primary) !important;
+  box-shadow: var(--focus-ring) !important;
+  outline: none !important;
+}
+
+:root[data-theme='dark'] .policy-generator .mode-switcher {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .mode-btn {
+  background: transparent !important;
+  color: var(--color-text-muted) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .mode-btn:hover {
+  background: var(--component-hover-bg) !important;
+  color: var(--color-heading) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .mode-btn.active,
+:root[data-theme='dark'] .policy-generator .mode-btn.active:hover {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-contrast) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .field-clear-btn {
+  background: var(--color-surface-muted) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .field-clear-btn:hover {
+  background: var(--color-error-bg) !important;
+  border-color: #b84250 !important;
+  color: var(--color-error-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator .custom-select-input {
+  background: rgba(102, 179, 255, 0.14) !important;
+  border-color: var(--color-primary) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(.error, .response.error) {
+  background: var(--color-error-bg) !important;
+  border-color: #b84250 !important;
+  color: var(--color-error-text) !important;
+}
+
+:root[data-theme='dark'] .policy-generator :where(.success, .response.success) {
+  background: var(--component-success-bg) !important;
+  border-color: var(--color-success) !important;
+  color: var(--color-success) !important;
+}

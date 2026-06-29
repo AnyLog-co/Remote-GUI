@@ -115,69 +115,40 @@ const Monitor = ({ node }) => {
   return (
     <div className="monitor-container">
       <h2>Monitor Node Section</h2>
-      <div style={{ marginBottom: '10px' }}>
+      <div className="monitor-summary">
         <p>
           <strong>Connected Node:</strong> {node}
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+        <div className="monitor-controls-row">
           <label htmlFor="rerunRate">
             {isMonitoring ? 'Refresh Rate (seconds):' : 'Refresh Paused:'}
           </label>
           <input
+            className="monitor-rate-input"
             id="rerunRate"
             type="number"
             min="0"
             step="20"
             value={rerunRate}
             onChange={handleRerunRateChange}
-            style={{ 
-              width: '100px', 
-              backgroundColor: isMonitoring ? 'white' : '#f5f5f5',
-              color: isMonitoring ? 'black' : '#666'
-            }}
             disabled={!isMonitoring}
           />
-          {inputError && <span style={{ color: 'red' }}>{inputError} <span className="error-dismiss" onClick={() => setInputError(null)}>×</span></span>}
+          {inputError && <span className="monitor-error-text">{inputError} <span className="error-dismiss" onClick={() => setInputError(null)}>×</span></span>}
           {isMonitoring && (
-            <span style={{ 
-              color: '#28a745', 
-              fontSize: '14px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}>
-              <span style={{ 
-                width: '8px', 
-                height: '8px', 
-                backgroundColor: '#28a745', 
-                borderRadius: '50%',
-                animation: 'pulse 2s infinite'
-              }}></span>
+            <span className="monitoring-status status-active">
+              <span className="status-indicator status-active-dot"></span>
               Monitoring Active
             </span>
           )}
           {!isMonitoring && (
-            <span style={{ 
-              color: '#dc3545', 
-              fontSize: '14px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}>
-              <span style={{ 
-                width: '8px', 
-                height: '8px', 
-                backgroundColor: '#dc3545', 
-                borderRadius: '50%'
-              }}></span>
+            <span className="monitoring-status status-paused">
+              <span className="status-indicator status-paused-dot"></span>
               Monitoring Paused
             </span>
           )}
         </div>
       </div>
-      <div style={{ marginBottom: '10px' }}>
+      <div className="monitor-actions-row">
         <button 
           onClick={handleStartMonitoring}
           className="monitor-button start-monitoring-btn"
@@ -188,13 +159,12 @@ const Monitor = ({ node }) => {
         <button 
           onClick={handleStopMonitoring} 
           className="monitor-button stop-monitoring-btn"
-          style={{ marginLeft: '10px' }}
           disabled={!isMonitoring}
         >
           Stop Monitoring
         </button>
       </div>
-      {error && <p style={{ color: 'red' }}><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</p>}
+      {error && <p className="monitor-error-text"><span className="error-dismiss" onClick={() => setError(null)}>×</span>{error}</p>}
       {data && data.length > 0 && <MonitorTable data={data} />}
     </div>
   );

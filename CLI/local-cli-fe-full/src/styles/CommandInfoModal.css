@@ -287,6 +287,78 @@
   transform: translateY(-1px);
 }
 
+:root[data-theme='dark'] .modal-content {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .modal-header,
+:root[data-theme='dark'] .modal-footer {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .modal-header h2,
+:root[data-theme='dark'] .info-section h3,
+:root[data-theme='dark'] .curl-command-item h4,
+:root[data-theme='dark'] .info-row strong {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .close-button {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .close-button:hover {
+  background: var(--component-hover-bg);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .platform-indicator {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .command-display,
+:root[data-theme='dark'] .url-display,
+:root[data-theme='dark'] .connection-info,
+:root[data-theme='dark'] .curl-command-item {
+  background: var(--component-code-bg);
+  border-color: var(--color-border);
+  color: var(--component-code-text);
+}
+
+:root[data-theme='dark'] .command-display code,
+:root[data-theme='dark'] .url-display code,
+:root[data-theme='dark'] .info-row code {
+  color: var(--component-code-text);
+}
+
+:root[data-theme='dark'] .info-row code {
+  background: var(--color-surface-muted);
+}
+
+:root[data-theme='dark'] .curl-command-item .command-display {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .qr-image {
+  border-color: var(--color-border);
+  background: #ffffff;
+}
+
+:root[data-theme='dark'] .close-modal-button {
+  background: var(--component-button-secondary-bg);
+  border: 1px solid var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}
+
+:root[data-theme='dark'] .close-modal-button:hover {
+  background: var(--component-button-secondary-hover-bg);
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .modal-content {

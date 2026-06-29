@@ -95,9 +95,10 @@ const ConnectionView = ({ conn }) => {
                 }),
                 display: 'flex',
                 flexDirection: 'column',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--color-border)',
                 borderRadius: '8px',
-                backgroundColor: 'white',
+                backgroundColor: 'var(--color-surface)',
+                color: 'var(--color-text)',
                 transition: 'background-color 0.2s',
                 overflow: 'hidden',
               }}

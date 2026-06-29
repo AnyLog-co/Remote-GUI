@@ -72,7 +72,9 @@ const GrafanaPage = ({ node }) => {
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '100vh',
-        padding: '20px'
+        padding: '20px',
+        backgroundColor: 'var(--color-bg)',
+        color: 'var(--color-text)'
       }}>
         <p>Loading Grafana configuration...</p>
       </div>
@@ -87,27 +89,28 @@ const GrafanaPage = ({ node }) => {
       flexDirection: 'column',
       padding: '0',
       overflow: 'hidden',
-      backgroundColor: '#f8f9fa'
+      backgroundColor: 'var(--color-bg)',
+      color: 'var(--color-text)'
     }}>
       {/* Header with title and button */}
       <div style={{ 
         position: 'relative',
         padding: '20px',
-        backgroundColor: '#ffffff',
-        borderBottom: '2px solid #007bff',
+        backgroundColor: 'var(--color-surface)',
+        borderBottom: '2px solid var(--color-primary)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         flexShrink: 0,
         zIndex: 100,
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+        boxShadow: 'var(--shadow-card)'
       }}>
         <h2 style={{ 
           margin: 0,
-          color: '#333',
+          color: 'var(--color-heading)',
           fontSize: '24px',
           fontWeight: '600',
-          borderBottom: '2px solid #007bff',
+          borderBottom: '2px solid var(--color-primary)',
           paddingBottom: '10px',
           display: 'inline-block'
         }}>
@@ -148,11 +151,11 @@ const GrafanaPage = ({ node }) => {
       {error && (
         <div style={{ 
           padding: '15px 20px', 
-          backgroundColor: '#f8d7da', 
-          border: '1px solid #f5c6cb',
+          backgroundColor: 'var(--color-danger-soft)', 
+          border: '1px solid var(--color-danger-border)',
           borderRadius: '6px',
           margin: '20px',
-          color: '#721c24',
+          color: 'var(--color-danger)',
           flexShrink: 0,
           fontWeight: '500'
         }}>
@@ -164,11 +167,11 @@ const GrafanaPage = ({ node }) => {
       {iframeError && (
         <div style={{ 
           padding: '20px', 
-          backgroundColor: '#fff3cd', 
-          border: '1px solid #ffeaa7',
+          backgroundColor: 'var(--color-warning-soft)', 
+          border: '1px solid var(--color-warning-border)',
           borderRadius: '6px',
           margin: '20px',
-          color: '#856404',
+          color: 'var(--color-warning-text)',
           flexShrink: 0
         }}>
           <span className="error-dismiss" onClick={() => setIframeError(false)}>×</span>
@@ -199,11 +202,11 @@ const GrafanaPage = ({ node }) => {
             width: '100%',
             height: '100%',
             maxWidth: '1400px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #dee2e6',
+            backgroundColor: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
             borderRadius: '8px',
             overflow: 'hidden',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+            boxShadow: 'var(--shadow-card)',
             position: 'relative'
           }}>
             {iframeError ? (
@@ -215,12 +218,13 @@ const GrafanaPage = ({ node }) => {
                 justifyContent: 'center',
                 alignItems: 'center',
                 padding: '40px',
-                backgroundColor: '#f8f9fa',
+                backgroundColor: 'var(--color-surface-muted)',
+                color: 'var(--color-text)',
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: '48px', marginBottom: '20px' }}>🔒</div>
-                <h3 style={{ color: '#495057', marginBottom: '10px' }}>Unable to Load Grafana</h3>
-                <p style={{ color: '#6c757d', marginBottom: '20px' }}>
+                <h3 style={{ color: 'var(--color-heading)', marginBottom: '10px' }}>Unable to Load Grafana</h3>
+                <p style={{ color: 'var(--color-text-muted)', marginBottom: '20px' }}>
                   The Grafana server is blocking iframe embedding. Click the button above to open in a new tab.
                 </p>
                 <button 

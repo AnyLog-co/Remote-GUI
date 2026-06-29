@@ -71,4 +71,51 @@
     -webkit-user-select: none;
     user-select: none;
   }
+
+:root[data-theme='dark'] .data-table-wrapper {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: 8px;
+}
+
+:root[data-theme='dark'] .data-table {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .data-table th,
+:root[data-theme='dark'] .data-table td {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .data-table th {
+  background-color: var(--color-surface-muted);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .data-table tbody tr {
+  background-color: var(--color-surface);
+}
+
+:root[data-theme='dark'] .data-table tbody tr:nth-child(even) {
+  background-color: #0a1220;
+}
+
+:root[data-theme='dark'] .data-table tbody tr:hover {
+  background-color: var(--component-hover-bg);
+}
+
+:root[data-theme='dark'] .col-resizer {
+  background: transparent;
+}
+
+:root[data-theme='dark'] .col-resizer:hover,
+:root[data-theme='dark'] .col-resizer:focus {
+  background: var(--color-primary);
+}
+
+:root[data-theme='dark'] .toggle-internal-columns {
+  border: 1px solid var(--color-border) !important;
+}
   

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './EdgeDataFabricTopologyPage.css';
+import usePageVisibility from '../../hooks/usePageVisibility';
 import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTables, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
 
 export const pluginMetadata = {
@@ -711,16 +712,16 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
       <svg className="edf-topology-svg" viewBox="0 0 900 430" role="img" aria-label={`${selectedSite.name} topology`}>
         <defs>
           <linearGradient id="edfLocalGradient" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#f8fbff" />
-            <stop offset="100%" stopColor="#edf4fb" />
+            <stop offset="0%" stopColor="var(--edf-map-stop-1)" />
+            <stop offset="100%" stopColor="var(--edf-map-stop-2)" />
           </linearGradient>
         </defs>
         <rect width="900" height="430" rx="10" fill="url(#edfLocalGradient)" />
-        <g stroke="#d8e2ee" strokeWidth="1">
+        <g stroke="var(--edf-map-grid)" strokeWidth="1">
           {[120, 240, 360, 480, 600, 720].map(x => <line key={`v-${x}`} x1={x} y1="38" x2={x} y2="392" />)}
           {[95, 170, 245, 320].map(y => <line key={`h-${y}`} x1="52" y1={y} x2="848" y2={y} />)}
         </g>
-        <circle cx="450" cy="215" r="62" fill="#e7f3ff" stroke="#8fc5ff" strokeWidth="2" />
+        <circle cx="450" cy="215" r="62" fill="var(--edf-map-hub-fill)" stroke="var(--edf-map-hub-stroke)" strokeWidth="2" />
         <text x="450" y="220" textAnchor="middle" className="edf-topology-hub">{selectedSite.name}</text>
         {nodes.map((node, index) => {
           const angle = (-90 + index * (360 / nodes.length)) * (Math.PI / 180);
@@ -728,7 +729,7 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
           const y = 215 + Math.sin(angle) * 132;
           return (
             <g key={node.id}>
-              <line x1="450" y1="215" x2={x} y2={y} stroke="#9db9d6" strokeWidth="2" strokeDasharray="8 7" />
+              <line x1="450" y1="215" x2={x} y2={y} stroke="var(--edf-map-connector)" strokeWidth="2" strokeDasharray="8 7" />
               <g
                 className="edf-svg-button"
                 role="button"
@@ -758,15 +759,15 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
     <svg className="edf-topology-svg" viewBox="0 0 900 430" role="img" aria-label="Global edge topology map">
       <defs>
         <linearGradient id="edfMapGradient" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#eef5fc" />
+          <stop offset="0%" stopColor="var(--edf-map-stop-1)" />
+          <stop offset="100%" stopColor="var(--edf-map-stop-2)" />
         </linearGradient>
       </defs>
       <rect width="900" height="430" rx="10" fill="url(#edfMapGradient)" />
-      <path d="M86 174 C148 86 256 99 322 150 C372 188 406 148 472 140 C584 126 622 205 710 188 C780 174 824 214 840 270 C760 310 670 286 596 316 C494 358 434 315 342 326 C230 338 148 300 86 250 Z" fill="#e5edf5" stroke="#c8d7e6" strokeWidth="2" />
-      <path d="M153 210 C226 186 279 214 338 237 C286 281 210 286 147 256 Z" fill="#dbe8f5" />
-      <path d="M532 197 C608 174 700 210 746 252 C686 276 590 268 520 242 Z" fill="#dbe8f5" />
-      <g stroke="#d7e2ed" strokeWidth="1">
+      <path d="M86 174 C148 86 256 99 322 150 C372 188 406 148 472 140 C584 126 622 205 710 188 C780 174 824 214 840 270 C760 310 670 286 596 316 C494 358 434 315 342 326 C230 338 148 300 86 250 Z" fill="var(--edf-map-land)" stroke="var(--edf-map-grid)" strokeWidth="2" />
+      <path d="M153 210 C226 186 279 214 338 237 C286 281 210 286 147 256 Z" fill="var(--edf-map-land-alt)" />
+      <path d="M532 197 C608 174 700 210 746 252 C686 276 590 268 520 242 Z" fill="var(--edf-map-land-alt)" />
+      <g stroke="var(--edf-map-grid)" strokeWidth="1">
         {[150, 300, 450, 600, 750].map(x => <line key={`v-${x}`} x1={x} y1="48" x2={x} y2="382" />)}
         {[105, 185, 265, 345].map(y => <line key={`h-${y}`} x1="60" y1={y} x2="840" y2={y} />)}
       </g>
@@ -796,6 +797,7 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
 }
 
 function EdgeDataFabricTopologyPage({ node }) {
+  const pageVisible = usePageVisibility();
   const [nodeAddress, setNodeAddress] = useState(node || '');
   const [rangePreset, setRangePreset] = useState('24h');
   const [customRangeMode, setCustomRangeMode] = useState('relative');
@@ -807,7 +809,7 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [customPollValue, setCustomPollValue] = useState(60);
   const [customPollUnit, setCustomPollUnit] = useState('seconds');
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(true);
   const [labels, setLabels] = useState(true);
   const [mapSize, setMapSize] = useState('m');
   const [selectedSite, setSelectedSite] = useState(null);
@@ -1160,14 +1162,14 @@ function EdgeDataFabricTopologyPage({ node }) {
   }, [nodeAddress, rangeHours, companyFilter, pollSeconds, runCatalogQueries]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (pageVisible) refresh();
+  }, [pageVisible, refresh]);
 
   useEffect(() => {
-    if (paused) return undefined;
+    if (paused || !pageVisible) return undefined;
     const id = window.setInterval(refresh, pollSeconds * 1000);
     return () => window.clearInterval(id);
-  }, [paused, pollSeconds, refresh]);
+  }, [pageVisible, paused, pollSeconds, refresh]);
 
   const togglePanel = key => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1419,6 +1421,11 @@ function EdgeDataFabricTopologyPage({ node }) {
   const rangeSummary = rangePreset === 'custom'
     ? 'Custom'
     : (RANGE_OPTIONS.find(option => option.value === rangePreset)?.label || rangePreset);
+  const autoRefreshStatus = !pageVisible
+    ? 'Auto-refresh suspended while tab is hidden'
+    : paused
+      ? 'Auto-refresh paused'
+      : `Auto-refresh every ${formatPollInterval(pollSeconds)}`;
 
   return (
     <div className="edf-page">
@@ -1812,7 +1819,7 @@ function EdgeDataFabricTopologyPage({ node }) {
         </section>
 
         <div className="edf-footer-status">
-          <span>{paused ? 'Auto-refresh paused' : `Auto-refresh every ${formatPollInterval(pollSeconds)}`}</span>
+          <span>{autoRefreshStatus}</span>
           <span>{lastRefresh ? `Last refresh ${lastRefresh.toLocaleTimeString()}` : 'Waiting for first refresh'}</span>
         </div>
       </main>
