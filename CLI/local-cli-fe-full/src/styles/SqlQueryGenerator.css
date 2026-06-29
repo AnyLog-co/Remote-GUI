@@ -1816,3 +1816,199 @@ input:checked + .toggle-slider:before {
   overflow-y: auto;
   margin: 0;
 } 
+
+/* Theme-aware component surfaces */
+.sql-query-generator {
+  color: var(--color-text);
+}
+
+.sql-query-generator h2,
+.sql-query-generator h3,
+.sql-query-generator h4,
+.sql-query-generator label,
+.sql-query-generator .toggle-label,
+.sql-query-generator .panel-header h3,
+.sql-query-generator .columns-header h3,
+.sql-query-generator .time-series-header h3,
+.sql-query-generator .section-header h4,
+.sql-query-generator .query-panel h3,
+.sql-query-generator .results-panel h3,
+.sql-query-generator .additional-content h4,
+.sql-query-generator .node-selection-preview h4 {
+  color: var(--color-heading);
+}
+
+.sql-query-generator :where(
+  .query-description,
+  .section-description,
+  .column-type,
+  .execution-time
+) {
+  color: var(--color-text-muted);
+}
+
+.sql-query-generator :where(
+  .selection-panel,
+  .columns-panel,
+  .query-options-panel,
+  .increments-panel,
+  .advanced-panel,
+  .query-panel,
+  .results-panel,
+  .target-nodes-panel,
+  .additional-content
+) {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.sql-query-generator :where(
+  .columns-header,
+  .column-actions,
+  .time-series-header,
+  .panel-header,
+  .toggle-advanced,
+  .increments-config,
+  .where-section,
+  .period-item,
+  .aggregation-item,
+  .join-item,
+  .operator-filter-item,
+  .node-selection-preview,
+  .results-panel h3,
+  .results-table th,
+  .results-raw
+) {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.sql-query-generator :where(
+  .column-mode-toggle,
+  .time-series-mode-toggle,
+  .column-item,
+  .where-condition-item,
+  .additional-content-text
+) {
+  background: var(--color-surface-elevated);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.sql-query-generator :where(
+  select,
+  input,
+  textarea,
+  .query-textarea,
+  .filter-value-input,
+  .table-name-input,
+  .field-name-input,
+  .logical-operator-select
+) {
+  background: var(--component-input-bg, var(--color-surface));
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.sql-query-generator select option {
+  background: var(--component-input-bg, var(--color-surface));
+  color: var(--color-text);
+}
+
+.sql-query-generator :where(select, input, textarea):disabled {
+  background: var(--component-disabled-bg, var(--color-surface-muted));
+  color: var(--component-disabled-text, var(--color-text-muted));
+  opacity: 1;
+}
+
+.sql-query-generator :where(select, input, textarea, .query-textarea):focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.sql-query-generator :where(.mode-btn) {
+  color: var(--color-text-muted);
+}
+
+.sql-query-generator :where(.mode-btn:hover, .toggle-advanced:hover, .column-item:hover) {
+  background: var(--component-hover-bg, var(--color-surface-muted));
+  border-color: var(--color-primary);
+  color: var(--color-heading);
+}
+
+.sql-query-generator :where(.mode-btn.active, .column-item.selected, .direction-btn.active) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.sql-query-generator :where(
+  .aggregation-preview,
+  .period-preview,
+  .increments-info,
+  .operators-info,
+  .preview-box
+) {
+  background: var(--component-info-bg, rgba(0, 123, 255, 0.1));
+  border-left-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.sql-query-generator :where(
+  .aggregation-preview code,
+  .period-preview code,
+  .increments-info p,
+  .increments-info code,
+  .operators-info p,
+  .preview-box code,
+  .filter-preview code
+) {
+  color: var(--color-primary);
+}
+
+.sql-query-generator :where(.filter-preview) {
+  background: var(--component-success-bg, rgba(34, 163, 74, 0.12));
+  border-left-color: var(--color-success);
+}
+
+.sql-query-generator :where(.warning-message, .group-by-warning) {
+  background: var(--color-warning-bg);
+  border-color: #d6a82f;
+  color: var(--color-warning-text);
+}
+
+.sql-query-generator :where(.error-message, .execution-error) {
+  background: var(--color-error-bg);
+  border-color: #b84250;
+  color: var(--color-error-text);
+}
+
+.sql-query-generator :where(.results-table td, .results-table th) {
+  border-color: var(--color-border);
+}
+
+.sql-query-generator .results-table tr:hover {
+  background: var(--component-hover-bg, var(--color-surface-muted));
+}
+
+:root[data-theme='dark'] .sql-query-generator {
+  --component-input-bg: #07111f;
+  --component-disabled-bg: #4b5566;
+  --component-disabled-text: #c7d2e3;
+  --component-hover-bg: #1f2c44;
+  --component-info-bg: rgba(102, 179, 255, 0.16);
+  --component-success-bg: rgba(74, 222, 128, 0.14);
+}
+
+:root[data-theme='dark'] .sql-query-generator .column-mode-toggle .mode-btn:not(.active),
+:root[data-theme='dark'] .sql-query-generator .time-series-mode-toggle .mode-btn:not(.active),
+:root[data-theme='dark'] .sql-query-generator .direction-btn:not(.active) {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--color-text-muted) !important;
+  border-color: transparent !important;
+}

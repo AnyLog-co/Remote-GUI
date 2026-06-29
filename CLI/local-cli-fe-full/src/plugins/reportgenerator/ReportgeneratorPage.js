@@ -567,7 +567,7 @@ const ReportgeneratorPage = ({ node }) => {
               <p>Selected {importFiles.length} file(s):</p>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
                 {importFiles.map((file, index) => (
-                  <li key={index} style={{ padding: '0.25rem 0', color: '#495057', fontSize: '0.9rem' }}>
+                  <li key={index} style={{ padding: '0.25rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
                     {file.name} {file.name.endsWith('.zip') && '(ZIP archive)'}
                   </li>
                 ))}
@@ -604,14 +604,14 @@ const ReportgeneratorPage = ({ node }) => {
 
           {/* Conflict Resolution Dialog */}
           {conflictingFiles.length > 0 && currentConflictIndex < conflictingFiles.length && !replaceAll && (
-            <div className="file-info" style={{ marginTop: '1rem', border: '2px solid #ffc107', backgroundColor: '#fff3cd' }}>
-              <h4 style={{ margin: '0 0 1rem 0', color: '#856404' }}>
+            <div className="file-info" style={{ marginTop: '1rem', border: '2px solid var(--color-warning-border)', backgroundColor: 'var(--color-warning-soft)' }}>
+              <h4 style={{ margin: '0 0 1rem 0', color: 'var(--color-warning-text)' }}>
                 File Already Exists ({currentConflictIndex + 1} of {conflictingFiles.length})
               </h4>
-              <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold', color: '#856404' }}>
+              <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold', color: 'var(--color-warning-text)' }}>
                 {conflictingFiles[currentConflictIndex]}
               </p>
-              <p style={{ margin: '0 0 1rem 0', color: '#856404' }}>
+              <p style={{ margin: '0 0 1rem 0', color: 'var(--color-warning-text)' }}>
                 This file already exists. What would you like to do?
               </p>
               <div className="import-actions">

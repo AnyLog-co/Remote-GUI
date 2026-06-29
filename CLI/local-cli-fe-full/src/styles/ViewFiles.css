@@ -325,4 +325,65 @@
       text-align: center;
     }
   }
+
+:root[data-theme='dark'] .view-files-card,
+:root[data-theme='dark'] .streaming-card,
+:root[data-theme='dark'] .embedded-streaming-container {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .view-files-header {
+  background: var(--color-surface-muted);
+  color: var(--color-heading);
+  border-bottom: 1px solid var(--color-border);
+}
+
+:root[data-theme='dark'] .modal-content {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .modal-close {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .streaming-notice {
+  background-color: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .streaming-info,
+:root[data-theme='dark'] .streaming-url-section,
+:root[data-theme='dark'] .streaming-url {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .streaming-info p,
+:root[data-theme='dark'] .streaming-url-section p {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .streaming-info strong,
+:root[data-theme='dark'] .streaming-url-section strong {
+  color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .no-streaming-data,
+:root[data-theme='dark'] .no-files-data {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .no-streaming-data p:first-child,
+:root[data-theme='dark'] .no-files-data p:first-child {
+  color: var(--color-heading);
+}
   

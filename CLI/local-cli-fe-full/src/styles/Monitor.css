@@ -1,10 +1,46 @@
 .monitor-container {
     padding: 20px;
-    background-color: #fff;
+    background-color: var(--color-surface, #fff);
+    color: var(--color-text, #333);
     border-radius: 8px;
     margin: 20px;
-    border: 1px solid #ddd;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--color-border, #ddd);
+    box-shadow: var(--shadow-card, 0 2px 5px rgba(0, 0, 0, 0.1));
+}
+
+.monitor-container h2 {
+  color: var(--color-heading, #222);
+}
+
+.monitor-summary {
+  margin-bottom: 10px;
+}
+
+.monitor-controls-row,
+.monitor-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.monitor-rate-input {
+  width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--component-input-border, #ced4da);
+  border-radius: 6px;
+  background: var(--component-input-bg, #fff);
+  color: var(--component-input-text, #111);
+}
+
+.monitor-rate-input:disabled {
+  background: var(--component-disabled-bg, #f5f5f5);
+  color: var(--color-text-muted, #666);
+}
+
+.monitor-error-text {
+  color: var(--color-error-text, #b00020);
 }
 
 /* Pulse animation for monitoring indicator */
@@ -72,4 +108,47 @@
 
 .status-paused {
   color: #dc3545;
+}
+
+.status-active-dot {
+  background-color: #28a745;
+  animation: pulse 2s infinite;
+}
+
+.status-paused-dot {
+  background-color: #dc3545;
+}
+
+:root[data-theme='dark'] .monitor-container {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .monitor-button:disabled {
+  opacity: 0.55;
+}
+
+@media (max-width: 680px) {
+  .monitor-container {
+    margin: 10px;
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  .monitor-controls-row,
+  .monitor-actions-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .monitor-rate-input,
+  .monitor-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .monitoring-status {
+    justify-content: flex-start;
+  }
 }

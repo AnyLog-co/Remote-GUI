@@ -55,6 +55,14 @@ function uniqueNodes(nodeList) {
 const Dashboard = () => {
   const location = useLocation();
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('remote-gui-theme');
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      return savedTheme;
+    }
+
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
 
   // Load plugin pages
   const pluginPages = getPluginPages();
@@ -200,6 +208,12 @@ const Dashboard = () => {
   }, [location.pathname]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    localStorage.setItem('remote-gui-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
     if (!isNavigationOpen) return undefined;
 
     const handleEscape = (event) => {
@@ -335,6 +349,10 @@ const Dashboard = () => {
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
+        theme={theme}
+        onThemeToggle={() => setTheme((currentTheme) => (
+          currentTheme === 'dark' ? 'light' : 'dark'
+        ))}
         isNavigationOpen={isNavigationOpen}
         onNavigationToggle={() => setIsNavigationOpen((isOpen) => !isOpen)}
       />

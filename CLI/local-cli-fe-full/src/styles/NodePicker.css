@@ -25,17 +25,18 @@
     align-items: center;
     gap: 10px;
     padding: 10px;
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background-color: var(--color-surface-muted, #f8f9fa);
+    border: 1px solid var(--color-border, #dee2e6);
     border-radius: 4px;
   }
   
   .node-picker-select {
     padding: 8px 12px;
     font-size: 14px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-border, #ccc);
     border-radius: 4px;
-    background-color: white;
+    background-color: var(--color-surface, white);
+    color: var(--color-text, #212529);
     min-width: 200px;
     max-width: 360px;
   }
@@ -59,7 +60,9 @@
   .node-picker-input {
     padding: 8px 12px;
     font-size: 14px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-border, #ccc);
+    background-color: var(--color-surface, white);
+    color: var(--color-text, #212529);
     border-radius: 4px;
     min-width: 200px;
   }
@@ -202,8 +205,8 @@
     width: min(760px, 100%);
     max-height: calc(100vh - 40px);
     overflow: auto;
-    color: #212529;
-    background: #fff;
+    color: var(--color-text, #212529);
+    background: var(--color-surface, #fff);
     border-radius: 6px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   }
@@ -214,7 +217,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 16px 18px;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--color-border, #dee2e6);
   }
 
   .bookmark-upload-header h2 {
@@ -228,15 +231,15 @@
     height: 32px;
     border: none;
     border-radius: 4px;
-    color: #495057;
-    background: #f1f3f5;
+    color: var(--color-text, #495057);
+    background: var(--color-surface-muted, #f1f3f5);
     cursor: pointer;
     font-size: 22px;
     line-height: 1;
   }
 
   .bookmark-upload-close:hover {
-    background: #e9ecef;
+    background: var(--color-border, #e9ecef);
   }
 
   .bookmark-upload-options {
@@ -261,7 +264,7 @@
     text-align: center;
     border: 2px dashed #adb5bd;
     border-radius: 6px;
-    background: #f8f9fa;
+    background: var(--color-surface-muted, #f8f9fa);
   }
 
   .bookmark-drop-zone.dragging {
@@ -272,13 +275,13 @@
   .bookmark-drop-zone h3,
   .bookmark-paste-zone h3 {
     margin: 0;
-    color: #212529;
+    color: var(--color-text, #212529);
     font-size: 16px;
   }
 
   .bookmark-drop-zone p {
     margin: 0;
-    color: #6c757d;
+    color: var(--color-text-muted, #6c757d);
     font-size: 13px;
     line-height: 1.4;
   }
@@ -294,7 +297,7 @@
     box-sizing: border-box;
     resize: vertical;
     padding: 10px;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--color-border, #ced4da);
     border-radius: 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 12px;

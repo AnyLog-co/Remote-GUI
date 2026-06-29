@@ -27,6 +27,7 @@ import {
   listModels,
 } from './mcpclient_api';
 import MarkdownRenderer from './MarkdownRenderer';
+import usePageVisibility from '../../hooks/usePageVisibility';
 
 export const pluginMetadata = {
   name: 'MCP Client',
@@ -372,6 +373,7 @@ const ArtifactPanel = ({ content, messageIndex }) => {
 };
 
 const McpclientPage = ({ node }) => {
+  const pageVisible = usePageVisibility();
   const nodeMcpUrl = useMemo(() => mcpUrlFromNode(node), [node]);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -647,12 +649,14 @@ const McpclientPage = ({ node }) => {
   }, [answers, streamNote]);
 
   useEffect(() => {
+    if (!pageVisible) return undefined;
+    refreshConnectionStatus();
     const intervalId = window.setInterval(() => {
       refreshConnectionStatus();
     }, 15000);
     return () => window.clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pageVisible]);
 
   useEffect(() => {
     try {
@@ -1873,6 +1877,171 @@ const McpclientPage = ({ node }) => {
           font-weight: 700;
           cursor: pointer;
         }
+        .mcp-page {
+          --mcp-page-bg: var(--color-bg, #eef2f6);
+          --mcp-topbar-bg: #101828;
+          --mcp-topbar-text: #ffffff;
+          --mcp-sidebar-bg: var(--color-surface, #ffffff);
+          --mcp-panel-bg: var(--color-surface, #ffffff);
+          --mcp-panel-muted-bg: var(--color-surface-muted, #f8fafc);
+          --mcp-input-bg: #fbfcfe;
+          --mcp-message-bg: var(--color-surface, #ffffff);
+          --mcp-user-message-bg: #f8fbff;
+          --mcp-border: var(--color-border, #d7dde8);
+          --mcp-text: var(--color-text, #172033);
+          --mcp-heading: var(--color-heading, #172033);
+          --mcp-muted: var(--color-text-muted, #66748b);
+          --mcp-primary: var(--color-primary, #2563eb);
+          --mcp-primary-contrast: var(--color-primary-contrast, #ffffff);
+          --component-code-bg: #f4f4f4;
+          --component-code-text: #172033;
+        }
+        :root[data-theme='dark'] .mcp-page {
+          --mcp-page-bg: #050914;
+          --mcp-topbar-bg: #071527;
+          --mcp-topbar-text: #ffffff;
+          --mcp-sidebar-bg: #0a1220;
+          --mcp-panel-bg: #0d1524;
+          --mcp-panel-muted-bg: #172238;
+          --mcp-input-bg: #07111f;
+          --mcp-message-bg: #101a2b;
+          --mcp-user-message-bg: rgba(102, 179, 255, 0.14);
+          --mcp-border: #37506f;
+          --mcp-text: #f7fbff;
+          --mcp-heading: #ffffff;
+          --mcp-muted: #c4cfdf;
+          --mcp-primary: #66b3ff;
+          --mcp-primary-contrast: #04111f;
+          --component-code-bg: #07111f;
+          --component-code-text: #e6f1ff;
+        }
+        .mcp-page {
+          background: var(--mcp-page-bg);
+          color: var(--mcp-text);
+        }
+        .mcp-page .mcp-topbar {
+          background: var(--mcp-topbar-bg);
+          color: var(--mcp-topbar-text);
+          border-color: var(--mcp-border);
+        }
+        .mcp-page .mcp-title p {
+          color: var(--mcp-muted);
+        }
+        .mcp-page .mcp-sidebar {
+          background: var(--mcp-sidebar-bg);
+          border-color: var(--mcp-border);
+        }
+        .mcp-page .mcp-workspace {
+          background: var(--mcp-page-bg);
+          color: var(--mcp-text);
+        }
+        .mcp-page .panel,
+        .mcp-page .artifact-panel,
+        .mcp-page .observation-panel {
+          background: var(--mcp-panel-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-text);
+          box-shadow: var(--shadow-card, 0 10px 28px rgba(16, 24, 40, 0.06));
+        }
+        .mcp-page .panel-header,
+        .mcp-page .message-header,
+        .mcp-page .observation-summary,
+        .mcp-page .chat-input,
+        .mcp-page .artifact-header,
+        .mcp-page .artifact-files {
+          background: var(--mcp-panel-muted-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-heading);
+        }
+        .mcp-page .field label,
+        .mcp-page .status-row,
+        .mcp-page .observation-meta,
+        .mcp-page .hint,
+        .mcp-page .chat-session-meta,
+        .mcp-page .empty-state,
+        .mcp-page .stream-note,
+        .mcp-page .observation-empty {
+          color: var(--mcp-muted);
+        }
+        .mcp-page .status-row strong,
+        .mcp-page .observation-meta strong,
+        .mcp-page .artifact-title,
+        .mcp-page .chat-session-title {
+          color: var(--mcp-heading);
+        }
+        .mcp-page .field input,
+        .mcp-page .field select,
+        .mcp-page .field textarea,
+        .mcp-page .chat-input textarea,
+        .mcp-page .model-picker select {
+          background: var(--mcp-input-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-text);
+        }
+        .mcp-page .field select option,
+        .mcp-page .model-picker select option {
+          background: var(--mcp-input-bg);
+          color: var(--mcp-text);
+        }
+        .mcp-page .field input:focus,
+        .mcp-page .field select:focus,
+        .mcp-page .field textarea:focus,
+        .mcp-page .chat-input textarea:focus {
+          border-color: var(--mcp-primary);
+          box-shadow: var(--focus-ring);
+          outline: none;
+        }
+        .mcp-page .model-empty,
+        .mcp-page .chat-session-button,
+        .mcp-page .message-info-button,
+        .mcp-page .artifact-file,
+        .mcp-page .observation-item {
+          background: var(--mcp-panel-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-text);
+        }
+        .mcp-page .chat-session-button.active,
+        .mcp-page .message-info-button.active {
+          background: rgba(102, 179, 255, 0.2);
+          border-color: var(--mcp-primary);
+          color: var(--mcp-primary);
+        }
+        .mcp-page .message {
+          background: var(--mcp-message-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-text);
+        }
+        .mcp-page .message.user {
+          background: var(--mcp-user-message-bg);
+          border-color: var(--mcp-primary);
+        }
+        .mcp-page .message.error,
+        .mcp-page .error-banner {
+          background: var(--color-error-bg);
+          border-color: #b84250;
+          color: var(--color-error-text);
+        }
+        .mcp-page .error-summary-text,
+        .mcp-page .exception-details summary {
+          color: var(--color-error-text);
+        }
+        .mcp-page .tool-chip {
+          background: var(--mcp-panel-muted-bg);
+          color: var(--mcp-heading);
+        }
+        .mcp-page .secondary-button,
+        .mcp-page .icon-action {
+          background: var(--mcp-panel-muted-bg);
+          border-color: var(--mcp-border);
+          color: var(--mcp-heading);
+        }
+        .mcp-page .primary-button {
+          background: var(--mcp-primary);
+          color: var(--mcp-primary-contrast);
+        }
+        .mcp-page .artifact-preview {
+          background: var(--mcp-panel-bg);
+        }
         @media (max-width: 980px) {
           .mcp-layout {
             grid-template-columns: 1fr;
@@ -1900,15 +2069,85 @@ const McpclientPage = ({ node }) => {
           }
         }
         @media (max-width: 680px) {
+          .mcp-page {
+            height: auto;
+            min-height: 100dvh;
+            overflow: visible;
+          }
           .mcp-topbar {
             align-items: flex-start;
             flex-direction: column;
+            min-height: 0;
+            padding: 12px;
           }
           .mcp-actions {
             justify-content: flex-start;
+            width: 100%;
+          }
+          .mcp-actions > * {
+            flex: 1 1 auto;
+          }
+          .mcp-layout,
+          .mcp-layout.config-expanded {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: visible;
+            padding: 0;
+          }
+          .mcp-sidebar,
+          .mcp-layout.config-expanded .mcp-sidebar {
+            width: 100%;
+            max-height: none;
+            overflow: visible;
+            padding: 12px;
+            border-right: 0;
+            border-bottom: 1px solid var(--mcp-border);
+            border-radius: 0;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          }
+          .mcp-sidebar .panel,
+          .mcp-layout.config-expanded .mcp-sidebar .panel {
+            margin: 0 !important;
+            width: 100%;
+            min-width: 0;
+          }
+          .mcp-workspace {
+            width: 100%;
+            padding: 12px;
+            min-height: 0;
+            overflow: visible;
+          }
+          .panel-header,
+          .panel-body,
+          .messages,
+          .chat-input {
+            padding: 12px;
+          }
+          .chat-session-list {
+            max-height: none;
+          }
+          .chat-session-actions,
+          .status-row {
+            grid-template-columns: 1fr;
+          }
+          .chat-panel {
+            min-height: 60dvh;
           }
           .chat-input {
             grid-template-columns: 1fr;
+          }
+          .chat-input textarea {
+            min-height: 110px;
+          }
+          .primary-button,
+          .secondary-button,
+          .danger-button,
+          .icon-action {
+            min-height: 44px;
           }
           .message-wrap {
             grid-template-columns: 1fr;

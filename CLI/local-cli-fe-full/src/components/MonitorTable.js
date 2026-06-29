@@ -250,29 +250,31 @@ const MonitorTable = ({ data }) => {
       )}
 
       {/* Data Table */}
-      <table className="data-table">
-        <thead>
-          <tr>
-            {headers.map((header, idx) => (
-              <th key={`header-${idx}`}>{header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filteredData.map((row, rowIndex) => (
-            <tr key={`row-${rowIndex}`}>
-              {headers.map((header, cellIndex) => (
-                <td 
-                  key={`cell-${rowIndex}-${cellIndex}`}
-                  style={getCellStyle(row[header], header)}
-                >
-                  {row[header]}
-                </td>
+      <div className="monitor-data-table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              {headers.map((header, idx) => (
+                <th key={`header-${idx}`}>{header}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredData.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`}>
+                {headers.map((header, cellIndex) => (
+                  <td 
+                    key={`cell-${rowIndex}-${cellIndex}`}
+                    style={getCellStyle(row[header], header)}
+                  >
+                    {row[header]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

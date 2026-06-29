@@ -16,6 +16,8 @@ const TopBar = ({
   onSelectNode,
   restoredFromStorage,
   onClearStoredData,
+  theme = 'light',
+  onThemeToggle,
   isNavigationOpen = false,
   onNavigationToggle,
 }) => {
@@ -117,7 +119,24 @@ const TopBar = ({
             className="clear-data-btn"
             title="Clear all stored data"
           >
-            🗑️ Clear Browser Data
+            Clear data
+          </button>
+        )}
+        {onThemeToggle && (
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={onThemeToggle}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            aria-pressed={theme === 'dark'}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            <span className="theme-toggle-icon" aria-hidden="true">
+              {theme === 'dark' ? '☀︎' : '☾'}
+            </span>
+            <span className="theme-toggle-text">
+              {theme === 'dark' ? 'Light' : 'Dark'}
+            </span>
           </button>
         )}
         {/* <button className="profile-btn">User Profile</button> */}

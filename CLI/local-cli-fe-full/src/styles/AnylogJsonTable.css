@@ -174,3 +174,55 @@
     min-width: 80px;
   }
 }
+
+:root[data-theme='dark'] .anylog-table-wrapper {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .anylog-table {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .anylog-table-header,
+:root[data-theme='dark'] .service-header {
+  background: var(--color-surface-muted);
+  color: var(--color-heading);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .anylog-table-row,
+:root[data-theme='dark'] .anylog-table-cell,
+:root[data-theme='dark'] .service-cell {
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .anylog-table-row:hover,
+:root[data-theme='dark'] .anylog-table-row:nth-child(even):hover {
+  background-color: var(--component-hover-bg);
+}
+
+:root[data-theme='dark'] .anylog-table-row:nth-child(even),
+:root[data-theme='dark'] .service-cell {
+  background-color: #0a1220;
+}
+
+:root[data-theme='dark'] .service-name,
+:root[data-theme='dark'] .anylog-table-value {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .anylog-table-null {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .anylog-table-array,
+:root[data-theme='dark'] .anylog-table-object,
+:root[data-theme='dark'] .anylog-table-empty {
+  background: var(--component-code-bg);
+  border-color: var(--color-border);
+  color: var(--component-code-text);
+}

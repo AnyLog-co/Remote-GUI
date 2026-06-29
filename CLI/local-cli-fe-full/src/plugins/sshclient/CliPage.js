@@ -72,10 +72,11 @@ export default function CliPage() {
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'stretch',
-          backgroundColor: 'white',
+          backgroundColor: 'var(--color-surface)',
           borderRadius: '12px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e2e8f0',
+          boxShadow: 'var(--shadow-card)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text)',
         }}
       >
         <div
@@ -83,7 +84,7 @@ export default function CliPage() {
             flex: '0 0 400px',
             width: '400px',
             minWidth: '400px',
-            borderRight: '1px solid #e2e8f0',
+            borderRight: '1px solid var(--color-border)',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -112,10 +113,11 @@ export default function CliPage() {
               flex: 1,
               minWidth: 0,
               display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: 'var(--color-text-muted)',
+          }}
+        >
             No open terminal
           </div>
         )}
@@ -142,9 +144,10 @@ export default function CliPage() {
                   flexDirection: 'column',
                   gap: 16,
                   // padding: 16,
-                  background: '#fafafa',
+                  background: 'var(--color-surface)',
                   borderRadius: 12,
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text)',
                 }}
               >
                 {<ActiveModalComponent />}
@@ -164,7 +167,7 @@ const modalStyle = {
   transform: 'translate(-50%, -50%)',
   maxWidth: '90vw',
   maxHeight: '40vw',
-  bgcolor: 'background.paper',
+  bgcolor: 'var(--color-surface)',
   boxShadow: 24,
   overflow: 'hidden',
   borderRadius: 3,

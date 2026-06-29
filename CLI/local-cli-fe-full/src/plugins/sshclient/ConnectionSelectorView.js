@@ -508,7 +508,7 @@ const ConnectionSelectorView = () => {
             padding: '32px',
           }}
         >
-          <p style={{ fontSize: '16px', color: '#64748b' }}>
+          <p style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>
             No active terminals
           </p>
         </div>
@@ -548,10 +548,10 @@ const ConnectionSelectorView = () => {
             <div
               key={hostname}
               style={{
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--color-border)',
                 borderRadius: '6px',
                 overflow: 'hidden',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'var(--color-surface)',
               }}
             >
               <div
@@ -568,9 +568,9 @@ const ConnectionSelectorView = () => {
                   padding: '10px 12px',
                   cursor: 'pointer',
                   fontWeight: '600',
-                  color: '#1a365d',
+                  color: 'var(--color-heading)',
                   fontSize: '14px',
-                  backgroundColor: isExpanded ? '#f1f5f9' : '#f8fafc',
+                  backgroundColor: isExpanded ? 'var(--color-surface-muted)' : 'var(--color-surface)',
                 }}
               >
                 {isExpanded ? (
@@ -592,7 +592,7 @@ const ConnectionSelectorView = () => {
                     marginLeft: 'auto',
                     fontSize: '12px',
                     fontWeight: '500',
-                    color: '#64748b',
+                    color: 'var(--color-text-muted)',
                   }}
                 >
                   {conns.length} terminal{conns.length !== 1 ? 's' : ''}
@@ -621,10 +621,10 @@ const ConnectionSelectorView = () => {
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '8px 10px',
-                          backgroundColor: isDropTarget ? '#eff6ff' : 'white',
+                          backgroundColor: isDropTarget ? 'var(--color-primary-soft)' : 'var(--color-surface)',
                           border: isDropTarget
                             ? '2px dashed #2563eb'
-                            : '1px solid #e2e8f0',
+                            : '1px solid var(--color-border)',
                           borderRadius: '6px',
                           gap: '8px',
                           opacity: isDragging ? 0.45 : 1,
@@ -665,13 +665,13 @@ const ConnectionSelectorView = () => {
                               style={{
                                 fontSize: '13px',
                                 fontWeight: '600',
-                                color: '#1e3a5f',
+                                color: 'var(--color-heading)',
                                 border: '1.5px solid #2563eb',
                                 borderRadius: '4px',
                                 padding: '1px 6px',
                                 outline: 'none',
                                 width: '120px',
-                                backgroundColor: '#f0f7ff',
+                                backgroundColor: 'var(--component-input-bg)',
                               }}
                             />
                           ) : (
@@ -685,7 +685,7 @@ const ConnectionSelectorView = () => {
                               }
                               style={{
                                 fontSize: '13px',
-                                color: '#1e3a5f',
+                                color: 'var(--color-heading)',
                                 fontWeight: '600',
                                 whiteSpace: 'nowrap',
                                 cursor: 'text',
@@ -766,8 +766,8 @@ const ConnectionSelectorView = () => {
                         <span
                           style={{
                             fontSize: '12px',
-                            color: '#475569',
-                            backgroundColor: '#f1f5f9',
+                            color: 'var(--color-text)',
+                            backgroundColor: 'var(--color-surface-muted)',
                             padding: '2px 8px',
                             borderRadius: '4px',
                             fontWeight: '500',
@@ -789,8 +789,8 @@ const ConnectionSelectorView = () => {
                             fontSize: '12px',
                             fontWeight: '500',
                             color: '#2563eb',
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            backgroundColor: 'var(--color-primary-soft)',
+                            border: '1px solid var(--color-primary-border)',
                             borderRadius: '6px',
                             cursor: 'pointer',
                           }}
@@ -835,7 +835,7 @@ const ConnectionSelectorView = () => {
             padding: '32px',
           }}
         >
-          <p style={{ fontSize: '16px', color: '#64748b' }}>
+          <p style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>
             No active terminals
           </p>
         </div>
@@ -848,7 +848,7 @@ const ConnectionSelectorView = () => {
       return (
         <h3
           style={{
-            color: '#64748b',
+            color: 'var(--color-text-muted)',
             fontSize: '14px',
             margin: '2px 0',
             fontWeight: '700',
@@ -867,9 +867,10 @@ const ConnectionSelectorView = () => {
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           padding: '16px',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--color-border)',
           borderRadius: '8px',
-          backgroundColor: 'white',
+          backgroundColor: 'var(--color-surface)',
+          color: 'var(--color-text)',
           transition: 'background-color 0.2s',
           width: '100%',
           boxSizing: 'border-box',
@@ -910,7 +911,7 @@ const ConnectionSelectorView = () => {
             <h3
               style={{
                 margin: 0,
-                color: '#1a365d',
+                color: 'var(--color-heading)',
                 fontSize: '16px',
                 fontWeight: '500',
                 wordBreak: 'break-word',
@@ -922,7 +923,7 @@ const ConnectionSelectorView = () => {
 
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 fontSize: '14px',
                 margin: '2px 0',
                 wordBreak: 'break-word',
@@ -932,12 +933,12 @@ const ConnectionSelectorView = () => {
               IP: {conn.ip}
             </p>
 
-            <p style={{ color: '#64748b', fontSize: '14px', margin: '2px 0' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', margin: '2px 0' }}>
               User: {conn.user}
             </p>
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 fontSize: '14px',
                 margin: '2px 0',
               }}
@@ -946,7 +947,7 @@ const ConnectionSelectorView = () => {
             </p>
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 fontSize: '14px',
                 margin: '2px 0',
               }}
@@ -968,8 +969,9 @@ const ConnectionSelectorView = () => {
               <button
                 style={{
                   ...actionStyles.actionButton,
-                  backgroundColor: '#E5E4E2',
-                  color: 'black',
+                  backgroundColor: 'var(--component-button-secondary-bg)',
+                  color: 'var(--component-button-secondary-text)',
+                  border: '1px solid var(--component-button-secondary-border)',
                   width: '100%',
                 }}
                 onClick={() => handleConnectClick(conn, 'direct_ssh')}
@@ -1020,14 +1022,15 @@ const ConnectionSelectorView = () => {
                 justifyContent: 'center',
                 padding: '64px 0',
                 textAlign: 'center',
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
               }}
             >
               <div
                 style={{
                   width: '64px',
                   height: '64px',
-                  backgroundColor: '#dbeafe',
+                  backgroundColor: 'var(--color-primary-soft)',
+                  color: 'var(--color-primary)',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
@@ -1047,7 +1050,7 @@ const ConnectionSelectorView = () => {
                 flexDirection: 'column',
                 gap: '12px',
                 padding: '16px',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--color-border)',
                 borderRadius: '8px',
                 width: '100%',
                 boxSizing: 'border-box',
@@ -1064,34 +1067,38 @@ const ConnectionSelectorView = () => {
                 <button
                   style={{
                     padding: '16px',
-                    border: '1px solid #b0c3db',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     backgroundColor:
-                      connectionsTab === 'all' ? '#cbd5e1' : '#ebeef1',
-                    color: 'black',
+                      connectionsTab === 'all'
+                        ? 'var(--color-surface-muted)'
+                        : 'var(--color-surface)',
+                    color: 'var(--color-text)',
                     fontWeight: connectionsTab === 'all' ? '600' : '400',
                   }}
                   onClick={() => setConnectionsTab('all')}
                 >
                   All Connections
                   <span
-                    style={{ color: 'grey' }}
+                    style={{ color: 'var(--color-text-muted)' }}
                   >{` (${connectionsList.length})`}</span>
                 </button>
                 <button
                   style={{
                     padding: '16px',
-                    border: '1px solid #b0c3db',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     backgroundColor:
-                      connectionsTab === 'active' ? '#cbd5e1' : '#ebeef1',
-                    color: 'black',
+                      connectionsTab === 'active'
+                        ? 'var(--color-surface-muted)'
+                        : 'var(--color-surface)',
+                    color: 'var(--color-text)',
                     fontWeight: connectionsTab === 'active' ? '600' : '400',
                   }}
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
-                  <span style={{ color: 'grey' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>
                     {` (${Object.keys(activeConnection || {}).length})`}
                   </span>
                 </button>
@@ -1141,19 +1148,21 @@ const ConnectionSelectorView = () => {
         >
           <div
             style={{
-              backgroundColor: 'white',
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
               borderRadius: '12px',
               padding: '32px',
               maxWidth: '500px',
               width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              boxShadow: 'var(--shadow-card)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2
               style={{
                 margin: '0 0 8px 0',
-                color: '#1a365d',
+                color: 'var(--color-heading)',
                 fontSize: '24px',
                 fontWeight: '600',
               }}
@@ -1162,7 +1171,7 @@ const ConnectionSelectorView = () => {
             </h2>
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 marginBottom: '24px',
                 fontSize: '14px',
               }}
@@ -1176,7 +1185,7 @@ const ConnectionSelectorView = () => {
                 display: 'flex',
                 gap: '8px',
                 marginBottom: '24px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--color-border)',
               }}
             >
               <button
@@ -1185,7 +1194,7 @@ const ConnectionSelectorView = () => {
                   border: 'none',
                   backgroundColor: 'transparent',
                   color:
-                    authMethod === CRED_TYPE_PASSWORD ? '#2563eb' : '#64748b',
+                    authMethod === CRED_TYPE_PASSWORD ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   borderBottom:
                     authMethod === CRED_TYPE_PASSWORD
                       ? '2px solid #2563eb'
@@ -1204,7 +1213,7 @@ const ConnectionSelectorView = () => {
                   border: 'none',
                   backgroundColor: 'transparent',
                   color:
-                    authMethod === CRED_TYPE_KEYFILE ? '#2563eb' : '#64748b',
+                    authMethod === CRED_TYPE_KEYFILE ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   borderBottom:
                     authMethod === CRED_TYPE_KEYFILE
                       ? '2px solid #2563eb'
@@ -1226,7 +1235,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1249,7 +1258,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1263,7 +1274,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1286,7 +1297,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1301,7 +1314,7 @@ const ConnectionSelectorView = () => {
                     style={{
                       display: 'block',
                       marginBottom: '8px',
-                      color: '#1a365d',
+                      color: 'var(--color-heading)',
                       fontSize: '14px',
                       fontWeight: '500',
                     }}
@@ -1324,7 +1337,9 @@ const ConnectionSelectorView = () => {
                         flex: 1,
                         padding: '12px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--component-input-border)',
+                        backgroundColor: 'var(--component-input-bg)',
+                        color: 'var(--component-input-text)',
                         fontSize: '14px',
                       }}
                       onKeyPress={(e) => {
@@ -1346,7 +1361,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1369,7 +1384,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1404,7 +1421,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1414,11 +1431,11 @@ const ConnectionSelectorView = () => {
                 <div
                   style={{
                     border: '2px dashed',
-                    borderColor: keyFile ? '#86efac' : '#cbd5e1',
+                    borderColor: keyFile ? 'var(--color-success)' : 'var(--component-input-border)',
                     borderRadius: '6px',
                     padding: '24px',
                     textAlign: 'center',
-                    backgroundColor: keyFile ? '#f0fdf4' : '#f8fafc',
+                    backgroundColor: keyFile ? 'rgba(34, 197, 94, 0.12)' : 'var(--color-surface-muted)',
                   }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
@@ -1447,7 +1464,7 @@ const ConnectionSelectorView = () => {
                   </label>
                   <p
                     style={{
-                      color: '#64748b',
+                      color: 'var(--color-text-muted)',
                       fontSize: '12px',
                       marginTop: '8px',
                     }}
@@ -1506,7 +1523,7 @@ const ConnectionSelectorView = () => {
                   gap: '8px',
                   cursor: credLocked ? 'not-allowed' : 'pointer',
                   fontSize: '14px',
-                  color: credLocked ? '#94a3b8' : '#1a365d',
+                  color: credLocked ? 'var(--color-text-subtle)' : 'var(--color-heading)',
                   opacity: credLocked ? 0.6 : 1,
                 }}
               >
@@ -1527,7 +1544,7 @@ const ConnectionSelectorView = () => {
               <p
                 style={{
                   fontSize: '12px',
-                  color: '#64748b',
+                  color: 'var(--color-text-muted)',
                   marginLeft: '24px',
                   marginTop: '4px',
                 }}
@@ -1563,9 +1580,9 @@ const ConnectionSelectorView = () => {
               <button
                 style={{
                   padding: '10px 20px',
-                  border: '1px solid #e2e8f0',
-                  backgroundColor: 'white',
-                  color: '#64748b',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--component-button-secondary-bg)',
+                  color: 'var(--component-button-secondary-text)',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '14px',

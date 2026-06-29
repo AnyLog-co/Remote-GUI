@@ -25,6 +25,28 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   const scrollbarDragStartXRef = useRef(0);
   const scrollbarDragStartViewRef = useRef({ start: 0, end: 0 });
 
+  const getThemeColor = (name, fallback) => {
+    if (typeof window === 'undefined') {
+      return fallback;
+    }
+
+    const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  };
+
+  const chartTheme = {
+    grid: getThemeColor('--chart-grid', '#e9ecef'),
+    axis: getThemeColor('--chart-axis', '#6c757d'),
+    line: getThemeColor('--chart-line', '#007bff'),
+    lineActive: getThemeColor('--chart-line-active', '#0056b3'),
+    gapFill: getThemeColor('--chart-gap-fill', '#e9ecef'),
+    tooltipBg: getThemeColor('--chart-tooltip-bg', '#ffffff'),
+    tooltipBorder: getThemeColor('--chart-tooltip-border', '#ced4da'),
+    surface: getThemeColor('--color-surface', '#ffffff'),
+    text: getThemeColor('--color-text', '#212529'),
+    textMuted: getThemeColor('--color-text-muted', '#6c757d'),
+  };
+
   // Reset chart zoom/pan when data, value column, or time column changes
   useEffect(() => {
     setChartViewStart(0);
@@ -110,7 +132,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = chartTheme.surface;
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/png'));
@@ -129,7 +151,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
 
   useImperativeHandle(ref, () => ({
     getChartAsDataUrl,
-  }), []);
+  }), [chartTheme.surface]);
 
   if (!sqlData || !Array.isArray(sqlData) || sqlData.length === 0) {
     return null;
@@ -249,6 +271,17 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   const paddedMin = dataMin - 1;
   const paddedMax = dataMax + 1;
   const yDomain = [paddedMin, paddedMax];
+  const buildYAxisTicks = (min, max) => {
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
+    if (min === max) return [min];
+
+    const tickCount = 5;
+    const step = (max - min) / (tickCount - 1);
+    return Array.from({ length: tickCount }, (_, index) => (
+      index === 0 ? min : index === tickCount - 1 ? max : min + step * index
+    ));
+  };
+  const yTicks = buildYAxisTicks(dataMin, dataMax);
   const visibleTimeMin = displayedData[0].timestamp;
   const visibleTimeMax = displayedData[displayedData.length - 1].timestamp;
   const xDomain = visibleTimeMin === visibleTimeMax
@@ -371,24 +404,25 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
             data={plottedData}
             margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
             <XAxis
               type="number"
               scale="time"
               dataKey="timestamp"
               domain={xDomain}
               ticks={xTicks}
-              tick={{ fontSize: 11 }}
-              stroke="#6c757d"
+              tick={{ fontSize: 11, fill: chartTheme.axis }}
+              stroke={chartTheme.axis}
               tickFormatter={formatTimestamp}
               minTickGap={36}
             />
             <YAxis
               type="number"
               domain={yDomain}
+              ticks={yTicks}
               allowDataOverflow
-              tick={{ fontSize: 11 }}
-              stroke="#6c757d"
+              tick={{ fontSize: 11, fill: chartTheme.axis }}
+              stroke={chartTheme.axis}
               tickFormatter={formatYAxisValue}
             />
             {gapAreas.map((gap) => (
@@ -396,13 +430,13 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
                 key={`${gap.start}-${gap.end}`}
                 x1={gap.start}
                 x2={gap.end}
-                fill="#e9ecef"
+                fill={chartTheme.gapFill}
                 fillOpacity={0.72}
                 strokeOpacity={0}
                 label={{
                   value: 'No data',
                   position: 'insideTop',
-                  fill: '#6c757d',
+                  fill: chartTheme.textMuted,
                   fontSize: 10,
                 }}
               />
@@ -411,18 +445,25 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
               isAnimationActive={false}
               labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
               formatter={(value) => [formatAxisValue(value), displayedMetricName]}
-              cursor={{ stroke: '#007bff', strokeWidth: 1 }}
+              cursor={{ stroke: chartTheme.line, strokeWidth: 1 }}
+              contentStyle={{
+                backgroundColor: chartTheme.tooltipBg,
+                borderColor: chartTheme.tooltipBorder,
+                color: chartTheme.text,
+              }}
+              labelStyle={{ color: chartTheme.text }}
+              itemStyle={{ color: chartTheme.text }}
             />
             <Line
               type="linear"
               dataKey="value"
               name={displayedMetricName}
-              stroke="#007bff"
+              stroke={chartTheme.line}
               strokeWidth={2}
               isAnimationActive={false}
               connectNulls={false}
-              dot={plottedData.length <= 80 ? { r: 3, fill: '#007bff' } : false}
-              activeDot={{ r: 5, fill: '#0056b3', stroke: '#fff', strokeWidth: 2 }}
+              dot={plottedData.length <= 80 ? { r: 3, fill: chartTheme.line } : false}
+              activeDot={{ r: 5, fill: chartTheme.lineActive, stroke: chartTheme.surface, strokeWidth: 2 }}
             />
           </LineChart>
         </ResponsiveContainer>

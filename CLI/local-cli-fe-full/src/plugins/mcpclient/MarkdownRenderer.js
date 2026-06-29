@@ -72,7 +72,8 @@ const MarkdownRenderer = ({ content }) => {
           <code
             key={`code-${idx}`}
             style={{
-              backgroundColor: '#f4f4f4',
+              backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+              color: 'var(--component-code-text, inherit)',
               padding: '2px 6px',
               borderRadius: '3px',
               fontFamily: 'monospace',
@@ -127,8 +128,9 @@ const MarkdownRenderer = ({ content }) => {
           width: '100%',
           borderCollapse: 'collapse',
           fontSize: '0.92em',
-          background: '#fff',
-          border: '1px solid #d7dde8',
+          background: 'var(--color-surface, #fff)',
+          color: 'var(--color-text, inherit)',
+          border: '1px solid var(--color-border, #d7dde8)',
           borderRadius: '6px',
           overflow: 'hidden'
         }}
@@ -141,9 +143,9 @@ const MarkdownRenderer = ({ content }) => {
                 style={{
                   textAlign: 'left',
                   padding: '8px 10px',
-                  background: '#eef3f8',
-                  borderBottom: '1px solid #d7dde8',
-                  color: '#24364b',
+                  background: 'var(--color-surface-muted, #eef3f8)',
+                  borderBottom: '1px solid var(--color-border, #d7dde8)',
+                  color: 'var(--color-heading, #24364b)',
                   fontWeight: 700
                 }}
               >
@@ -160,7 +162,8 @@ const MarkdownRenderer = ({ content }) => {
                   key={`td-${rowIndex}-${cellIndex}`}
                   style={{
                     padding: '8px 10px',
-                    borderTop: rowIndex === 0 ? 'none' : '1px solid #edf0f5',
+                    borderTop: rowIndex === 0 ? 'none' : '1px solid var(--color-border, #edf0f5)',
+                    color: 'var(--color-text, inherit)',
                     verticalAlign: 'top'
                   }}
                 >
@@ -242,14 +245,15 @@ const MarkdownRenderer = ({ content }) => {
           <pre
             key={`codeblock-${i}`}
             style={{
-              backgroundColor: '#f4f4f4',
+              backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+              color: 'var(--component-code-text, inherit)',
               padding: '12px',
               borderRadius: '4px',
               overflowX: 'auto',
               fontFamily: 'monospace',
               fontSize: '0.9em',
               margin: '10px 0',
-              border: '1px solid #ddd'
+              border: '1px solid var(--color-border, #ddd)'
             }}
           >
             <code>{codeContent}</code>
@@ -404,14 +408,15 @@ const MarkdownRenderer = ({ content }) => {
       <pre
         key="codeblock-final"
         style={{
-          backgroundColor: '#f4f4f4',
+          backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+          color: 'var(--component-code-text, inherit)',
           padding: '12px',
           borderRadius: '4px',
           overflowX: 'auto',
           fontFamily: 'monospace',
           fontSize: '0.9em',
           margin: '10px 0',
-          border: '1px solid #ddd'
+          border: '1px solid var(--color-border, #ddd)'
         }}
       >
         <code>{codeBlockContent.join('\n')}</code>
