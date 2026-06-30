@@ -11,6 +11,19 @@ import {
 } from 'recharts';
 import './UNSPage.css';
 
+const parseUNSTimestamp = (value) => {
+  if (value == null || value === '') return NaN;
+  if (typeof value === 'number') {
+    return value < 1000000000000 ? value * 1000 : value;
+  }
+  const trimmed = String(value).trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    return numeric < 1000000000000 ? numeric * 1000 : numeric;
+  }
+  return Date.parse(trimmed);
+};
+
 const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, preferredColumn, timeColumnKey = 'timestamp' }, ref) => {
   const [chartViewStart, setChartViewStart] = useState(0);
   const [chartViewEnd, setChartViewEnd] = useState(null);
@@ -196,7 +209,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
   const chartData = sqlData
     .map((row) => {
       const tsRaw = row[timeKey];
-      const timestamp = Date.parse(tsRaw);
+      const timestamp = parseUNSTimestamp(tsRaw);
       const vRaw = row[effectiveYKey];
       const value = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
       if (Number.isNaN(timestamp) || Number.isNaN(value)) return null;
@@ -524,5 +537,27 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
 });
 
 UNSLineChart.displayName = 'UNSLineChart';
+
+export const getUNSNumericColumns = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0 || !rows[0] || typeof rows[0] !== 'object') {
+    return [];
+  }
+
+  return Object.keys(rows[0]).filter((key) => {
+    if (['row_id', 'tsd_name', 'tsd_id', 'insert_timestamp', 'timestamp'].includes(key)) return false;
+    return rows.some((row) => {
+      const value = row?.[key];
+      if (value == null || value === '') return false;
+      return typeof value === 'number' || !Number.isNaN(parseFloat(value));
+    });
+  });
+};
+
+export const getUNSEffectiveYKey = ({ data, chartYKey, preferredColumn }) => {
+  const candidates = getUNSNumericColumns(data);
+  if (chartYKey && candidates.includes(chartYKey)) return chartYKey;
+  if (preferredColumn && candidates.includes(preferredColumn)) return preferredColumn;
+  return candidates[0] || null;
+};
 
 export default UNSLineChart;

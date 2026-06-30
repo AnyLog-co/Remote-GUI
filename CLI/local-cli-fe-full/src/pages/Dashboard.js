@@ -282,6 +282,7 @@ const Dashboard = () => {
       'mcpclient_active_chat_id',
       'client-command-draft',
       'uns-navigation-state',
+      'uns-compare-graphs-state',
     ].forEach((key) => localStorage.removeItem(key));
     window.dispatchEvent(new Event('mcpclient-storage-cleared'));
     window.dispatchEvent(new Event('uns-storage-cleared'));
