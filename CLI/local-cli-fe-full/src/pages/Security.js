@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConnectedNodeAddress from '../components/ConnectedNodeAddress';
 import PolicySelector from '../components/security/PolicySelector';
 import DynamicPolicyForm from '../components/security/DynamicPolicyForm';
 import SignWithSelector from '../components/security/SignWithSelector';
@@ -98,7 +99,7 @@ function PolicyGeneratorPage({ node }) {
       <div className="page-header">
         <h2>Security Policy Generator</h2>
         {node ? (
-          <p className="node-info">Connected to: <strong>{node}</strong></p>
+          <ConnectedNodeAddress value={node} label="Connected to:" className="node-info" />
         ) : (
           <p className="node-warning">⚠️ Please select a node from the top bar to continue</p>
         )}

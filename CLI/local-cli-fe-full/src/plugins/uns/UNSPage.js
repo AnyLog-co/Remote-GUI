@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
 import UNSCompareGraphs from './UNSCompareGraphs';
+import { formatDateTimeLocalForBackend, getUNSTimeRangeError } from './UNSTimeUtils';
 import { getRoot, getChildren, checkChildren, queryTable, checkTable } from './uns_api';
 
 const ROOT_QUERY_UNS_DATA = 'blockchain get root policies exclude cluster';
@@ -29,6 +30,10 @@ const UNSPage = ({ node }) => {
   const [showingClusters, setShowingClusters] = useState(false);
   const [timeRangeValue, setTimeRangeValue] = useState(5); // Time range value (default 5)
   const [timeRangeUnit, setTimeRangeUnit] = useState('minute'); // Time range unit (default: minute)
+  const [timeMode, setTimeMode] = useState('relative');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [timeRangeErrorDismissed, setTimeRangeErrorDismissed] = useState(false);
   const [timeColumn, setTimeColumn] = useState('timestamp'); // Time column: timestamp or insert_timestamp
   const [sqlData, setSqlData] = useState(null); // SQL query results
   const [sqlColumns, setSqlColumns] = useState([]); // SQL table columns
@@ -86,6 +91,10 @@ const UNSPage = ({ node }) => {
       setRootQuery(ROOT_QUERY_UNS_DATA);
       setExecutedRootQuery(ROOT_QUERY_UNS_DATA);
       setShowingClusters(false);
+      setTimeMode('relative');
+      setStartTime('');
+      setEndTime('');
+      setTimeRangeErrorDismissed(false);
       setCompareGraphs([]);
       setActiveCompareGraphId(null);
       setIsCompareOpen(false);
@@ -1039,6 +1048,15 @@ const UNSPage = ({ node }) => {
   ) => {
     if (!node || !dbms || !table) return;
 
+    const timeRangeError = getUNSTimeRangeError({ timeMode, startTime, endTime });
+    if (timeRangeError) {
+      setTimeRangeErrorDismissed(false);
+      if (!silent) {
+        setSqlError(null);
+      }
+      return;
+    }
+
     if (!silent) {
       setSqlLoading(true);
       setSqlError(null);
@@ -1050,6 +1068,8 @@ const UNSPage = ({ node }) => {
         table,
         time_value: timeRangeValue,
         time_unit: timeRangeUnit,
+        start_time: timeMode === 'absolute' ? formatDateTimeLocalForBackend(startTime) : '',
+        end_time: timeMode === 'absolute' ? formatDateTimeLocalForBackend(endTime) : '',
         where: whereClause,
         column,
         time_column: timeColumn,
@@ -1083,6 +1103,11 @@ const UNSPage = ({ node }) => {
         setSqlLoading(false);
       }
     }
+  };
+
+  const setSingleChartTimeControl = (setter) => (value) => {
+    setter(value);
+    setTimeRangeErrorDismissed(false);
   };
 
   const createCompareGraph = () => {
@@ -1531,6 +1556,8 @@ const UNSPage = ({ node }) => {
     );
   };
 
+  const singleChartTimeRangeError = getUNSTimeRangeError({ timeMode, startTime, endTime });
+
   return (
     <div className="uns-container">
       <div className="uns-header">
@@ -1650,8 +1677,13 @@ const UNSPage = ({ node }) => {
             sqlError={sqlError}
             timeRangeValue={timeRangeValue}
             timeRangeUnit={timeRangeUnit}
+            timeMode={timeMode}
+            startTime={startTime}
+            endTime={endTime}
+            timeRangeError={singleChartTimeRangeError}
+            timeRangeErrorDismissed={timeRangeErrorDismissed}
             timeColumn={timeColumn}
-            onTimeColumnChange={setTimeColumn}
+            onTimeColumnChange={setSingleChartTimeControl(setTimeColumn)}
             onClose={() => {
               setIsSidePanelOpen(false);
               setSelectedItem(null);
@@ -1659,8 +1691,12 @@ const UNSPage = ({ node }) => {
               setSqlColumns([]);
               setSqlError(null);
             }}
-            onTimeRangeValueChange={setTimeRangeValue}
-            onTimeRangeUnitChange={setTimeRangeUnit}
+            onTimeRangeValueChange={setSingleChartTimeControl(setTimeRangeValue)}
+            onTimeRangeUnitChange={setSingleChartTimeControl(setTimeRangeUnit)}
+            onTimeModeChange={setSingleChartTimeControl(setTimeMode)}
+            onStartTimeChange={setSingleChartTimeControl(setStartTime)}
+            onEndTimeChange={setSingleChartTimeControl(setEndTime)}
+            onTimeRangeErrorDismiss={() => setTimeRangeErrorDismissed(true)}
             onFetchTimeRange={fetchSqlData}
             onCompareItem={addItemToCompare}
             isCompared={selectedItem ? isItemInActiveCompareGraph(selectedItem) : false}

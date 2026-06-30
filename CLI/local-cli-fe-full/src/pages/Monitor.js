@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import MonitorTable from '../components/MonitorTable';
+import ConnectedNodeAddress from '../components/ConnectedNodeAddress';
 import { monitor } from '../services/api'; // Ensure your API is set up correctly
 import '../styles/Monitor.css';
 
@@ -116,9 +117,7 @@ const Monitor = ({ node }) => {
     <div className="monitor-container">
       <h2>Monitor Node Section</h2>
       <div className="monitor-summary">
-        <p>
-          <strong>Connected Node:</strong> {node}
-        </p>
+        <ConnectedNodeAddress value={node} label="Connected Node:" />
         <div className="monitor-controls-row">
           <label htmlFor="rerunRate">
             {isMonitoring ? 'Refresh Rate (seconds):' : 'Refresh Paused:'}

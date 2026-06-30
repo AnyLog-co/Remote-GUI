@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import './EdgeDataFabricTopologyPage.css';
 import usePageVisibility from '../../hooks/usePageVisibility';
+import MaskedTextInput from '../../components/MaskedTextInput';
+import { hasMaskableAddress, maskNodeAddress } from '../../utils/maskAddress';
 import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTables, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
 
 export const pluginMetadata = {
@@ -815,6 +818,7 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [selectedSite, setSelectedSite] = useState(null);
   const [companyFilter, setCompanyFilter] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
+  const [revealedTopologyNodeIds, setRevealedTopologyNodeIds] = useState(new Set());
   const [nodeMetricOrder, setNodeMetricOrder] = useState(DEFAULT_NODE_METRIC_ORDER);
   const [draggedNodeMetric, setDraggedNodeMetric] = useState('');
   const [nodeMetricRefreshing, setNodeMetricRefreshing] = useState(false);
@@ -1191,6 +1195,18 @@ function EdgeDataFabricTopologyPage({ node }) {
     setSelectedNode({ ...topologyNode, site: site.name, region: site.region });
   };
 
+  const toggleTopologyNodeAddress = (nodeId) => {
+    setRevealedTopologyNodeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
+
   const openQueries = (section, queries) => {
     const titles = {
       map: 'Global Network Map',
@@ -1461,7 +1477,12 @@ function EdgeDataFabricTopologyPage({ node }) {
                 </span>
               )}
             </span>
-            <input value={nodeAddress} onChange={event => setNodeAddress(event.target.value)} />
+            <MaskedTextInput
+              value={nodeAddress}
+              onChange={event => setNodeAddress(event.target.value)}
+              label="topology node"
+              resetKey={node}
+            />
           </label>
           <div className="edf-control-group edf-time-range-control">
             <span>Time Range</span>
@@ -1604,12 +1625,30 @@ function EdgeDataFabricTopologyPage({ node }) {
             {(currentSelectedSite ? currentSelectedSite.nodes : sites).map(item => {
               const isSite = Boolean(item.nodes);
               const status = isSite ? siteStatus(item) : item.status;
+              const itemKey = String(item.id || item.name);
+              const canMaskName = !isSite && hasMaskableAddress(item.name);
+              const isNameRevealed = revealedTopologyNodeIds.has(itemKey);
+              const displayName = canMaskName && !isNameRevealed ? maskNodeAddress(item.name) : item.name;
               return (
-                <button key={item.id} type="button" onClick={() => isSite ? selectSite(item) : openNode(item, currentSelectedSite)}>
-                  <span className={`edf-status-dot ${status}`} />
-                  <strong>{item.name}</strong>
-                  <small>{isSite ? `${item.nodes.length} nodes / ${item.region}` : `${item.role} / CPU ${formatMetricValue(item.cpu)} / Disk ${formatMetricValue(item.diskUsage)}`}</small>
-                </button>
+                <div key={itemKey} className="edf-topology-list-item">
+                  <button type="button" className="edf-topology-list-main" onClick={() => isSite ? selectSite(item) : openNode(item, currentSelectedSite)}>
+                    <span className={`edf-status-dot ${status}`} />
+                    <strong>{displayName}</strong>
+                    <small>{isSite ? `${item.nodes.length} nodes / ${item.region}` : `${item.role} / CPU ${formatMetricValue(item.cpu)} / Disk ${formatMetricValue(item.diskUsage)}`}</small>
+                  </button>
+                  {canMaskName && (
+                    <button
+                      type="button"
+                      className="edf-topology-reveal-btn"
+                      onClick={() => toggleTopologyNodeAddress(itemKey)}
+                      aria-label={`${isNameRevealed ? 'Hide' : 'Show'} topology node address`}
+                      title={`${isNameRevealed ? 'Hide' : 'Show'} topology node address`}
+                      aria-pressed={isNameRevealed}
+                    >
+                      {isNameRevealed ? <FaEyeSlash aria-hidden="true" /> : <FaEye aria-hidden="true" />}
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

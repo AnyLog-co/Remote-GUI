@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ConnectedNodeAddress from '../../components/ConnectedNodeAddress';
 import '../../styles/ReportgeneratorPage.css';
 import { getApiBaseUrl } from '../../utils/runtimeConfig';
 
@@ -532,10 +533,14 @@ const ReportgeneratorPage = ({ node }) => {
       <div className="reportgenerator-header">
         <h2>Report Generator</h2>
         {node && (
-          <div className="selected-node-info">
-            <span className="node-label">Node:</span>
-            <span className="node-value">{node}</span>
-          </div>
+          <ConnectedNodeAddress
+            value={node}
+            label="Node:"
+            as="div"
+            className="selected-node-info"
+            labelClassName="node-label"
+            valueClassName="node-value"
+          />
         )}
       </div>
 

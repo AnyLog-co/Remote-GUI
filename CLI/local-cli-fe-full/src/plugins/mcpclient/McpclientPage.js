@@ -28,6 +28,8 @@ import {
 } from './mcpclient_api';
 import MarkdownRenderer from './MarkdownRenderer';
 import usePageVisibility from '../../hooks/usePageVisibility';
+import MaskedTextInput from '../../components/MaskedTextInput';
+import MaskedNodeAddress from '../../components/MaskedNodeAddress';
 
 export const pluginMetadata = {
   name: 'MCP Client',
@@ -289,13 +291,23 @@ const ObservationPanel = ({ observations = [], totalElapsedMs }) => (
             {item.status === 'error' && (
               <details open>
                 <summary>Error</summary>
-                <pre>{item.error}</pre>
+                <MaskedErrorText
+                  value={item.error}
+                  label="MCP observation error"
+                  as="pre"
+                  className="exception-text"
+                />
               </details>
             )}
             {item.status === 'error' && item.exception && (
               <details>
                 <summary>Full exception</summary>
-                <pre>{item.exception}</pre>
+                <MaskedErrorText
+                  value={item.exception}
+                  label="MCP observation exception"
+                  as="pre"
+                  className="exception-text"
+                />
               </details>
             )}
           </div>
@@ -305,13 +317,47 @@ const ObservationPanel = ({ observations = [], totalElapsedMs }) => (
   </div>
 );
 
+const MaskedErrorText = ({
+  value,
+  label = 'error message',
+  as: Wrapper = 'span',
+  className = '',
+}) => {
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    setRevealed(false);
+  }, [value]);
+
+  return (
+    <Wrapper className={className}>
+      <MaskedNodeAddress
+        value={value}
+        revealed={revealed}
+        onToggle={() => setRevealed(prev => !prev)}
+        label={label}
+      />
+    </Wrapper>
+  );
+};
+
 const ErrorDetails = ({ message, exception }) => (
   <div className="message-error-content">
-    <div className="error-summary-text">{formatBriefError(message)}</div>
+    <MaskedErrorText
+      value={formatBriefError(message)}
+      label="error summary"
+      as="div"
+      className="error-summary-text"
+    />
     {exception && (
       <details className="exception-details">
         <summary>Full exception</summary>
-        <pre>{exception}</pre>
+        <MaskedErrorText
+          value={exception}
+          label="full exception"
+          as="pre"
+          className="exception-text"
+        />
       </details>
     )}
   </div>
@@ -1289,7 +1335,6 @@ const McpclientPage = ({ node }) => {
   };
 
   const canConnect = Boolean(anylogUrl.trim() && ollamaModel.trim() && !connecting);
-  const endpointLabel = normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama';
   const activeChatRunning = runningChatIds.includes(activeChatId);
   const activeChat = chatSessions.find((chat) => chat.id === activeChatId);
   const canSendPrompt = Boolean(anylogUrl.trim() && ollamaModel.trim() && !activeChatRunning);
@@ -2163,7 +2208,7 @@ const McpclientPage = ({ node }) => {
           <FaServer />
           <div>
             <h2>MCP Client</h2>
-            <p>{endpointLabel} | {ollamaModel || 'No model selected'}</p>
+            <p>{ollamaModel || 'No model selected'}</p>
           </div>
         </div>
         <div className="mcp-actions">
@@ -2273,7 +2318,7 @@ const McpclientPage = ({ node }) => {
 
                 <div className="field">
                   <label htmlFor="anylog-url">AnyLog MCP SSE URL</label>
-                  <input
+                  <MaskedTextInput
                     id="anylog-url"
                     value={anylogUrl}
                     onChange={(event) => {
@@ -2281,19 +2326,20 @@ const McpclientPage = ({ node }) => {
                       setAnylogUrl(event.target.value);
                     }}
                     placeholder="http://host:port/mcp/sse"
+                    label="AnyLog MCP SSE URL"
+                    resetKey={nodeMcpUrl}
                   />
-                  <div className="hint">
-                    Defaults to the query node selected in the page header: {nodeMcpUrl || 'no node selected'}.
-                  </div>
                 </div>
 
                 <div className="field">
                   <label htmlFor="ollama-endpoint">LLM base URL</label>
-                  <input
+                  <MaskedTextInput
                     id="ollama-endpoint"
                     value={ollamaEndpoint}
                     onChange={(event) => setOllamaEndpoint(event.target.value)}
                     placeholder="http://192.168.1.50:11434 or http://localhost:1234"
+                    label="LLM base URL"
+                    resetKey="ollama-endpoint"
                   />
                   <div className="hint">Leave blank to use Ollama on the backend machine. For LM Studio, use its local server base URL, commonly http://localhost:1234.</div>
                 </div>
@@ -2430,7 +2476,7 @@ const McpclientPage = ({ node }) => {
           {error && (
             <div className="error-banner">
               <FaExclamationTriangle />
-              <div>{error}</div>
+              <MaskedErrorText value={error} label="MCP error banner" as="div" />
             </div>
           )}
 

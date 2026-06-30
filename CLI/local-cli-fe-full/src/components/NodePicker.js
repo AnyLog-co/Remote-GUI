@@ -5,6 +5,8 @@ import { getConnectedNodes, checkNodeReachable } from '../services/api';
 import '../styles/NodePicker.css';
 import { useEffect } from 'react';
 import { validateNodeConnection } from '../utils/connectionAddress';
+import MaskedNodeAddress from './MaskedNodeAddress';
+import { hasMaskableAddress, maskNodeAddress } from '../utils/maskAddress';
 
 const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNode, onRemoveNode, onEditNode, onSelectNode }) => {
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
   const [editingNode, setEditingNode] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState(null);
+  const [nodeAddressesRevealed, setNodeAddressesRevealed] = useState(false);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -161,6 +164,7 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
   };
 
   const displayedNodes = [...new Set(nodes.filter(Boolean))];
+  const hasMaskedDropdownNodes = displayedNodes.some(hasMaskableAddress);
 
   // If no node is selected, show connection input
   if (!selectedNode) {
@@ -202,20 +206,33 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
   return (
     <div className="node-picker-container">
       <div className="connected-node-section">
-        <select
-          className="node-picker-select"
-          value={selectedNode}
-          onChange={handleDropdownChange}
-        >
-          {displayedNodes.map((node) => (
-            <option key={node} value={node}>
-              {node}
-            </option>
-          ))}
-          <option value="add-node">+ Add New Node</option>
-          {onEditNode && <option value="edit-node">~ Edit Current Node</option>}
-          {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
-        </select>
+        <div className="node-picker-select-group">
+          <select
+            className="node-picker-select"
+            value={selectedNode}
+            onChange={handleDropdownChange}
+          >
+            {displayedNodes.map((node) => (
+              <option key={node} value={node}>
+                {nodeAddressesRevealed ? node : maskNodeAddress(node)}
+              </option>
+            ))}
+            <option value="add-node">+ Add New Node</option>
+            {onEditNode && <option value="edit-node">~ Edit Current Node</option>}
+            {onRemoveNode && <option value="remove-node">− Remove Current Node</option>}
+          </select>
+          {hasMaskedDropdownNodes && (
+            <MaskedNodeAddress
+              value={selectedNode}
+              revealed={nodeAddressesRevealed}
+              onToggle={() => setNodeAddressesRevealed((isRevealed) => !isRevealed)}
+              className="node-picker-reveal-control"
+              buttonClassName="node-picker-reveal-btn"
+              label="node addresses"
+              showText={false}
+            />
+          )}
+        </div>
         {networkDisconnected && (
           <span className="node-picker-status-error" title="The selected node failed the get status network request.">
             Not network connected

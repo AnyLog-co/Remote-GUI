@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AnylogJsonTable from '../../components/AnylogJsonTable';
+import ConnectedNodeAddress from '../../components/ConnectedNodeAddress';
 import { 
   getNodeStatus, 
   getProcessesEndpoint, 
@@ -56,10 +57,14 @@ const NodecheckPage = ({ node }) => {
       <div className="nodecheck-header">
         <h2>Node Check</h2>
         {node && (
-          <div className="selected-node-info">
-            <span className="node-label">Checking:</span>
-            <span className="node-value">{node}</span>
-          </div>
+          <ConnectedNodeAddress
+            value={node}
+            label="Checking:"
+            as="div"
+            className="selected-node-info"
+            labelClassName="node-label"
+            valueClassName="node-value"
+          />
         )}
       </div>
 

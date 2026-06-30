@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import UNSLineChart, { getUNSEffectiveYKey, getUNSNumericColumns } from './UNSLineChart';
 import UNSTimeControls from './UNSTimeControls';
+import { formatDateTimeLocalForBackend, getUNSTimeRangeError as getTimeRangeError } from './UNSTimeUtils';
 import { queryTable } from './uns_api';
 import './UNSPage.css';
 
@@ -52,28 +53,6 @@ const parseTimestampValue = (value) => {
     return numeric < 1000000000000 ? numeric * 1000 : numeric;
   }
   return Date.parse(trimmed);
-};
-
-const formatDateTimeLocalForBackend = (value) => {
-  if (!value) return '';
-  const [datePart, timePart = '00:00'] = String(value).split('T');
-  if (!datePart) return '';
-  const normalizedTime = timePart.length === 5 ? `${timePart}:00` : timePart;
-  return `${datePart} ${normalizedTime}`;
-};
-
-const getTimeRangeError = (graph) => {
-  if (!graph || (graph.timeMode || 'relative') !== 'absolute' || !graph.startTime || !graph.endTime) {
-    return '';
-  }
-
-  const startTime = Date.parse(graph.startTime);
-  const endTime = Date.parse(graph.endTime);
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime < endTime) {
-    return '';
-  }
-
-  return 'Start time must be before end time.';
 };
 
 const getSourceStats = (source) => {

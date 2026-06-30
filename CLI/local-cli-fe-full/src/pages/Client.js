@@ -6,6 +6,8 @@ import CommandInfoModal from '../components/CommandInfoModal'; // Command info m
 import { sendCommand, viewBlobs, viewStreamingBlobs, getBasePresetPolicy } from '../services/api'; // Adjust path as needed
 import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import { getPresetGroups, getPresetsByGroup, addPreset, addPresetGroup } from '../services/file_auth';
+import MaskedNodeAddress from '../components/MaskedNodeAddress';
+import { maskNodeAddress } from '../utils/maskAddress';
 import '../styles/Client.css'; // Optional: create client-specific CSS
 
 const DEFAULT_COMMAND = 'get status';
@@ -39,6 +41,7 @@ const Client = ({ node }) => {
   const [executionTimestamp, setExecutionTimestamp] = useState(null);
   const [additionalContent, setAdditionalContent] = useState(null);
   const [rawTextEnabled, setRawTextEnabled] = useState(false);
+  const [nodeAddressRevealed, setNodeAddressRevealed] = useState(false);
   
   // Bookmark functionality
   const [showBookmarkModal, setShowBookmarkModal] = useState(false);
@@ -59,6 +62,10 @@ const Client = ({ node }) => {
   useEffect(() => {
     window.localStorage.setItem(COMMAND_STORAGE_KEY, command);
   }, [command]);
+
+  useEffect(() => {
+    setNodeAddressRevealed(false);
+  }, [node]);
 
   // Fetch presets once on mount
   useEffect(() => {
@@ -162,6 +169,7 @@ const Client = ({ node }) => {
 
       const endTime = Date.now();
       const executionTimeMs = endTime - startTime;
+      const displayNode = nodeAddressRevealed ? node : maskNodeAddress(node);
       
       console.log('Command execution result:', result);
       setExecutionTime(executionTimeMs);
@@ -213,7 +221,7 @@ const Client = ({ node }) => {
         setResponseData(result.data ?? '');
       } else if (result.type === 'json') {
         setResponseData(
-          `Command "${command}" was sent to ${node}.\n\n\n${JSON.stringify(
+          `Command "${command}" was sent to ${displayNode}.\n\n\n${JSON.stringify(
             result.data,
             null,
             2
@@ -222,7 +230,7 @@ const Client = ({ node }) => {
       } else {
         // For string responses, display the data directly without JSON.stringify
         setResponseData(
-          `Command "${command}" was sent to ${node}.\n\n\n${result.data}`
+          `Command "${command}" was sent to ${displayNode}.\n\n\n${result.data}`
         );
       }
     } catch (err) {
@@ -555,8 +563,14 @@ const Client = ({ node }) => {
         </div>
       ) : (
         <>
-          <p>
-            <strong>Connected Node:</strong> {node}
+          <p className="client-connected-node">
+            <strong>Connected Node:</strong>
+            <MaskedNodeAddress
+              value={node}
+              revealed={nodeAddressRevealed}
+              onToggle={() => setNodeAddressRevealed((isRevealed) => !isRevealed)}
+              label="connected node address"
+            />
           </p>
 
       {/* Hiding Presets for now */}

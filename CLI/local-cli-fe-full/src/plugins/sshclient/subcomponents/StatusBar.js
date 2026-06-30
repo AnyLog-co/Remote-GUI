@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { cliState } from '../state/state';
 import { closeTerminalSession } from '../sessionManager';
 import { FaCircle } from 'react-icons/fa6';
+import MaskedNodeAddress from '../../../components/MaskedNodeAddress';
 import '../styles/StatusBar.css';
 
 export const TimeCounter = ({ customStart, enabled }) => {
@@ -37,6 +38,7 @@ export const TimeCounter = ({ customStart, enabled }) => {
 };
 
 const StatusBar = ({ id, conn }) => {
+  const [addressRevealed, setAddressRevealed] = useState(false);
   const isConnected = cliState(
     (state) => state.activeConnection[id]?.isConnected ?? false,
   );
@@ -64,7 +66,12 @@ const StatusBar = ({ id, conn }) => {
           className="status-icon"
         />
         <span className="hostname">
-          {conn.hostname ?? 'Host'}({conn.ip ?? 'IP'})
+          <MaskedNodeAddress
+            value={`${conn.hostname ?? 'Host'}(${conn.ip ?? 'IP'})`}
+            revealed={addressRevealed}
+            onToggle={() => setAddressRevealed(prev => !prev)}
+            label="SSH terminal address"
+          />
         </span>
       </div>
 

@@ -70,6 +70,35 @@
   box-shadow: none;
 }
 
+.policy-generator .masked-node-address-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted, #5b6678);
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.policy-generator .masked-node-address-toggle:hover {
+  background: transparent;
+  color: var(--color-primary, #2563eb);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.policy-generator .masked-node-address-toggle:active {
+  transform: translateY(0);
+}
+
 /* Submit button specific styles */
 .submit-button {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
