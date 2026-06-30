@@ -117,9 +117,9 @@ const TopBar = ({
           <button 
             onClick={onClearStoredData}
             className="clear-data-btn"
-            title="Clear all stored data"
+            title="Clear cached local data"
           >
-            Clear data
+            Clear cache
           </button>
         )}
         {onThemeToggle && (

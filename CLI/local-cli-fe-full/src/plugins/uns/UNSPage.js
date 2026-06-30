@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
+import UNSCompareGraphs from './UNSCompareGraphs';
 import { getRoot, getChildren, checkChildren, queryTable, checkTable } from './uns_api';
 
 const ROOT_QUERY_UNS_DATA = 'blockchain get root policies exclude cluster';
 const ROOT_QUERY_UNS_CLUSTERS = 'blockchain get root policies include cluster';
 const UNS_NAVIGATION_STORAGE_KEY = 'uns-navigation-state';
+const UNS_COMPARE_STORAGE_KEY = 'uns-compare-graphs-state';
 
 const isRootGroupItem = (item) => item?.__unsRootGroup === true;
 
@@ -33,6 +35,9 @@ const UNSPage = ({ node }) => {
   const [sqlLoading, setSqlLoading] = useState(false); // SQL query loading state
   const [sqlError, setSqlError] = useState(null); // SQL query error
   const [chartYKey, setChartYKey] = useState(null); // Selected value column for line chart
+  const [compareGraphs, setCompareGraphs] = useState([]);
+  const [activeCompareGraphId, setActiveCompareGraphId] = useState(null);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [itemsWithData, setItemsWithData] = useState(new Map()); // Cache: item key (dbms:table) -> has_data (boolean)
   const [checkingData, setCheckingData] = useState(new Set()); // Track items currently being checked
   const checkTimeoutsRef = useRef([]); // Track all pending timeout IDs for cleanup
@@ -40,14 +45,22 @@ const UNSPage = ({ node }) => {
   const childrenCheckTimeoutsRef = useRef([]); // Track all pending timeout IDs for children checks
   const autoExpandedItemsRef = useRef(new Set());
   const sidePanelAnchorRef = useRef(null);
+  const [compareCacheReady, setCompareCacheReady] = useState(false);
 
   // Load root items on mount or when node changes
   useEffect(() => {
+    setCompareCacheReady(false);
     if (node) {
       if (!restoreNavigationState(node)) {
         loadRootItems();
       }
+      restoreCompareState(node);
+    } else {
+      setCompareGraphs([]);
+      setActiveCompareGraphId(null);
+      setIsCompareOpen(false);
     }
+    setCompareCacheReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node]); // Only reload when node changes, not when rootQuery changes
 
@@ -73,6 +86,10 @@ const UNSPage = ({ node }) => {
       setRootQuery(ROOT_QUERY_UNS_DATA);
       setExecutedRootQuery(ROOT_QUERY_UNS_DATA);
       setShowingClusters(false);
+      setCompareGraphs([]);
+      setActiveCompareGraphId(null);
+      setIsCompareOpen(false);
+      clearCachedCompareState();
       autoExpandedItemsRef.current = new Set();
     };
 
@@ -90,6 +107,15 @@ const UNSPage = ({ node }) => {
     cacheNavigationState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node, executedRootQuery, showingClusters, layers, currentPath, expandedItems, itemsWithChildren, itemsWithoutChildren]);
+
+  useEffect(() => {
+    if (!node || !compareCacheReady) {
+      return;
+    }
+
+    cacheCompareState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node, compareCacheReady, compareGraphs, activeCompareGraphId, isCompareOpen]);
 
   useEffect(() => {
     if (!isSidePanelOpen || !selectedItem || !sidePanelAnchorRef.current) {
@@ -398,6 +424,14 @@ const UNSPage = ({ node }) => {
     }
   };
 
+  const clearCachedCompareState = () => {
+    try {
+      window.localStorage.removeItem(UNS_COMPARE_STORAGE_KEY);
+    } catch {
+      // Ignore storage failures; compare state should still reset in memory.
+    }
+  };
+
   const cacheNavigationState = () => {
     try {
       window.localStorage.setItem(
@@ -415,6 +449,96 @@ const UNSPage = ({ node }) => {
       );
     } catch {
       // Ignore storage failures; navigation should still work in memory.
+    }
+  };
+
+  const normalizeCompareGraph = (graph) => {
+    if (!graph || typeof graph !== 'object' || !graph.id) {
+      return null;
+    }
+
+    const sources = Array.isArray(graph.sources)
+      ? graph.sources
+        .filter((source) => source && source.dbms && source.table)
+        .map((source) => ({
+          ...source,
+          identityKey: source.identityKey || getCompareSourceIdentityFromParts(source),
+          data: Array.isArray(source.data) ? source.data : [],
+          columns: Array.isArray(source.columns) ? source.columns : [],
+          loading: false,
+          error: source.error || null,
+          needsFetch: source.needsFetch === true && !(Array.isArray(source.data) && source.data.length > 0),
+        }))
+      : [];
+
+    return {
+      ...graph,
+      timeRangeValue: graph.timeRangeValue || 5,
+      timeRangeUnit: graph.timeRangeUnit || 'minute',
+      timeMode: graph.timeMode || 'relative',
+      startTime: graph.startTime || '',
+      endTime: graph.endTime || '',
+      timeColumn: graph.timeColumn || 'timestamp',
+      refreshRate: graph.refreshRate || 20,
+      liveMode: false,
+      timeRangeErrorDismissed: Boolean(graph.timeRangeErrorDismissed),
+      sources,
+    };
+  };
+
+  const cacheCompareState = () => {
+    try {
+      if (compareGraphs.length === 0) {
+        window.localStorage.removeItem(UNS_COMPARE_STORAGE_KEY);
+        return;
+      }
+
+      window.localStorage.setItem(
+        UNS_COMPARE_STORAGE_KEY,
+        JSON.stringify({
+          node,
+          graphs: compareGraphs.map(normalizeCompareGraph).filter(Boolean),
+          activeGraphId: activeCompareGraphId,
+          isOpen: isCompareOpen,
+        }),
+      );
+    } catch {
+      // Ignore storage failures; compare state should still work in memory.
+    }
+  };
+
+  const restoreCompareState = (currentNode) => {
+    try {
+      const raw = window.localStorage.getItem(UNS_COMPARE_STORAGE_KEY);
+      if (!raw) {
+        setCompareGraphs([]);
+        setActiveCompareGraphId(null);
+        setIsCompareOpen(false);
+        return false;
+      }
+
+      const saved = JSON.parse(raw);
+      if (!saved || saved.node !== currentNode || !Array.isArray(saved.graphs)) {
+        setCompareGraphs([]);
+        setActiveCompareGraphId(null);
+        setIsCompareOpen(false);
+        return false;
+      }
+
+      const savedGraphs = saved.graphs.map(normalizeCompareGraph).filter(Boolean);
+      const savedActiveId = savedGraphs.some((graph) => graph.id === saved.activeGraphId)
+        ? saved.activeGraphId
+        : savedGraphs[0]?.id || null;
+      setCompareGraphs(savedGraphs);
+      setActiveCompareGraphId(savedActiveId);
+      setIsCompareOpen(Boolean(saved.isOpen && savedGraphs.length > 0));
+      return savedGraphs.length > 0;
+    } catch {
+      clearCachedCompareState();
+      setCompareGraphs([]);
+      setActiveCompareGraphId(null);
+      setIsCompareOpen(false);
+      return false;
     }
   };
 
@@ -961,6 +1085,133 @@ const UNSPage = ({ node }) => {
     }
   };
 
+  const createCompareGraph = () => {
+    const nextIndex = compareGraphs.length + 1;
+    const graph = {
+      id: `compare-graph-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `Comparison ${nextIndex}`,
+      timeRangeValue,
+      timeRangeUnit,
+      timeMode: 'relative',
+      startTime: '',
+      endTime: '',
+      timeColumn,
+      refreshRate: 20,
+      liveMode: false,
+      sources: [],
+    };
+
+    setCompareGraphs((prev) => [...prev, graph]);
+    setActiveCompareGraphId(graph.id);
+    setIsCompareOpen(true);
+    return graph;
+  };
+
+  const getCompareSourceIdentityFromParts = (source) => {
+    if (!source?.dbms || !source?.table) return '';
+    return [
+      source.dbms,
+      source.table,
+      source.where || '',
+      source.column || '',
+    ].join('::');
+  };
+
+  const getCompareSourceIdentity = (item) => {
+    const itemData = getItemData(item);
+    return getCompareSourceIdentityFromParts(itemData);
+  };
+
+  const isItemInActiveCompareGraph = (item) => {
+    const identityKey = getCompareSourceIdentity(item);
+    if (!identityKey || !activeCompareGraphId) return false;
+
+    const activeGraph = compareGraphs.find((graph) => graph.id === activeCompareGraphId);
+    if (!activeGraph) return false;
+
+    return activeGraph.sources.some((source) => (
+      (source.identityKey || getCompareSourceIdentityFromParts(source)) === identityKey
+    ));
+  };
+
+  const buildCompareSource = (item) => {
+    const itemData = getItemData(item);
+    if (!itemData?.dbms || !itemData?.table) {
+      return null;
+    }
+
+    return {
+      id: `compare-source-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: getItemName(item),
+      type: getItemType(item),
+      dbms: itemData.dbms,
+      table: itemData.table,
+      where: itemData.where || '',
+      column: itemData.column || '',
+      identityKey: getCompareSourceIdentityFromParts(itemData),
+      chartYKey: null,
+      data: [],
+      columns: [],
+      loading: false,
+      error: null,
+      needsFetch: true,
+      lastFetchedAt: null,
+    };
+  };
+
+  const addItemToCompare = (item) => {
+    const source = buildCompareSource(item);
+    if (!source) {
+      setError('This UNS item does not have table data to compare.');
+      return;
+    }
+
+    let targetGraphId = activeCompareGraphId;
+    let graphToCreate = null;
+
+    if (!targetGraphId || !compareGraphs.some((graph) => graph.id === targetGraphId)) {
+      const nextIndex = compareGraphs.length + 1;
+      graphToCreate = {
+        id: `compare-graph-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: `Comparison ${nextIndex}`,
+        timeRangeValue,
+        timeRangeUnit,
+        timeMode: 'relative',
+        startTime: '',
+        endTime: '',
+        timeColumn,
+        refreshRate: 20,
+        liveMode: false,
+        sources: [],
+      };
+      targetGraphId = graphToCreate.id;
+      setActiveCompareGraphId(targetGraphId);
+    }
+
+    setCompareGraphs((prev) => {
+      const nextGraphs = graphToCreate && !prev.some((graph) => graph.id === graphToCreate.id)
+        ? [...prev, graphToCreate]
+        : prev;
+
+      return nextGraphs.map((graph) => {
+        if (graph.id !== targetGraphId) return graph;
+
+        const alreadyAdded = graph.sources.some((existing) => (
+          (existing.identityKey || getCompareSourceIdentityFromParts(existing)) === source.identityKey
+        ));
+
+        if (alreadyAdded) return graph;
+
+        return {
+          ...graph,
+          sources: [...graph.sources, source],
+        };
+      });
+    });
+
+    setIsCompareOpen(true);
+  };
+
   const checkTableData = async (dbms, table) => {
     if (!node || !dbms || !table) return false;
 
@@ -1103,7 +1354,8 @@ const UNSPage = ({ node }) => {
       // Don't expand if clicking on the info button
       if (
         (hasChildren || !hasNoChildren) &&
-        !e.target.closest('.uns-item-info-btn')
+        !e.target.closest('.uns-item-info-btn') &&
+        !e.target.closest('.uns-item-compare-btn')
       ) {
         expandItem(item, layerIndex);
       }
@@ -1122,6 +1374,7 @@ const UNSPage = ({ node }) => {
     };
 
     const isSelected = selectedItem && getItemKey(selectedItem) === itemIdentity;
+    const isComparedInActiveGraph = isItemInActiveCompareGraph(item);
 
     // Add table indicator class only if the table schema is available.
     // Don't add any class if hasData is false or null (no table or not checked)
@@ -1162,6 +1415,20 @@ const UNSPage = ({ node }) => {
           )}
         </div>
         <div className="uns-item-actions">
+          {hasTable && (
+            <button
+              className={`uns-item-compare-btn ${isComparedInActiveGraph ? 'selected' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                addItemToCompare(item);
+              }}
+              title={isComparedInActiveGraph ? 'Already in active compare graph' : 'Add to compare graph'}
+              aria-label={isComparedInActiveGraph ? 'Already in active compare graph' : 'Add to compare graph'}
+              aria-pressed={isComparedInActiveGraph}
+            >
+              {isComparedInActiveGraph ? 'Compared' : 'Compare'}
+            </button>
+          )}
           <button
             className="uns-item-info-btn"
             onClick={handleInfoButtonClick}
@@ -1226,7 +1493,7 @@ const UNSPage = ({ node }) => {
     if (layers.length === 0) return null;
 
     return (
-      <div className="uns-breadcrumb">
+      <div className="uns-breadcrumb" onClick={() => setIsCompareOpen(false)}>
         <button className="uns-breadcrumb-item" onClick={navigateToRoot}>
           🏠 Root
         </button>
@@ -1328,6 +1595,17 @@ const UNSPage = ({ node }) => {
         <div className="uns-main-content-wrapper">
           {renderBreadcrumb()}
 
+          <UNSCompareGraphs
+            conn={node}
+            graphs={compareGraphs}
+            setGraphs={setCompareGraphs}
+            activeGraphId={activeCompareGraphId}
+            setActiveGraphId={setActiveCompareGraphId}
+            isOpen={isCompareOpen}
+            setIsOpen={setIsCompareOpen}
+            onCreateGraph={createCompareGraph}
+          />
+
           <div className="uns-layers">
             {layers.length > 0 &&
               (() => {
@@ -1384,6 +1662,8 @@ const UNSPage = ({ node }) => {
             onTimeRangeValueChange={setTimeRangeValue}
             onTimeRangeUnitChange={setTimeRangeUnit}
             onFetchTimeRange={fetchSqlData}
+            onCompareItem={addItemToCompare}
+            isCompared={selectedItem ? isItemInActiveCompareGraph(selectedItem) : false}
             getItemName={getItemName}
             getItemType={getItemType}
             getItemId={getItemId}

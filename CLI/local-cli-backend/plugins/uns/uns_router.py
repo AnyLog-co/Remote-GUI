@@ -29,6 +29,8 @@ class QueryTableRequest(BaseModel):
     table: str
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
+    start_time: Optional[str] = None  # Absolute range start, e.g. "2026-06-29 16:00:00"
+    end_time: Optional[str] = None  # Absolute range end, e.g. "2026-06-29 17:00:00"
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
     column: Optional[str] = None  # When set, only fetch time_column and this column
     time_column: Optional[str] = "insert_timestamp"  # Time-based column for filtering: insert_timestamp or timestamp
@@ -233,8 +235,15 @@ async def query_table(request: QueryTableRequest):
 
         table_quoted = _quote_identifier(request.table.strip()) if request.table else request.table
 
+        start_time = (request.start_time or "").strip().replace("'", "''")
+        end_time = (request.end_time or "").strip().replace("'", "''")
+        if start_time and end_time:
+            time_filter = f"{time_col} >= '{start_time}' AND {time_col} < '{end_time}'"
+        else:
+            time_filter = f"period({time_unit}, {time_value_str}, NOW(), {time_col})"
+
         # Base time filter using selected time column
-        sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE period({time_unit}, {time_value_str}, NOW(), {time_col})'
+        sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE {time_filter}'
         where_clause = (request.where or "").strip()
         if where_clause:
             sql_query += f" AND {where_clause}"
