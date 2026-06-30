@@ -22,7 +22,7 @@ const AddConnectionView = () => {
 
   // When connection is created, add to connection state
   const handleSubmit = () => {
-    if (!newConnection.hostname || !newConnection.ip || !newConnection.user) {
+    if (!newConnection.hostname || !newConnection.ip) {
       alert('Please fill in all required fields');
       return;
     }
@@ -73,15 +73,6 @@ const AddConnectionView = () => {
           onChange={handleChange}
           required
         />
-        <FormField
-          label="Username"
-          name="user"
-          placeholder="root"
-          value={newConnection.user}
-          onChange={handleChange}
-          required
-        />
-
         <FormButton onClick={handleSubmit} fullWidth primary>
           Add Connection
         </FormButton>

@@ -8,8 +8,10 @@ import {
   updateBookmarkNode,
   setDefaultBookmark
 } from "../services/file_auth";
+import MaskedNodeAddress from "../components/MaskedNodeAddress";
 import { buildBookmarksExport, parseBookmarkJson } from "../utils/bookmarkImport";
 import { validateNodeConnection } from "../utils/connectionAddress";
+import { maskNodeAddress } from "../utils/maskAddress";
 import "../styles/Bookmarks.css";
 
 const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSelectNode }) => {
@@ -22,6 +24,7 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [nodeSelectionMsg, setNodeSelectionMsg] = useState("");
+  const [revealedBookmarkNodes, setRevealedBookmarkNodes] = useState(new Set());
 
   // Import functionality
   const [importFile, setImportFile] = useState(null);
@@ -268,7 +271,7 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
       }));
       // reload to reflect updated flags
       await loadBookmarks();
-      setSuccessMsg(`Set ${node} as default`);
+      setSuccessMsg(`Set ${maskNodeAddress(node)} as default`);
       setError("");
     } catch (error) {
       setError("Failed to set default bookmark");
@@ -285,7 +288,19 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
 
     onSelectNode(node);
     setError("");
-    setNodeSelectionMsg(`Selected node: ${node}`);
+    setNodeSelectionMsg(`Selected node: ${maskNodeAddress(node)}`);
+  };
+
+  const toggleBookmarkNodeReveal = (node) => {
+    setRevealedBookmarkNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(node)) {
+        next.delete(node);
+      } else {
+        next.add(node);
+      }
+      return next;
+    });
   };
 
   const handleStartEditing = (node, currentDescription) => {
@@ -553,7 +568,14 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
                   <ul>
                     {importPreview.bookmarks.map((bookmark, index) => (
                       <li key={index}>
-                        <strong>{bookmark.node}</strong>
+                        <strong>
+                          <MaskedNodeAddress
+                            value={bookmark.node}
+                            revealed={revealedBookmarkNodes.has(`preview-${index}-${bookmark.node}`)}
+                            onToggle={() => toggleBookmarkNodeReveal(`preview-${index}-${bookmark.node}`)}
+                            label="import preview node"
+                          />
+                        </strong>
                         {bookmark.description && ` - ${bookmark.description}`}
                       </li>
                     ))}
@@ -655,13 +677,19 @@ const Bookmarks = ({ node, nodes = [], onAddNode, onRemoveNode, onEditNode, onSe
                       </div>
                     ) : (
                       <div className="node-display-container">
-                        <span className="bookmark-node">{bookmark.node}</span>
+                        <MaskedNodeAddress
+                          value={bookmark.node}
+                          revealed={revealedBookmarkNodes.has(bookmark.node)}
+                          onToggle={() => toggleBookmarkNodeReveal(bookmark.node)}
+                          className="bookmark-node"
+                          label="bookmark node"
+                        />
                         <button
                           className="node-edit-btn"
                           disabled={loading}
                           onClick={() => handleStartNodeEditing(bookmark.node)}
                           title="Edit IP and port"
-                          aria-label={`Edit IP and port for ${bookmark.node}`}
+                          aria-label="Edit IP and port"
                         >
                           ✏️
                         </button>

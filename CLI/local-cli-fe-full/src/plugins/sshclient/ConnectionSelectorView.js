@@ -12,6 +12,7 @@ import { CiTrash, CiStar } from 'react-icons/ci';
 import { FaStar } from 'react-icons/fa';
 import { TbBrandPowershell } from 'react-icons/tb';
 import { Vault } from './storage/vault';
+import MaskedNodeAddress from '../../components/MaskedNodeAddress';
 import {
   retrieveStoredCredential,
   storeCredentialInSession,
@@ -67,6 +68,7 @@ const ConnectionSelectorView = () => {
   });
   const [sortedConns, setSortedConns] = useState(null);
   const [expandedHostnames, setExpandedHostnames] = useState({});
+  const [revealedConnectionAddresses, setRevealedConnectionAddresses] = useState(new Set());
 
   // States for active terminals view and editing terminal conn name
   const [visibleTooltip, setVisibleTooltip] = useState(null);
@@ -79,6 +81,18 @@ const ConnectionSelectorView = () => {
 
   const handleRemoveConnection = (id) => {
     removeConnection(id);
+  };
+
+  const toggleConnectionAddressReveal = (key) => {
+    setRevealedConnectionAddresses(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   /**
@@ -585,7 +599,12 @@ const ConnectionSelectorView = () => {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {hostname}
+                  <MaskedNodeAddress
+                    value={hostname}
+                    revealed={revealedConnectionAddresses.has(`group-${hostname}`)}
+                    onToggle={() => toggleConnectionAddressReveal(`group-${hostname}`)}
+                    label="SSH host address"
+                  />
                 </span>
                 <span
                   style={{
@@ -918,7 +937,12 @@ const ConnectionSelectorView = () => {
                 overflowWrap: 'break-word',
               }}
             >
-              {conn.hostname}
+              <MaskedNodeAddress
+                value={conn.hostname}
+                revealed={revealedConnectionAddresses.has(`host-${conn.id || conn.hostname}`)}
+                onToggle={() => toggleConnectionAddressReveal(`host-${conn.id || conn.hostname}`)}
+                label="SSH connection hostname"
+              />
             </h3>
 
             <p
@@ -930,21 +954,15 @@ const ConnectionSelectorView = () => {
                 overflowWrap: 'break-word',
               }}
             >
-              IP: {conn.ip}
+              IP:{' '}
+              <MaskedNodeAddress
+                value={conn.ip}
+                revealed={revealedConnectionAddresses.has(`ip-${conn.id || conn.ip}`)}
+                onToggle={() => toggleConnectionAddressReveal(`ip-${conn.id || conn.ip}`)}
+                label="SSH connection IP"
+              />
             </p>
 
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', margin: '2px 0' }}>
-              User: {conn.user}
-            </p>
-            <p
-              style={{
-                color: 'var(--color-text-muted)',
-                fontSize: '14px',
-                margin: '2px 0',
-              }}
-            >
-              Password: ******
-            </p>
             <p
               style={{
                 color: 'var(--color-text-muted)',
@@ -1167,7 +1185,13 @@ const ConnectionSelectorView = () => {
                 fontWeight: '600',
               }}
             >
-              Connect to {selectedConnection?.hostname}
+              Connect to{' '}
+              <MaskedNodeAddress
+                value={selectedConnection?.hostname}
+                revealed={revealedConnectionAddresses.has(`modal-${selectedConnection?.hostname}`)}
+                onToggle={() => toggleConnectionAddressReveal(`modal-${selectedConnection?.hostname}`)}
+                label="selected SSH host"
+              />
             </h2>
             <p
               style={{

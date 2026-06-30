@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import { getDatabases, getTables, getColumns, sendCommand } from '../services/api';
 import DataTable from '../components/DataTable';
+import ConnectedNodeAddress from '../components/ConnectedNodeAddress';
 import { exportToCSV, exportToPDF } from '../utils/tableExport';
 import '../styles/SqlQueryGenerator.css';
 
@@ -946,7 +947,7 @@ const SqlQueryGenerator = ({ node }) => {
   return (
     <div className="sql-query-generator">
       <h2>AnyLog Query Generator</h2>
-      <p><strong>Connected Node:</strong> {node}</p>
+      <ConnectedNodeAddress value={node} label="Connected Node:" />
       {/* <p className="query-description">
         Build AnyLog SQL queries with the format: <code>run client () sql [dbms] [options] "[SELECT statement]"</code>
       </p> */}

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import ConnectedNodeAddress from "../components/ConnectedNodeAddress";
 import { submitPolicy } from "../services/api";
 import "../styles/Policies.css"; // Import your CSS file for styling
 
@@ -53,9 +54,7 @@ const Policies = ({ node }) => {
         <div className="container">
             <h2>Policy Editor</h2>
 
-            <p>
-                <strong>Connected Node:</strong> {node}
-            </p>
+            <ConnectedNodeAddress value={node} label="Connected Node:" />
 
             {/* Policy Name Input */}
             <input

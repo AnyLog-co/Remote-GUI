@@ -19,6 +19,13 @@
     flex-wrap: wrap;
     min-width: 0;
   }
+
+  .node-picker-select-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
   
   .add-node-section {
     display: flex;
@@ -39,6 +46,42 @@
     color: var(--color-text, #212529);
     min-width: 200px;
     max-width: 360px;
+  }
+
+  .node-picker-reveal-control {
+    flex: 0 0 auto;
+  }
+
+  .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn {
+    color: #000000;
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    font-size: 20px;
+    opacity: 1;
+  }
+
+  .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn svg {
+    color: #000000;
+    fill: currentColor;
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 1px rgba(255, 255, 255, 0.75));
+  }
+
+  .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn:hover {
+    color: #000000;
+  }
+
+  :root[data-theme='dark'] .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn {
+    color: rgba(247, 251, 255, 0.88);
+  }
+
+  :root[data-theme='dark'] .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn svg {
+    color: rgba(247, 251, 255, 0.88);
+    filter: none;
+  }
+
+  :root[data-theme='dark'] .node-picker-select-group .masked-node-address-toggle.node-picker-reveal-btn:hover {
+    color: #f7fbff;
   }
 
   .node-picker-status-error {

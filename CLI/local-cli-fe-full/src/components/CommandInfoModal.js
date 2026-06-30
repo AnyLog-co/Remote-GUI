@@ -1,4 +1,5 @@
 import React from 'react';
+import ConnectedNodeAddress from './ConnectedNodeAddress';
 import '../styles/CommandInfoModal.css';
 
 const CommandInfoModal = ({ isOpen, onClose, node, command, method }) => {
@@ -191,7 +192,7 @@ const CommandInfoModal = ({ isOpen, onClose, node, command, method }) => {
             <h3>Connection Details</h3>
             <div className="connection-info">
               <div className="info-row">
-                <strong>Node:</strong> <code>{node}</code>
+                <ConnectedNodeAddress value={node} label="Node:" as="span" />
               </div>
               <div className="info-row">
                 <strong>Method:</strong> <code>{method}</code>

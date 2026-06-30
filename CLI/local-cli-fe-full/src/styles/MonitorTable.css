@@ -36,6 +36,16 @@
   color: var(--color-heading, #222);
 }
 
+.monitor-node-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.monitor-node-cell {
+  max-width: 100%;
+}
+
 /* Threshold Form Styles */
 .threshold-form {
   background-color: var(--color-surface-muted, #f8f9fa);
