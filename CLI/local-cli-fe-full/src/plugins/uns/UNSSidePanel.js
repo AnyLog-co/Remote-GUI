@@ -16,10 +16,19 @@ const UNSSidePanel = ({
   sqlError,
   timeRangeValue,
   timeRangeUnit,
+  timeMode = 'relative',
+  startTime = '',
+  endTime = '',
+  timeRangeError = '',
+  timeRangeErrorDismissed = false,
   timeColumn,
   onClose,
   onTimeRangeValueChange,
   onTimeRangeUnitChange,
+  onTimeModeChange,
+  onStartTimeChange,
+  onEndTimeChange,
+  onTimeRangeErrorDismiss,
   onTimeColumnChange,
   onFetchTimeRange,
   onCompareItem,
@@ -223,12 +232,18 @@ const UNSSidePanel = ({
                       idPrefix="uns-detail"
                       timeRangeValue={timeRangeValue}
                       timeRangeUnit={timeRangeUnit}
+                      timeMode={timeMode}
+                      startTime={startTime}
+                      endTime={endTime}
                       timeColumn={timeColumn}
-                      loading={sqlLoading}
+                      loading={sqlLoading || Boolean(timeRangeError)}
                       liveMode={liveMode}
                       refreshRate={refreshRate}
                       onTimeRangeValueChange={onTimeRangeValueChange}
                       onTimeRangeUnitChange={onTimeRangeUnitChange}
+                      onTimeModeChange={onTimeModeChange}
+                      onStartTimeChange={onStartTimeChange}
+                      onEndTimeChange={onEndTimeChange}
                       onTimeColumnChange={onTimeColumnChange}
                       onRefresh={() => {
                         if (showTableSection) {
@@ -238,6 +253,18 @@ const UNSSidePanel = ({
                       onLiveModeChange={setLiveMode}
                       onRefreshRateChange={setRefreshRate}
                     />
+                    {timeRangeError && !timeRangeErrorDismissed && (
+                      <div className="uns-compare-range-error uns-time-range-error" role="alert">
+                        <span>{timeRangeError}</span>
+                        <button
+                          type="button"
+                          onClick={onTimeRangeErrorDismiss}
+                          aria-label="Dismiss time range error"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
