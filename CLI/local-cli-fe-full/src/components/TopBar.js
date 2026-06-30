@@ -1,5 +1,5 @@
 // src/components/TopBar.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import '../styles/TopBar.css';
 import logo from '../assets/AnyLog_EDM_logo.png';
 import NodePicker from './NodePicker.js';
@@ -16,6 +16,8 @@ const TopBar = ({
   onSelectNode,
   restoredFromStorage,
   onClearStoredData,
+  onExportCache,
+  onImportCache,
   theme = 'light',
   onThemeToggle,
   isNavigationOpen = false,
@@ -23,6 +25,7 @@ const TopBar = ({
 }) => {
   const [license, setLicense] = useState(null);
   const [areMobileToolsOpen, setAreMobileToolsOpen] = useState(false);
+  const cacheUploadInputRef = useRef(null);
   const [nodeReachability, setNodeReachability] = useState({
     checking: false,
     networkDisconnected: false,
@@ -113,6 +116,41 @@ const TopBar = ({
         <NavLink to="bookmarks" className="mobile-header-link">
           Update Bookmarks
         </NavLink>
+        {onExportCache && (
+          <button
+            type="button"
+            onClick={onExportCache}
+            className="topbar-cache-btn"
+            title="Export UNS and topology cache"
+          >
+            Export cache
+          </button>
+        )}
+        {onImportCache && (
+          <>
+            <button
+              type="button"
+              onClick={() => cacheUploadInputRef.current?.click()}
+              className="topbar-cache-btn"
+              title="Upload UNS and topology cache"
+            >
+              Upload cache
+            </button>
+            <input
+              ref={cacheUploadInputRef}
+              type="file"
+              className="topbar-cache-input"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  onImportCache(file);
+                }
+                event.target.value = '';
+              }}
+            />
+          </>
+        )}
         {onClearStoredData && (
           <button 
             onClick={onClearStoredData}

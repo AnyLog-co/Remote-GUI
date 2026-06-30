@@ -4,6 +4,15 @@ import './EdgeDataFabricTopologyPage.css';
 import usePageVisibility from '../../hooks/usePageVisibility';
 import MaskedTextInput from '../../components/MaskedTextInput';
 import { hasMaskableAddress, maskNodeAddress } from '../../utils/maskAddress';
+import {
+  EDF_TOPOLOGY_CACHE_STORAGE_KEY,
+  EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY,
+  downloadJson,
+  mergeTopologyCachePayload,
+  readJsonStorage,
+  todayStamp,
+  writeJsonStorage,
+} from '../../utils/pageCacheExport';
 import { fetchEdgeDataFabricColumns, fetchEdgeDataFabricMonitoringStatus, fetchEdgeDataFabricNodeMetrics, fetchEdgeDataFabricTables, fetchEdgeDataFabricTopology, runEdgeDataFabricQuery } from './edgedatafabrictopology_api';
 
 export const pluginMetadata = {
@@ -58,6 +67,8 @@ const DEFAULT_QUERY_FORM = {
 const DEFAULT_NODE_METRIC_ORDER = ['Status', 'Role', 'CPU', 'Disk', 'Inserts', 'Operational Time'];
 const DEFAULT_NODE_METRICS = new Set(DEFAULT_NODE_METRIC_ORDER);
 const AGGREGATION_OPTIONS = ['count', 'min', 'max', 'avg', 'sum'];
+const EDF_TOPOLOGY_CACHE_KIND = 'anylog-edf-topology-cache';
+const EDF_TOPOLOGY_CACHE_VERSION = 1;
 
 function normalizeFieldName(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -799,6 +810,105 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
   );
 }
 
+function normalizeTopologyCacheNodeEntry(entry, fallbackNode = '') {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  return {
+    nodeAddress: String(entry.nodeAddress || fallbackNode || ''),
+    rangePreset: entry.rangePreset || '24h',
+    customRangeMode: entry.customRangeMode || 'relative',
+    customRangeValue: entry.customRangeValue ?? 24,
+    customRangeUnit: entry.customRangeUnit || 'hours',
+    customRangeStart: entry.customRangeStart || '',
+    customRangeEnd: entry.customRangeEnd || '',
+    pollPreset: entry.pollPreset || '60',
+    customPollValue: entry.customPollValue ?? 60,
+    customPollUnit: entry.customPollUnit || 'seconds',
+    paused: entry.paused ?? true,
+    labels: entry.labels ?? true,
+    mapSize: entry.mapSize || 'm',
+    selectedSite: entry.selectedSite || null,
+    companyFilter: entry.companyFilter || '',
+    selectedNode: entry.selectedNode || null,
+    revealedTopologyNodeIds: Array.isArray(entry.revealedTopologyNodeIds)
+      ? entry.revealedTopologyNodeIds
+      : [],
+    nodeMetricOrder: Array.isArray(entry.nodeMetricOrder)
+      ? entry.nodeMetricOrder
+      : DEFAULT_NODE_METRIC_ORDER,
+    catalogQueryForm: entry.catalogQueryForm || DEFAULT_QUERY_FORM,
+    editingCatalogQueryId: entry.editingCatalogQueryId || null,
+    catalogQueryCards: Array.isArray(entry.catalogQueryCards) ? entry.catalogQueryCards : [],
+    catalogQueryResults: entry.catalogQueryResults || {},
+    tablesByDbms: entry.tablesByDbms || {},
+    columnsByTable: entry.columnsByTable || {},
+    topology: entry.topology || {
+      sites: [],
+      catalog: [],
+      networkDatabases: [],
+      scopedNetworkDatabases: [],
+      activeCompanyFilter: '',
+      issues: [],
+      apiLog: []
+    },
+    lastRefresh: entry.lastRefresh || null,
+    collapsed: entry.collapsed || {
+      catalog: false,
+      kpis: true,
+      issues: false,
+      resources: true,
+      tables: true
+    },
+    savedAt: entry.savedAt || null
+  };
+}
+
+function normalizeTopologyCachePayload(payload) {
+  if (payload?.kind === EDF_TOPOLOGY_CACHE_KIND) {
+    const nodes = Object.entries(payload.nodes || {}).reduce((acc, [key, entry]) => {
+      const normalized = normalizeTopologyCacheNodeEntry(entry, key);
+      if (normalized) {
+        acc[key] = normalized;
+      }
+      return acc;
+    }, {});
+
+    return {
+      kind: EDF_TOPOLOGY_CACHE_KIND,
+      version: EDF_TOPOLOGY_CACHE_VERSION,
+      exportedAt: payload.exportedAt || new Date().toISOString(),
+      nodes,
+      topologyQueryCards: Array.isArray(payload.topologyQueryCards)
+        ? payload.topologyQueryCards
+        : undefined
+    };
+  }
+
+  const legacyEntry = normalizeTopologyCacheNodeEntry(payload, payload?.nodeAddress || '');
+  if (legacyEntry?.nodeAddress) {
+    return {
+      kind: EDF_TOPOLOGY_CACHE_KIND,
+      version: EDF_TOPOLOGY_CACHE_VERSION,
+      exportedAt: new Date().toISOString(),
+      nodes: {
+        [legacyEntry.nodeAddress]: legacyEntry
+      },
+      topologyQueryCards: Array.isArray(payload.topologyQueryCards)
+        ? payload.topologyQueryCards
+        : undefined
+    };
+  }
+
+  return {
+    kind: EDF_TOPOLOGY_CACHE_KIND,
+    version: EDF_TOPOLOGY_CACHE_VERSION,
+    exportedAt: new Date().toISOString(),
+    nodes: {}
+  };
+}
+
 function EdgeDataFabricTopologyPage({ node }) {
   const pageVisible = usePageVisibility();
   const [nodeAddress, setNodeAddress] = useState(node || '');
@@ -847,6 +957,8 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [columnsLoadingKey, setColumnsLoadingKey] = useState('');
   const [draggedQueryId, setDraggedQueryId] = useState(null);
   const catalogQueryCardsRef = useRef([]);
+  const topologyCacheUploadInputRef = useRef(null);
+  const topologyCacheSkipNextWriteRef = useRef(false);
   const refreshSequence = useRef(0);
   const monitoringStatusSequence = useRef(0);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -862,6 +974,8 @@ function EdgeDataFabricTopologyPage({ node }) {
     apiLog: []
   });
   const [loadError, setLoadError] = useState(null);
+  const [cacheMessage, setCacheMessage] = useState('');
+  const [topologyCacheReady, setTopologyCacheReady] = useState(false);
   const [collapsed, setCollapsed] = useState({
     catalog: false,
     kpis: true,
@@ -871,7 +985,14 @@ function EdgeDataFabricTopologyPage({ node }) {
   });
 
   useEffect(() => {
-    if (node) setNodeAddress(node);
+    setTopologyCacheReady(false);
+    setCacheMessage('');
+    if (node) {
+      setNodeAddress(node);
+      restoreTopologyCache(node);
+    }
+    setTopologyCacheReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node]);
 
   const sites = topology.sites;
@@ -949,9 +1070,227 @@ function EdgeDataFabricTopologyPage({ node }) {
       .filter(([label]) => !nodeMetricOrder.includes(label));
   }, [activeSelectedNode, nodeMetricOrder]);
 
+  const buildTopologyCacheEntry = useCallback(() => ({
+    nodeAddress,
+    rangePreset,
+    customRangeMode,
+    customRangeValue,
+    customRangeUnit,
+    customRangeStart,
+    customRangeEnd,
+    pollPreset,
+    customPollValue,
+    customPollUnit,
+    paused,
+    labels,
+    mapSize,
+    selectedSite,
+    companyFilter,
+    selectedNode,
+    revealedTopologyNodeIds: [...revealedTopologyNodeIds],
+    nodeMetricOrder,
+    catalogQueryForm,
+    editingCatalogQueryId,
+    catalogQueryCards,
+    catalogQueryResults,
+    tablesByDbms,
+    columnsByTable,
+    topology,
+    lastRefresh: lastRefresh?.toISOString?.() || lastRefresh || null,
+    collapsed,
+    savedAt: new Date().toISOString()
+  }), [
+    catalogQueryCards,
+    catalogQueryForm,
+    catalogQueryResults,
+    collapsed,
+    columnsByTable,
+    companyFilter,
+    customPollUnit,
+    customPollValue,
+    customRangeEnd,
+    customRangeMode,
+    customRangeStart,
+    customRangeUnit,
+    customRangeValue,
+    editingCatalogQueryId,
+    labels,
+    lastRefresh,
+    mapSize,
+    nodeAddress,
+    nodeMetricOrder,
+    paused,
+    pollPreset,
+    rangePreset,
+    revealedTopologyNodeIds,
+    selectedNode,
+    selectedSite,
+    tablesByDbms,
+    topology
+  ]);
+
+  const readTopologyCachePayload = useCallback(() => (
+    normalizeTopologyCachePayload(readJsonStorage(EDF_TOPOLOGY_CACHE_STORAGE_KEY))
+  ), []);
+
+  const writeTopologyCachePayload = useCallback((payload) => {
+    writeJsonStorage(EDF_TOPOLOGY_CACHE_STORAGE_KEY, normalizeTopologyCachePayload(payload));
+  }, []);
+
+  const cacheTopologyState = useCallback(() => {
+    if (!nodeAddress) {
+      return;
+    }
+
+    const payload = readTopologyCachePayload();
+    payload.nodes[nodeAddress] = buildTopologyCacheEntry();
+    writeTopologyCachePayload(payload);
+  }, [buildTopologyCacheEntry, nodeAddress, readTopologyCachePayload, writeTopologyCachePayload]);
+
+  const applyTopologyCacheEntry = useCallback((entry) => {
+    const normalized = normalizeTopologyCacheNodeEntry(entry, nodeAddress || node || '');
+    if (!normalized) {
+      return false;
+    }
+
+    setNodeAddress(normalized.nodeAddress || nodeAddress || node || '');
+    setRangePreset(normalized.rangePreset);
+    setCustomRangeMode(normalized.customRangeMode);
+    setCustomRangeValue(normalized.customRangeValue);
+    setCustomRangeUnit(normalized.customRangeUnit);
+    setCustomRangeStart(normalized.customRangeStart);
+    setCustomRangeEnd(normalized.customRangeEnd);
+    setPollPreset(normalized.pollPreset);
+    setCustomPollValue(normalized.customPollValue);
+    setCustomPollUnit(normalized.customPollUnit);
+    setPaused(normalized.paused);
+    setLabels(normalized.labels);
+    setMapSize(normalized.mapSize);
+    setSelectedSite(normalized.selectedSite);
+    setCompanyFilter(normalized.companyFilter);
+    setSelectedNode(normalized.selectedNode);
+    setRevealedTopologyNodeIds(new Set(normalized.revealedTopologyNodeIds));
+    setNodeMetricOrder(normalized.nodeMetricOrder);
+    setDraggedNodeMetric('');
+    setCatalogQueryForm(normalized.catalogQueryForm);
+    setEditingCatalogQueryId(normalized.editingCatalogQueryId);
+    setCatalogQueryCards(normalized.catalogQueryCards);
+    setCatalogQueryResults(normalized.catalogQueryResults);
+    setTablesByDbms(normalized.tablesByDbms);
+    setColumnsByTable(normalized.columnsByTable);
+    setTopology(normalized.topology);
+    setLastRefresh(normalized.lastRefresh ? new Date(normalized.lastRefresh) : null);
+    setCollapsed(normalized.collapsed);
+    return true;
+  }, [node, nodeAddress]);
+
+  const restoreTopologyCache = useCallback((cacheNode = nodeAddress || node || '') => {
+    const payload = readTopologyCachePayload();
+    const entry = payload.nodes?.[cacheNode];
+    if (!entry) {
+      return false;
+    }
+
+    const restored = applyTopologyCacheEntry(entry);
+    if (restored) {
+      writeTopologyCachePayload(payload);
+    }
+    return restored;
+  }, [applyTopologyCacheEntry, node, nodeAddress, readTopologyCachePayload, writeTopologyCachePayload]);
+
+  const exportTopologyCache = useCallback(() => {
+    const payload = readTopologyCachePayload();
+    if (nodeAddress) {
+      payload.nodes[nodeAddress] = buildTopologyCacheEntry();
+    }
+    const queryCards = readJsonStorage(EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY, catalogQueryCards);
+    payload.topologyQueryCards = Array.isArray(queryCards) ? queryCards : catalogQueryCards;
+    payload.exportedAt = new Date().toISOString();
+    writeTopologyCachePayload(payload);
+    downloadJson(`edf-topology-graphs-${todayStamp()}.json`, payload);
+    setCacheMessage('Topology graphs cache exported.');
+  }, [buildTopologyCacheEntry, catalogQueryCards, nodeAddress, readTopologyCachePayload, writeTopologyCachePayload]);
+
+  const importTopologyCache = useCallback(async (file) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const importedPayload = normalizeTopologyCachePayload(JSON.parse(await file.text()));
+      const currentPayload = readTopologyCachePayload();
+      currentPayload.topologyQueryCards = readJsonStorage(
+        EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY,
+        catalogQueryCards,
+      );
+      const mergedPayload = mergeTopologyCachePayload(currentPayload, importedPayload);
+      writeTopologyCachePayload(mergedPayload);
+      if (Array.isArray(importedPayload.topologyQueryCards)) {
+        writeJsonStorage(EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY, mergedPayload.topologyQueryCards);
+        setCatalogQueryCards(mergedPayload.topologyQueryCards);
+      }
+
+      const cacheNode = nodeAddress || node || Object.keys(mergedPayload.nodes || {})[0] || '';
+      if (cacheNode && mergedPayload.nodes?.[cacheNode]) {
+        applyTopologyCacheEntry(mergedPayload.nodes[cacheNode]);
+      }
+      setCacheMessage(`Imported ${Object.keys(importedPayload.nodes || {}).length} topology graph cache${Object.keys(importedPayload.nodes || {}).length === 1 ? '' : 's'}.`);
+    } catch (error) {
+      setCacheMessage(error.message || 'Unable to import topology graphs cache.');
+    }
+  }, [applyTopologyCacheEntry, node, nodeAddress, readTopologyCachePayload, writeTopologyCachePayload]);
+
   useEffect(() => {
     window.localStorage.setItem('edfTopologyQueryCards', JSON.stringify(catalogQueryCards));
   }, [catalogQueryCards]);
+
+  useEffect(() => {
+    if (!topologyCacheReady || !nodeAddress) {
+      return;
+    }
+    if (topologyCacheSkipNextWriteRef.current) {
+      topologyCacheSkipNextWriteRef.current = false;
+      return;
+    }
+    cacheTopologyState();
+  }, [cacheTopologyState, nodeAddress, topologyCacheReady]);
+
+  useEffect(() => {
+    const handleCacheImported = () => {
+      const savedQueryCards = readJsonStorage(EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY, []);
+      if (Array.isArray(savedQueryCards)) {
+        setCatalogQueryCards(savedQueryCards);
+      }
+      const restored = restoreTopologyCache(nodeAddress || node || '');
+      setCacheMessage(restored ? 'Topology cache imported.' : 'Topology cache imported for another node.');
+    };
+    const handleCacheCleared = () => {
+      setTopologyCacheReady(false);
+      topologyCacheSkipNextWriteRef.current = true;
+      setCacheMessage('');
+      setCatalogQueryCards([]);
+      setCatalogQueryResults({});
+      setTablesByDbms({});
+      setColumnsByTable({});
+      setTopology({
+        sites: [],
+        catalog: [],
+        networkDatabases: [],
+        scopedNetworkDatabases: [],
+        activeCompanyFilter: '',
+        issues: [],
+        apiLog: []
+      });
+      setTopologyCacheReady(true);
+    };
+
+    window.addEventListener('edf-topology-cache-imported', handleCacheImported);
+    window.addEventListener('edf-topology-cache-cleared', handleCacheCleared);
+    return () => {
+      window.removeEventListener('edf-topology-cache-imported', handleCacheImported);
+      window.removeEventListener('edf-topology-cache-cleared', handleCacheCleared);
+    };
+  }, [node, nodeAddress, restoreTopologyCache]);
 
   useEffect(() => {
     catalogQueryCardsRef.current = visibleCatalogQueryCards;
@@ -1580,8 +1919,35 @@ function EdgeDataFabricTopologyPage({ node }) {
           <button className="edf-action primary" type="button" onClick={refresh} disabled={loading}>
             {loading ? 'Refreshing' : 'Refresh'}
           </button>
+          <button className="edf-action" type="button" onClick={exportTopologyCache}>
+            Export graphs
+          </button>
+          <button className="edf-action" type="button" onClick={() => topologyCacheUploadInputRef.current?.click()}>
+            Upload graphs
+          </button>
+          <input
+            ref={topologyCacheUploadInputRef}
+            type="file"
+            className="edf-cache-input"
+            accept="application/json,.json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                importTopologyCache(file);
+              }
+              event.target.value = '';
+            }}
+          />
         </div>
       </header>
+      {cacheMessage && (
+        <div className="edf-cache-message" role="status">
+          <span>{cacheMessage}</span>
+          <button type="button" onClick={() => setCacheMessage('')} aria-label="Dismiss cache message">
+            ×
+          </button>
+        </div>
+      )}
 
       {!monitoringStatus.networkDisconnected && (
       <main className="edf-main">

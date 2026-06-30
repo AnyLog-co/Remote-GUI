@@ -172,8 +172,16 @@ const Sidebar = ({ isOpen = false, onNavigate }) => {
 
       <div className="sidebar-version">
         <NavLink to="about" className="sidebar-about-link" onClick={onNavigate}>About</NavLink>
+        <a href="https://anylog-co.github.io/anylog-docs.github.io/docs/readme/"
+          className="sidebar-about-link"
+          onClick={onNavigate}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Documentation
+        </a>
         <span className="sidebar-version-number">
-          {formatVersion(remoteGuiVersion)}
+            {formatVersion(remoteGuiVersion)}
         </span>
       </div>
     </nav>

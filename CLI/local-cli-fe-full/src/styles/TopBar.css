@@ -126,6 +126,7 @@
 
   /* Clear data button styling */
   .clear-data-btn,
+  .topbar-cache-btn,
   .theme-toggle-btn {
     display: inline-flex;
     align-items: center;
@@ -140,7 +141,8 @@
     white-space: nowrap;
   }
 
-  .clear-data-btn {
+  .clear-data-btn,
+  .topbar-cache-btn {
     background: rgba(255, 255, 255, 0.94);
     border: 1px solid rgba(255, 255, 255, 0.72);
     color: #0757a4;
@@ -148,27 +150,31 @@
     box-shadow: 0 6px 18px rgba(0, 43, 92, 0.14);
   }
 
-  .clear-data-btn:hover {
+  .clear-data-btn:hover,
+  .topbar-cache-btn:hover {
     background: #ffffff;
     border-color: #ffffff;
     box-shadow: 0 8px 22px rgba(0, 43, 92, 0.2);
     transform: translateY(-1px);
   }
 
-  :root[data-theme='dark'] .clear-data-btn {
+  :root[data-theme='dark'] .clear-data-btn,
+  :root[data-theme='dark'] .topbar-cache-btn {
     background: rgba(7, 17, 31, 0.82);
     border-color: rgba(109, 139, 177, 0.72);
     color: #f7fbff;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 22px rgba(0, 0, 0, 0.24);
   }
 
-  :root[data-theme='dark'] .clear-data-btn:hover {
+  :root[data-theme='dark'] .clear-data-btn:hover,
+  :root[data-theme='dark'] .topbar-cache-btn:hover {
     background: rgba(31, 44, 68, 0.96);
     border-color: rgba(146, 201, 255, 0.82);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 26px rgba(0, 0, 0, 0.34);
   }
 
   .clear-data-btn:focus-visible,
+  .topbar-cache-btn:focus-visible,
   .theme-toggle-btn:focus-visible {
     outline: 3px solid rgba(255, 255, 255, 0.68);
     outline-offset: 2px;
@@ -197,6 +203,10 @@
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
     font-size: 15px;
+  }
+
+  .topbar-cache-input {
+    display: none;
   }
 
   /* Animations */
@@ -339,7 +349,8 @@
       text-align: center;
     }
 
-    .clear-data-btn {
+    .clear-data-btn,
+    .topbar-cache-btn {
       min-height: 44px;
       flex: 1;
       width: 100%;

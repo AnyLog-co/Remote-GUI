@@ -33,6 +33,12 @@ import {
   setDefaultBookmark,
   updateBookmarkNode,
 } from '../services/file_auth';
+import {
+  EDF_TOPOLOGY_CACHE_STORAGE_KEY,
+  EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY,
+  downloadGlobalPageCache,
+  importGlobalPageCache,
+} from '../utils/pageCacheExport';
 
 const DEFAULT_BOOKMARK_PORT = '32149';
 
@@ -283,12 +289,35 @@ const Dashboard = () => {
       'client-command-draft',
       'uns-navigation-state',
       'uns-compare-graphs-state',
+      EDF_TOPOLOGY_CACHE_STORAGE_KEY,
+      EDF_TOPOLOGY_QUERY_CARDS_STORAGE_KEY,
     ].forEach((key) => localStorage.removeItem(key));
     window.dispatchEvent(new Event('mcpclient-storage-cleared'));
     window.dispatchEvent(new Event('uns-storage-cleared'));
+    window.dispatchEvent(new Event('edf-topology-cache-cleared'));
     setNodes([]);
     setSelectedNode(null);
     console.log('Cleared all stored dashboard data');
+  };
+
+  const handleExportCache = () => {
+    const result = downloadGlobalPageCache();
+    if (!result.ok) {
+      window.alert('No UNS or topology cache is available to export yet.');
+    }
+  };
+
+  const handleImportCache = async (file) => {
+    try {
+      const result = await importGlobalPageCache(file);
+      window.alert(
+        result.ok
+          ? `Imported ${result.imported.join(', ')}.`
+          : 'No supported cache data was found in that file.'
+      );
+    } catch (error) {
+      window.alert(error.message || 'Unable to import cache file.');
+    }
   };
 
   // Adds a new node (if valid and not already in the list)
@@ -350,6 +379,8 @@ const Dashboard = () => {
         onSelectNode={setSelectedNode}
         restoredFromStorage={restoredFromStorage}
         onClearStoredData={clearStoredData}
+        onExportCache={handleExportCache}
+        onImportCache={handleImportCache}
         theme={theme}
         onThemeToggle={() => setTheme((currentTheme) => (
           currentTheme === 'dark' ? 'light' : 'dark'

@@ -385,8 +385,13 @@ const UNSCompareGraphs = ({
   isOpen,
   setIsOpen,
   onCreateGraph,
+  onExportCache,
+  onImportCache,
+  cacheMessage,
+  onDismissCacheMessage,
 }) => {
   const liveIntervalRef = useRef(null);
+  const cacheUploadInputRef = useRef(null);
   const activeGraph = graphs.find((graph) => graph.id === activeGraphId) || graphs[0] || null;
 
   const updateGraph = (graphId, updater) => {
@@ -520,10 +525,6 @@ const UNSCompareGraphs = ({
     activeGraph?.sources,
   ]);
 
-  if (graphs.length === 0) {
-    return null;
-  }
-
   const removeGraph = (graphId) => {
     const nextGraphs = graphs.filter((graph) => graph.id !== graphId);
     setGraphs(nextGraphs);
@@ -584,11 +585,44 @@ const UNSCompareGraphs = ({
               {graph.name} ({graph.sources.length})
             </option>
           ))}
+          {graphs.length === 0 && (
+            <option value="">No compare graphs</option>
+          )}
         </select>
         <button type="button" className="uns-compare-secondary-btn" onClick={onCreateGraph}>
           New graph
         </button>
+        <button type="button" className="uns-compare-secondary-btn" onClick={onExportCache}>
+          Export graphs
+        </button>
+        <button
+          type="button"
+          className="uns-compare-secondary-btn"
+          onClick={() => cacheUploadInputRef.current?.click()}
+        >
+          Upload graphs
+        </button>
+        <input
+          ref={cacheUploadInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="uns-compare-cache-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              onImportCache?.(file);
+            }
+            event.target.value = '';
+          }}
+        />
       </div>
+
+      {cacheMessage && (
+        <div className="uns-compare-cache-message" role="status">
+          <span>{cacheMessage}</span>
+          <button type="button" onClick={onDismissCacheMessage} aria-label="Dismiss cache message">×</button>
+        </div>
+      )}
 
       {isOpen && activeGraph && (
         <div className="uns-compare-body">

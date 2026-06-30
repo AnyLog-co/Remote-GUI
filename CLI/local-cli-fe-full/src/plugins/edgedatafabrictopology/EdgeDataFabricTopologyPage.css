@@ -130,6 +130,16 @@
   color: var(--color-error-text);
 }
 
+:root[data-theme='dark'] .edf-cache-message {
+  background: rgba(102, 179, 255, 0.12);
+  border-color: rgba(102, 179, 255, 0.44);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-cache-message button {
+  color: var(--color-text);
+}
+
 :root[data-theme='dark'] .edf-query-button,
 :root[data-theme='dark'] .edf-table-wrap,
 :root[data-theme='dark'] .edf-modal-shell,
@@ -438,6 +448,43 @@
   border-color: #ffc107;
   background: #fff8e1;
   color: #856404;
+}
+
+.edf-cache-input {
+  display: none;
+}
+
+.edf-cache-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid #b6d9ff;
+  border-radius: 8px;
+  background: #eef7ff;
+  color: #17456f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.edf-cache-message button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #17456f;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.edf-cache-message button:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .edf-main {
