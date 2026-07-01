@@ -203,6 +203,42 @@
   fill: var(--edf-map-hub-label);
 }
 
+:root[data-theme='dark'] .edf-maplibre-map {
+  background: #07111f;
+}
+
+:root[data-theme='dark'] .edf-maplibre-map .maplibregl-ctrl,
+:root[data-theme='dark'] .edf-maplibre-map .maplibregl-ctrl-group {
+  background: rgba(7, 17, 31, 0.88);
+  border-color: rgba(109, 139, 177, 0.58);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-maplibre-map .maplibregl-ctrl-group button {
+  filter: invert(1);
+}
+
+:root[data-theme='dark'] .edf-map-marker-label {
+  background: rgba(7, 17, 31, 0.86);
+  border-color: rgba(109, 139, 177, 0.58);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-map-coordinate-readout {
+  background: rgba(7, 17, 31, 0.9);
+  border-color: rgba(109, 139, 177, 0.58);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .edf-map-geolabel {
+  color: rgba(226, 237, 252, 0.88);
+  text-shadow:
+    0 1px 2px rgba(7, 17, 31, 0.95),
+    0 -1px 2px rgba(7, 17, 31, 0.95),
+    1px 0 2px rgba(7, 17, 31, 0.95),
+    -1px 0 2px rgba(7, 17, 31, 0.95);
+}
+
 :root[data-theme='dark'] .edf-topology-list-item {
   background: var(--color-surface);
   border-color: var(--color-border);
@@ -227,6 +263,7 @@
 }
 
 :root[data-theme='dark'] .edf-catalog-card,
+:root[data-theme='dark'] .edf-catalog-metric-grid article,
 :root[data-theme='dark'] .edf-kpi-grid article,
 :root[data-theme='dark'] .edf-node-metric-card,
 :root[data-theme='dark'] .edf-modal-item {
@@ -236,12 +273,15 @@
 }
 
 :root[data-theme='dark'] .edf-catalog-card strong,
+:root[data-theme='dark'] .edf-catalog-metric-grid strong,
 :root[data-theme='dark'] .edf-modal-item strong {
   color: var(--color-heading);
 }
 
 :root[data-theme='dark'] .edf-catalog-card span,
 :root[data-theme='dark'] .edf-catalog-card small,
+:root[data-theme='dark'] .edf-catalog-metric-grid span,
+:root[data-theme='dark'] .edf-catalog-metric-grid small,
 :root[data-theme='dark'] .edf-kpi-grid span,
 :root[data-theme='dark'] .edf-kpi-grid small,
 :root[data-theme='dark'] .edf-modal-metrics span {
@@ -648,6 +688,156 @@
   height: 100%;
 }
 
+.edf-maplibre-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.edf-maplibre-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #e8f0f7;
+  cursor: grab;
+}
+
+.edf-maplibre-map:active {
+  cursor: grabbing;
+}
+
+.edf-maplibre-map .maplibregl-ctrl,
+.edf-maplibre-map .maplibregl-ctrl-group {
+  border: 1px solid rgba(116, 139, 166, 0.34);
+  border-radius: 7px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.edf-maplibre-map .maplibregl-ctrl-attrib {
+  font-size: 10px;
+  opacity: 0.78;
+}
+
+.edf-maplibre-map .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+
+.edf-map-coordinate-readout {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  z-index: 3;
+  padding: 5px 8px;
+  border: 1px solid rgba(116, 139, 166, 0.36);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+.edf-map-geolabel {
+  display: block;
+  max-width: 140px;
+  color: rgba(37, 54, 74, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+  pointer-events: none;
+  text-align: center;
+  text-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.92),
+    0 -1px 2px rgba(255, 255, 255, 0.92),
+    1px 0 2px rgba(255, 255, 255, 0.92),
+    -1px 0 2px rgba(255, 255, 255, 0.92);
+  white-space: normal;
+}
+
+.edf-map-geolabel.country {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.edf-map-geolabel.state {
+  color: rgba(42, 66, 91, 0.72);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.edf-map-marker {
+  position: absolute;
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #28a745;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.26);
+  z-index: 2;
+}
+
+.edf-map-marker.warn {
+  background: #ffc107;
+  color: #18202c;
+}
+
+.edf-map-marker.crit {
+  background: #dc3545;
+}
+
+.edf-map-marker:hover,
+.edf-map-marker:focus-visible {
+  z-index: 4;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(102, 179, 255, 0.26), 0 7px 18px rgba(0, 0, 0, 0.32);
+}
+
+.edf-map-marker-count {
+  pointer-events: none;
+}
+
+.edf-map-marker-label {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  display: grid;
+  min-width: 140px;
+  max-width: 220px;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid rgba(116, 139, 166, 0.34);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
+  text-align: left;
+  transform: translateX(-50%);
+  white-space: normal;
+}
+
+.edf-map-marker-label small {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
 .edf-svg-button {
   appearance: none;
   padding: 0;
@@ -802,6 +992,7 @@
 }
 
 .edf-catalog-grid,
+.edf-catalog-metric-grid,
 .edf-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -809,6 +1000,7 @@
 }
 
 .edf-catalog-card,
+.edf-catalog-metric-grid article,
 .edf-kpi-grid article {
   padding: 13px 14px;
   border: 1px solid #dee2e6;
@@ -827,6 +1019,7 @@
 }
 
 .edf-catalog-card span,
+.edf-catalog-metric-grid span,
 .edf-kpi-grid span,
 .edf-modal-metrics span {
   display: block;
@@ -836,11 +1029,21 @@
   text-transform: uppercase;
 }
 
-.edf-catalog-card strong {
+.edf-catalog-card strong,
+.edf-catalog-metric-grid strong {
   display: block;
   margin-top: 4px;
   color: #333;
   font-size: 15px;
+}
+
+.edf-catalog-metric-grid {
+  margin-bottom: 14px;
+}
+
+.edf-catalog-metric-grid strong {
+  color: #007bff;
+  font-size: 24px;
 }
 
 .edf-catalog-card b {
@@ -851,6 +1054,7 @@
 }
 
 .edf-catalog-card small,
+.edf-catalog-metric-grid small,
 .edf-kpi-grid small {
   display: block;
   color: #6c757d;

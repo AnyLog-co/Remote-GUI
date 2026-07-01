@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import maplibregl from 'maplibre-gl';
+import { feature, mesh } from 'topojson-client';
+import countriesTopology from 'world-atlas/countries-110m.json';
+import landTopology from 'world-atlas/land-110m.json';
+import statesTopology from 'us-atlas/states-10m.json';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './EdgeDataFabricTopologyPage.css';
 import usePageVisibility from '../../hooks/usePageVisibility';
 import MaskedTextInput from '../../components/MaskedTextInput';
@@ -34,6 +40,10 @@ const SIZE_OPTIONS = [
   { label: 'L', value: 'l' },
   { label: 'XL', value: 'xl' }
 ];
+const TOPOLOGY_GROUP_OPTIONS = [
+  { label: 'Company', value: 'company' },
+  { label: 'Loc', value: 'loc' }
+];
 const POLL_PRESET_OPTIONS = [
   { label: '10s', value: '10' },
   { label: '30s', value: '30' },
@@ -55,6 +65,9 @@ const MEM_KEYS = ['mem_percent', 'memory_percent', 'Memory Percent', 'Mem Percen
 const DISK_FREE_KEYS = ['free_space_percent', 'disk_free_percent', 'Free Space Percent', 'Free Space', 'free space', 'free space percent', 'Disk Free Percent', 'Disk Free %'];
 const DISK_USAGE_KEYS = ['disk_percent', 'disk_usage_percent', 'disk_used_percent', 'Disk Percent', 'Disk Usage', 'Disk Usage Percent', 'disk usage percent', 'Disk Used Percent', 'Disk Used %', 'Disk %'];
 const OPERATIONAL_TIME_KEYS = ['operational time', 'Operational Time', 'processing time', 'Processing Time', 'elapsed time', 'Elapsed time'];
+const LOCATION_KEYS = ['loc', 'Loc', 'LOC', 'location', 'Location', 'site', 'Site', 'region', 'Region', 'city', 'City', 'area', 'Area', 'zone', 'Zone', 'cluster', 'namespace'];
+const LATITUDE_KEYS = ['lat', 'Lat', 'LAT', 'latitude', 'Latitude', 'LATITUDE', 'y', 'Y'];
+const LONGITUDE_KEYS = ['lon', 'Lon', 'LON', 'lng', 'Lng', 'LNG', 'long', 'Long', 'longitude', 'Longitude', 'LONGITUDE', 'x', 'X'];
 const NODE_METRICS_QUERY = 'get monitored operators';
 const DEFAULT_QUERY_FORM = {
   label: '',
@@ -69,6 +82,30 @@ const DEFAULT_NODE_METRICS = new Set(DEFAULT_NODE_METRIC_ORDER);
 const AGGREGATION_OPTIONS = ['count', 'min', 'max', 'avg', 'sum'];
 const EDF_TOPOLOGY_CACHE_KIND = 'anylog-edf-topology-cache';
 const EDF_TOPOLOGY_CACHE_VERSION = 1;
+const MAP_MIN_ZOOM = 1;
+const MAP_MAX_ZOOM = 15;
+const MAP_DEFAULT_ZOOM = 2;
+const OFFLINE_COUNTRIES_GEOJSON = feature(countriesTopology, countriesTopology.objects.countries);
+const OFFLINE_LAND_GEOJSON = feature(landTopology, landTopology.objects.land);
+const OFFLINE_COUNTRY_BORDER_GEOJSON = mesh(
+  countriesTopology,
+  countriesTopology.objects.countries,
+  (a, b) => a !== b
+);
+const OFFLINE_US_STATE_GEOJSON = feature(statesTopology, statesTopology.objects.states);
+const OFFLINE_US_STATE_BORDER_GEOJSON = mesh(
+  statesTopology,
+  statesTopology.objects.states,
+  (a, b) => a !== b
+);
+const OFFLINE_GRATICULE_GEOJSON = createGraticuleGeoJson();
+const OFFLINE_COUNTRY_LABEL_POINTS = createFeatureLabelPoints(OFFLINE_COUNTRIES_GEOJSON, {
+  minArea: 3,
+  skipNames: new Set(['Antarctica'])
+});
+const OFFLINE_US_STATE_LABEL_POINTS = createFeatureLabelPoints(OFFLINE_US_STATE_GEOJSON, {
+  minArea: 0
+});
 
 function normalizeFieldName(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -416,6 +453,344 @@ function roleFromName(name, fallback) {
   return fallback || 'Node';
 }
 
+function parseCoordinatePair(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    const lat = toNumber(firstValue(value, LATITUDE_KEYS));
+    const lon = toNumber(firstValue(value, LONGITUDE_KEYS));
+    return lat !== null && lon !== null ? { lat, lon } : null;
+  }
+
+  const match = String(value).match(/(-?\d+(?:\.\d+)?)\s*[,/ ]\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lon = Number(match[2]);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
+function locationFromRow(row) {
+  const locValue = firstValue(row, LOCATION_KEYS);
+  const parsedLoc = parseCoordinatePair(locValue);
+  const lat = toNumber(firstValue(row, LATITUDE_KEYS)) ?? parsedLoc?.lat ?? null;
+  let lon = toNumber(firstValue(row, LONGITUDE_KEYS)) ?? parsedLoc?.lon ?? null;
+  const countryValue = cleanMetadataValue(firstValue(row, ['country', 'Country']));
+  const country = countryValue.toLowerCase();
+  if (lon !== null && lon > 0 && ['us', 'usa', 'united states', 'united states of america'].includes(country)) {
+    lon = -lon;
+  }
+  const state = cleanMetadataValue(firstValue(row, ['state', 'State', 'province', 'Province']));
+  const city = cleanMetadataValue(firstValue(row, ['city', 'City', 'town', 'Town']));
+  const placeName = [city, state, countryValue].filter(Boolean).join(', ');
+  const locationName = cleanMetadataValue(locValue);
+
+  return {
+    name: placeName || locationName || (lat !== null && lon !== null ? `${lat.toFixed(4)}, ${lon.toFixed(4)}` : ''),
+    coordinateLabel: lat !== null && lon !== null ? `${lat.toFixed(4)}, ${lon.toFixed(4)}` : '',
+    country: countryValue,
+    state,
+    city,
+    lat,
+    lon
+  };
+}
+
+function mapCoordinatesFromLatLon(lat, lon) {
+  if (lat === null || lon === null || lat === undefined || lon === undefined) {
+    return null;
+  }
+
+  const clampedLat = Math.max(-90, Math.min(90, Number(lat)));
+  const clampedLon = Math.max(-180, Math.min(180, Number(lon)));
+  if (!Number.isFinite(clampedLat) || !Number.isFinite(clampedLon)) {
+    return null;
+  }
+
+  return {
+    x: 5 + ((clampedLon + 180) / 360) * 90,
+    y: 90 - ((clampedLat + 90) / 180) * 80
+  };
+}
+
+function clampLatitude(value) {
+  return Math.max(-85.05112878, Math.min(85.05112878, Number(value) || 0));
+}
+
+function clampLongitude(value) {
+  const number = Number(value) || 0;
+  return Math.max(-180, Math.min(180, number));
+}
+
+function normalizedMapZoom(value) {
+  return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(Number(value) || MAP_DEFAULT_ZOOM)));
+}
+
+function formatMapCoordinate(value, axis) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  const direction = axis === 'lat'
+    ? (number >= 0 ? 'N' : 'S')
+    : (number >= 0 ? 'E' : 'W');
+  return `${Math.abs(number).toFixed(4)}°${direction}`;
+}
+
+function runtimeMapStyleUrl() {
+  if (typeof window === 'undefined') return '';
+  const env = window._env_ || {};
+  return env.EDF_MAP_STYLE_URL || env.TOPOLOGY_MAP_STYLE_URL || env.MARTIN_STYLE_URL || '';
+}
+
+function createGraticuleGeoJson() {
+  const features = [];
+  for (let lon = -180; lon <= 180; lon += 30) {
+    const coordinates = [];
+    for (let lat = -80; lat <= 80; lat += 5) {
+      coordinates.push([lon, lat]);
+    }
+    features.push({
+      type: 'Feature',
+      properties: { type: 'longitude', value: lon },
+      geometry: { type: 'LineString', coordinates }
+    });
+  }
+
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const coordinates = [];
+    for (let lon = -180; lon <= 180; lon += 5) {
+      coordinates.push([lon, lat]);
+    }
+    features.push({
+      type: 'Feature',
+      properties: { type: 'latitude', value: lat },
+      geometry: { type: 'LineString', coordinates }
+    });
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features
+  };
+}
+
+function collectGeometryCoordinates(geometry, coordinates = []) {
+  if (!geometry) return coordinates;
+  if (geometry.type === 'GeometryCollection') {
+    geometry.geometries.forEach(item => collectGeometryCoordinates(item, coordinates));
+    return coordinates;
+  }
+
+  const visit = value => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === 'number' && typeof value[1] === 'number') {
+      coordinates.push(value);
+      return;
+    }
+    value.forEach(visit);
+  };
+  visit(geometry.coordinates);
+  return coordinates;
+}
+
+function createFeatureLabelPoints(featureCollection, options = {}) {
+  const minArea = Number(options.minArea) || 0;
+  const skipNames = options.skipNames || new Set();
+  return (featureCollection.features || [])
+    .map(item => {
+      const name = cleanMetadataValue(item.properties?.name);
+      if (!name || skipNames.has(name)) return null;
+      const coordinates = collectGeometryCoordinates(item.geometry);
+      if (coordinates.length === 0) return null;
+
+      let minLon = Infinity;
+      let maxLon = -Infinity;
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      coordinates.forEach(([lon, lat]) => {
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+        minLon = Math.min(minLon, lon);
+        maxLon = Math.max(maxLon, lon);
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+      });
+      if (![minLon, maxLon, minLat, maxLat].every(Number.isFinite)) return null;
+
+      const area = Math.abs(maxLon - minLon) * Math.abs(maxLat - minLat);
+      if (area < minArea) return null;
+
+      return {
+        id: `${name}-${minLat.toFixed(3)}-${minLon.toFixed(3)}`,
+        name,
+        lat: clampLatitude((minLat + maxLat) / 2),
+        lon: clampLongitude((minLon + maxLon) / 2),
+        area
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.area - a.area);
+}
+
+function fallbackMapStyle() {
+  const isDark = typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'dark';
+  const oceanColor = isDark ? '#07111f' : '#dcebf5';
+  const landColor = isDark ? '#17263a' : '#f3f5ee';
+  const landOutlineColor = isDark ? '#2d4568' : '#9fb2bf';
+  const borderColor = isDark ? '#395173' : '#8fa6b6';
+  const stateBorderColor = isDark ? '#6d8eba' : '#637d91';
+  const gridColor = isDark ? '#263c5d' : '#b9cbd8';
+
+  return {
+    version: 8,
+    name: 'AnyLog embedded topology map',
+    sources: {
+      countries: {
+        type: 'geojson',
+        data: OFFLINE_COUNTRIES_GEOJSON
+      },
+      land: {
+        type: 'geojson',
+        data: OFFLINE_LAND_GEOJSON
+      },
+      countryBorders: {
+        type: 'geojson',
+        data: OFFLINE_COUNTRY_BORDER_GEOJSON
+      },
+      usStates: {
+        type: 'geojson',
+        data: OFFLINE_US_STATE_GEOJSON
+      },
+      usStateBorders: {
+        type: 'geojson',
+        data: OFFLINE_US_STATE_BORDER_GEOJSON
+      },
+      graticule: {
+        type: 'geojson',
+        data: OFFLINE_GRATICULE_GEOJSON
+      }
+    },
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': oceanColor
+        }
+      },
+      {
+        id: 'graticule',
+        type: 'line',
+        source: 'graticule',
+        paint: {
+          'line-color': gridColor,
+          'line-width': 0.7,
+          'line-opacity': isDark ? 0.52 : 0.64
+        }
+      },
+      {
+        id: 'land',
+        type: 'fill',
+        source: 'land',
+        paint: {
+          'fill-color': landColor,
+          'fill-opacity': 0.96
+        }
+      },
+      {
+        id: 'land-outline',
+        type: 'line',
+        source: 'land',
+        paint: {
+          'line-color': landOutlineColor,
+          'line-width': 1.2,
+          'line-opacity': 0.86
+        }
+      },
+      {
+        id: 'country-borders',
+        type: 'line',
+        source: 'countryBorders',
+        paint: {
+          'line-color': borderColor,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            1,
+            0.4,
+            5,
+            0.8,
+            9,
+            1.2
+          ],
+          'line-opacity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            1,
+            0.42,
+            5,
+            0.72,
+            9,
+            0.92
+          ]
+        }
+      },
+      {
+        id: 'us-state-borders',
+        type: 'line',
+        source: 'usStateBorders',
+        minzoom: 3,
+        paint: {
+          'line-color': stateBorderColor,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3,
+            0.45,
+            5,
+            0.9,
+            8,
+            1.4
+          ],
+          'line-opacity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3,
+            0.35,
+            5,
+            0.72,
+            8,
+            0.95
+          ]
+        }
+      }
+    ]
+  };
+}
+
+function mapCenterFromSites(sites) {
+  const locatedSites = sites.filter(site => site.lat !== null && site.lon !== null);
+  if (locatedSites.length === 0) {
+    return { lat: 20, lon: 0 };
+  }
+
+  return {
+    lat: locatedSites.reduce((sum, site) => sum + Number(site.lat || 0), 0) / locatedSites.length,
+    lon: locatedSites.reduce((sum, site) => sum + Number(site.lon || 0), 0) / locatedSites.length
+  };
+}
+
+function normalizeMapCenter(center, sites) {
+  if (center && Number.isFinite(Number(center.lat)) && Number.isFinite(Number(center.lon))) {
+    return {
+      lat: clampLatitude(center.lat),
+      lon: clampLongitude(center.lon)
+    };
+  }
+
+  return mapCenterFromSites(sites);
+}
+
 function siteFromRow(row, fallbackSite) {
   return (
     cleanMetadataValue(firstValue(row, ['company', 'Company', 'site', 'location', 'region', 'cluster', 'namespace'])) ||
@@ -464,7 +839,7 @@ function deriveIssues(nodeRows, syslogRows) {
   return issues.slice(0, 100);
 }
 
-function deriveSites(raw) {
+function deriveSites(raw, groupMode = 'company') {
   const nodeMap = new Map();
   const aliasMap = new Map();
   const companyList = raw.activeCompanyFilter
@@ -491,12 +866,20 @@ function deriveSites(raw) {
     const mem = nodeMem(source);
     const diskUsage = nodeDiskUsage(source);
     const uptime = operationalTime(source);
+    const location = locationFromRow(source);
     nodeMap.set(key, {
       id: key,
       name: firstValue(source, ['node_name', 'name', 'node', 'host', 'hostname']) || key,
       role: roleFromName(firstValue(source, ['node_name', 'name', 'node', 'host', 'hostname']) || key, roleFallback || existing.role),
       site: siteFromRow(source, fallbackSite),
       company: cleanMetadataValue(firstValue(source, ['company', 'Company'])) || fallbackCompany,
+      loc: location.name || existing.loc || '',
+      coordinateLabel: location.coordinateLabel || existing.coordinateLabel || '',
+      country: location.country || existing.country || '',
+      state: location.state || existing.state || '',
+      city: location.city || existing.city || '',
+      lat: location.lat ?? existing.lat ?? null,
+      lon: location.lon ?? existing.lon ?? null,
       status: existing.status || 'ok',
       cpu: cpu ?? existing.cpu ?? null,
       mem: mem ?? existing.mem ?? null,
@@ -525,12 +908,20 @@ function deriveSites(raw) {
     const mem = nodeMem(source);
     const diskUsage = nodeDiskUsage(source);
     const uptime = operationalTime(source);
+    const location = locationFromRow(source);
     nodeMap.set(key, {
       ...existing,
       cpu: cpu ?? existing.cpu,
       mem: mem ?? existing.mem,
       diskUsage: diskUsage ?? existing.diskUsage,
       operationalTime: uptime || existing.operationalTime,
+      loc: location.name || existing.loc || '',
+      coordinateLabel: location.coordinateLabel || existing.coordinateLabel || '',
+      country: location.country || existing.country || '',
+      state: location.state || existing.state || '',
+      city: location.city || existing.city || '',
+      lat: location.lat ?? existing.lat ?? null,
+      lon: location.lon ?? existing.lon ?? null,
       metricSource: cpu !== null || mem !== null || diskUsage !== null || uptime ? NODE_METRICS_QUERY : existing.metricSource,
       metrics: {
         ...(existing.metrics || {}),
@@ -545,7 +936,9 @@ function deriveSites(raw) {
   };
 
   (raw.operatorPolicies || []).forEach(row => addNode(row, 'Operator'));
+  (raw.queryPolicies || []).forEach(row => addNode(row, 'Query'));
   (raw.masterPolicies || []).forEach(row => addNode(row, 'Master'));
+  (raw.publisherPolicies || []).forEach(row => addNode(row, 'Publisher'));
 
   const metadataDefinedTopology = nodeMap.size > 0;
   if (metadataDefinedTopology) {
@@ -569,29 +962,62 @@ function deriveSites(raw) {
 
   const nodes = [...nodeMap.values()].map(node => ({ ...node, status: nodeStatusFromMetrics(node) }));
 
-  const grouped = new Map();
-  companyList.forEach(company => {
-    if (company && !grouped.has(company)) grouped.set(company, []);
-  });
-  nodes.forEach(item => {
-    const site = item.site || fallbackSite;
-    if (!grouped.has(site)) grouped.set(site, []);
-    grouped.get(site).push(item);
-  });
-
   const positions = [
     [18, 42], [40, 48], [58, 35], [78, 58], [28, 64], [66, 68], [47, 25], [82, 34]
   ];
 
-  return [...grouped.entries()].map(([name, siteNodes], index) => ({
-    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `site-${index + 1}`,
-    name,
-    region: name,
-    company: siteNodes.find(node => node.company)?.company || fallbackCompany || (name !== 'AnyLog Network' ? name : ''),
-    x: positions[index % positions.length][0],
-    y: positions[index % positions.length][1],
-    nodes: siteNodes
-  }));
+  const grouped = new Map();
+
+  nodes.forEach(item => {
+    const locationName = item.loc || item.site || fallbackSite;
+    const groupName = groupMode === 'loc'
+      ? locationName || 'Unknown Loc'
+      : item.site || fallbackSite;
+    const groupKey = groupMode === 'loc' && item.lat !== null && item.lon !== null
+      ? `loc:${item.lat.toFixed(4)},${item.lon.toFixed(4)}`
+      : groupName;
+
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, {
+        name: groupName,
+        nodes: [],
+        lat: groupMode === 'loc' ? item.lat : null,
+        lon: groupMode === 'loc' ? item.lon : null,
+        coordinateLabel: groupMode === 'loc' ? item.coordinateLabel : ''
+      });
+    }
+
+    const group = grouped.get(groupKey);
+    group.nodes.push(item);
+    if (groupMode === 'loc' && (group.lat === null || group.lon === null) && item.lat !== null && item.lon !== null) {
+      group.lat = item.lat;
+      group.lon = item.lon;
+    }
+  });
+
+  return [...grouped.values()].map((group, index) => {
+    const coordinatePosition = groupMode === 'loc'
+      ? mapCoordinatesFromLatLon(group.lat, group.lon)
+      : null;
+    const fallbackPosition = positions[index % positions.length];
+
+    return {
+      id: `${groupMode}-${group.name}-${index + 1}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `site-${index + 1}`,
+      name: group.name,
+      region: groupMode === 'loc' && group.lat !== null && group.lon !== null
+        ? group.coordinateLabel || `${group.lat.toFixed(4)}, ${group.lon.toFixed(4)}`
+        : group.name,
+      company: groupMode === 'company'
+        ? group.nodes.find(node => node.company)?.company || fallbackCompany || (group.name !== 'AnyLog Network' ? group.name : '')
+        : '',
+      lat: groupMode === 'loc' ? group.lat : null,
+      lon: groupMode === 'loc' ? group.lon : null,
+      coordinateLabel: groupMode === 'loc' ? group.coordinateLabel : '',
+      x: coordinatePosition?.x ?? fallbackPosition[0],
+      y: coordinatePosition?.y ?? fallbackPosition[1],
+      nodes: group.nodes
+    };
+  });
 }
 
 function MetricBar({ value }) {
@@ -612,9 +1038,9 @@ function MetricBar({ value }) {
 
 function getSectionQueries(apiLog, section) {
   const patterns = {
-    map: ['metadata operators', 'metadata masters', 'network databases', 'monitored operators'],
+    map: ['metadata operators', 'metadata queries', 'metadata masters', 'metadata publishers', 'network databases', 'monitored operators'],
     catalog: ['virtual tables', 'network tables', 'tables ', 'count '],
-    kpis: ['metadata operators', 'metadata masters', 'network databases', 'monitored operators', 'syslog', 'virtual tables', 'network tables', 'count '],
+    kpis: ['metadata operators', 'metadata queries', 'metadata masters', 'metadata publishers', 'network databases', 'monitored operators', 'syslog', 'virtual tables', 'network tables', 'count '],
     issues: ['monitored operators', 'syslog'],
     resources: ['monitored operators'],
     tables: ['monitored operators']
@@ -719,7 +1145,193 @@ function Panel({ id, title, tag, children, collapsed, onToggle, querySection, ap
   );
 }
 
-function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode }) {
+function LocationTileMap({ sites, labels, mapZoom = MAP_DEFAULT_ZOOM, mapCenter, onMapCenterChange, onMapZoomChange, onSelectSite }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const mapLabelMarkersRef = useRef([]);
+  const mapStyleUrl = useMemo(() => runtimeMapStyleUrl(), []);
+  const [pointerCoordinate, setPointerCoordinate] = useState(null);
+  const locatedSites = useMemo(
+    () => sites.filter(site => Number.isFinite(Number(site.lat)) && Number.isFinite(Number(site.lon))),
+    [sites]
+  );
+  const zoom = normalizedMapZoom(mapZoom);
+  const [liveZoom, setLiveZoom] = useState(zoom);
+  const center = normalizeMapCenter(mapCenter, locatedSites);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return undefined;
+
+    mapRef.current = new maplibregl.Map({
+      container: containerRef.current,
+      style: mapStyleUrl || fallbackMapStyle(),
+      center: [center.lon, center.lat],
+      zoom,
+      minZoom: MAP_MIN_ZOOM,
+      maxZoom: MAP_MAX_ZOOM,
+      attributionControl: false
+    });
+    mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    mapRef.current.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
+    const syncMapState = () => {
+      const nextCenter = mapRef.current.getCenter();
+      onMapCenterChange?.({ lat: nextCenter.lat, lon: nextCenter.lng });
+      const nextZoom = normalizedMapZoom(mapRef.current.getZoom());
+      setLiveZoom(nextZoom);
+      onMapZoomChange?.(nextZoom);
+    };
+    const updatePointerCoordinate = event => {
+      setPointerCoordinate({ lat: event.lngLat.lat, lon: event.lngLat.lng });
+    };
+    mapRef.current.on('moveend', syncMapState);
+    mapRef.current.on('zoomend', syncMapState);
+    mapRef.current.on('mousemove', updatePointerCoordinate);
+    mapRef.current.on('mouseout', () => setPointerCoordinate(null));
+
+    return () => {
+      mapRef.current?.remove();
+      mapRef.current = null;
+      markersRef.current = [];
+      mapLabelMarkersRef.current = [];
+    };
+  }, [mapStyleUrl]);
+
+  useEffect(() => {
+    if (mapStyleUrl || typeof MutationObserver === 'undefined') return undefined;
+
+    const observer = new MutationObserver(() => {
+      mapRef.current?.setStyle(fallbackMapStyle());
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
+
+    return () => observer.disconnect();
+  }, [mapStyleUrl]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    setLiveZoom(zoom);
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+    const centerChanged = Math.abs(currentCenter.lat - center.lat) > 0.000001 || Math.abs(currentCenter.lng - center.lon) > 0.000001;
+    const zoomChanged = Math.abs(currentZoom - zoom) > 0.01;
+    if (centerChanged || zoomChanged) {
+      map.easeTo({
+        center: [center.lon, center.lat],
+        zoom,
+        duration: 220
+      });
+    }
+  }, [center.lat, center.lon, zoom]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = locatedSites.map(site => {
+      const markerButton = document.createElement('button');
+      markerButton.type = 'button';
+      markerButton.className = `edf-map-marker ${siteStatus(site)}`;
+      markerButton.title = `${site.name} · ${site.region} · ${site.nodes.length} node${site.nodes.length === 1 ? '' : 's'}`;
+
+      const count = document.createElement('span');
+      count.className = 'edf-map-marker-count';
+      count.textContent = String(site.nodes.length);
+      markerButton.appendChild(count);
+
+      if (labels) {
+        const label = document.createElement('span');
+        label.className = 'edf-map-marker-label';
+        const name = document.createElement('strong');
+        name.textContent = site.name;
+        const region = document.createElement('small');
+        region.textContent = site.region;
+        label.appendChild(name);
+        label.appendChild(region);
+        markerButton.appendChild(label);
+      }
+
+      markerButton.addEventListener('click', event => {
+        event.stopPropagation();
+        onSelectSite(site);
+      });
+
+      return new maplibregl.Marker({ element: markerButton, anchor: 'center' })
+        .setLngLat([Number(site.lon), Number(site.lat)])
+        .addTo(map);
+    });
+
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
+    };
+  }, [locatedSites, labels, onSelectSite]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    mapLabelMarkersRef.current.forEach(marker => marker.remove());
+    mapLabelMarkersRef.current = [];
+
+    if (!labels) return undefined;
+
+    const labelPoints = [
+      ...(liveZoom >= 3
+        ? OFFLINE_COUNTRY_LABEL_POINTS.slice(0, liveZoom >= 5 ? 180 : 70).map(point => ({
+          ...point,
+          labelType: 'country'
+        }))
+        : []),
+      ...(liveZoom >= 5
+        ? OFFLINE_US_STATE_LABEL_POINTS.map(point => ({
+          ...point,
+          labelType: 'state'
+        }))
+        : [])
+    ];
+
+    mapLabelMarkersRef.current = labelPoints.map(point => {
+      const label = document.createElement('span');
+      label.className = `edf-map-geolabel ${point.labelType}`;
+      label.textContent = point.name;
+      return new maplibregl.Marker({ element: label, anchor: 'center' })
+        .setLngLat([Number(point.lon), Number(point.lat)])
+        .addTo(map);
+    });
+
+    return () => {
+      mapLabelMarkersRef.current.forEach(marker => marker.remove());
+      mapLabelMarkersRef.current = [];
+    };
+  }, [labels, liveZoom]);
+
+  return (
+    <div className="edf-maplibre-shell">
+      <div
+        ref={containerRef}
+        className="edf-maplibre-map"
+        role="img"
+        aria-label="MapLibre location topology"
+      />
+      <div className="edf-map-coordinate-readout" aria-live="polite">
+        {pointerCoordinate
+          ? `${formatMapCoordinate(pointerCoordinate.lat, 'lat')} ${formatMapCoordinate(pointerCoordinate.lon, 'lon')}`
+          : `${formatMapCoordinate(center.lat, 'lat')} ${formatMapCoordinate(center.lon, 'lon')}`}
+      </div>
+    </div>
+  );
+}
+
+function WorldTopology({ sites, selectedSite, labels, groupMode, mapZoom = MAP_DEFAULT_ZOOM, mapCenter = null, onMapCenterChange, onMapZoomChange, onSelectSite, onSelectNode }) {
+
   if (selectedSite) {
     const nodes = selectedSite.nodes;
     return (
@@ -769,6 +1381,20 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
     );
   }
 
+  if (groupMode === 'loc') {
+    return (
+      <LocationTileMap
+        sites={sites}
+        labels={labels}
+        mapZoom={mapZoom}
+        mapCenter={mapCenter}
+        onMapCenterChange={onMapCenterChange}
+        onMapZoomChange={onMapZoomChange}
+        onSelectSite={onSelectSite}
+      />
+    );
+  }
+
   return (
     <svg className="edf-topology-svg" viewBox="0 0 900 430" role="img" aria-label="Global edge topology map">
       <defs>
@@ -796,6 +1422,7 @@ function WorldTopology({ sites, selectedSite, labels, onSelectSite, onSelectNode
             if (event.key === 'Enter' || event.key === ' ') onSelectSite(site);
           }}
         >
+          <title>{`${site.name} · ${site.region} · ${site.nodes.length} node${site.nodes.length === 1 ? '' : 's'}`}</title>
           <circle cx={(site.x / 100) * 900} cy={(site.y / 100) * 430} r="26" className={`edf-site-marker ${siteStatus(site)}`} />
           <text x={(site.x / 100) * 900} y={(site.y / 100) * 430 + 5} textAnchor="middle" className="edf-site-count">{site.nodes.length}</text>
           {labels && (
@@ -814,6 +1441,16 @@ function normalizeTopologyCacheNodeEntry(entry, fallbackNode = '') {
   if (!entry || typeof entry !== 'object') {
     return null;
   }
+  const networkCatalogSnapshot = entry.networkCatalogSnapshot || null;
+  const topology = entry.topology || {
+    sites: [],
+    catalog: [],
+    networkDatabases: [],
+    scopedNetworkDatabases: [],
+    activeCompanyFilter: '',
+    issues: [],
+    apiLog: []
+  };
 
   return {
     nodeAddress: String(entry.nodeAddress || fallbackNode || ''),
@@ -829,6 +1466,11 @@ function normalizeTopologyCacheNodeEntry(entry, fallbackNode = '') {
     paused: entry.paused ?? true,
     labels: entry.labels ?? true,
     mapSize: entry.mapSize || 'm',
+    topologyGroupMode: entry.topologyGroupMode === 'loc' ? 'loc' : 'company',
+    locMapZoom: normalizedMapZoom(entry.locMapZoom || MAP_DEFAULT_ZOOM),
+    locMapCenter: entry.locMapCenter && typeof entry.locMapCenter === 'object'
+      ? entry.locMapCenter
+      : null,
     selectedSite: entry.selectedSite || null,
     companyFilter: entry.companyFilter || '',
     selectedNode: entry.selectedNode || null,
@@ -844,14 +1486,20 @@ function normalizeTopologyCacheNodeEntry(entry, fallbackNode = '') {
     catalogQueryResults: entry.catalogQueryResults || {},
     tablesByDbms: entry.tablesByDbms || {},
     columnsByTable: entry.columnsByTable || {},
-    topology: entry.topology || {
-      sites: [],
-      catalog: [],
-      networkDatabases: [],
-      scopedNetworkDatabases: [],
-      activeCompanyFilter: '',
-      issues: [],
-      apiLog: []
+    networkCatalogSnapshot,
+    topology: {
+      ...topology,
+      catalog: Array.isArray(topology.catalog) && topology.catalog.length > 0
+        ? topology.catalog
+        : networkCatalogSnapshot?.catalog || [],
+      networkDatabases: Array.isArray(topology.networkDatabases) && topology.networkDatabases.length > 0
+        ? topology.networkDatabases
+        : networkCatalogSnapshot?.networkDatabases || [],
+      scopedNetworkDatabases: Array.isArray(topology.scopedNetworkDatabases) && topology.scopedNetworkDatabases.length > 0
+        ? topology.scopedNetworkDatabases
+        : networkCatalogSnapshot?.scopedNetworkDatabases || [],
+      issues: topology.issues || [],
+      apiLog: topology.apiLog || []
     },
     lastRefresh: entry.lastRefresh || null,
     collapsed: entry.collapsed || {
@@ -925,6 +1573,9 @@ function EdgeDataFabricTopologyPage({ node }) {
   const [paused, setPaused] = useState(true);
   const [labels, setLabels] = useState(true);
   const [mapSize, setMapSize] = useState('m');
+  const [topologyGroupMode, setTopologyGroupMode] = useState('company');
+  const [locMapZoom, setLocMapZoom] = useState(MAP_DEFAULT_ZOOM);
+  const [locMapCenter, setLocMapCenter] = useState(null);
   const [selectedSite, setSelectedSite] = useState(null);
   const [companyFilter, setCompanyFilter] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
@@ -1070,6 +1721,28 @@ function EdgeDataFabricTopologyPage({ node }) {
       .filter(([label]) => !nodeMetricOrder.includes(label));
   }, [activeSelectedNode, nodeMetricOrder]);
 
+  const networkCatalogMetrics = useMemo(() => {
+    const uniqueDbms = new Set((networkDatabases || [])
+      .map(item => cleanIdentifier(item.dbms || item.DBMS || item.database || item.Database))
+      .filter(Boolean));
+    const uniqueTables = new Set((catalog || [])
+      .map(item => `${cleanIdentifier(item.dbms).toLowerCase()}.${cleanIdentifier(item.table).toLowerCase()}`)
+      .filter(key => key !== '.'));
+    const companies = new Set(allNodes.map(item => cleanIdentifier(item.company)).filter(Boolean));
+    const locations = new Set(sites.map(site => site.name).filter(Boolean));
+    const nodesWithCatalog = allNodes.filter(node => Number(node.tables) > 0).length;
+
+    return {
+      dbms: uniqueDbms.size,
+      tables: uniqueTables.size,
+      companies: companies.size,
+      locations: locations.size,
+      nodes: allNodes.length,
+      nodesWithCatalog,
+      queryCards: visibleCatalogQueryCards.length
+    };
+  }, [allNodes, catalog, networkDatabases, sites, visibleCatalogQueryCards.length]);
+
   const buildTopologyCacheEntry = useCallback(() => ({
     nodeAddress,
     rangePreset,
@@ -1084,6 +1757,9 @@ function EdgeDataFabricTopologyPage({ node }) {
     paused,
     labels,
     mapSize,
+    topologyGroupMode,
+    locMapZoom,
+    locMapCenter,
     selectedSite,
     companyFilter,
     selectedNode,
@@ -1095,6 +1771,14 @@ function EdgeDataFabricTopologyPage({ node }) {
     catalogQueryResults,
     tablesByDbms,
     columnsByTable,
+    networkCatalogSnapshot: {
+      catalog,
+      networkDatabases: topology.networkDatabases || [],
+      scopedNetworkDatabases: topology.scopedNetworkDatabases || [],
+      tablesByDbms,
+      columnsByTable,
+      metrics: networkCatalogMetrics
+    },
     topology,
     lastRefresh: lastRefresh?.toISOString?.() || lastRefresh || null,
     collapsed,
@@ -1115,8 +1799,11 @@ function EdgeDataFabricTopologyPage({ node }) {
     customRangeValue,
     editingCatalogQueryId,
     labels,
+    locMapZoom,
+    locMapCenter,
     lastRefresh,
     mapSize,
+    networkCatalogMetrics,
     nodeAddress,
     nodeMetricOrder,
     paused,
@@ -1126,7 +1813,8 @@ function EdgeDataFabricTopologyPage({ node }) {
     selectedNode,
     selectedSite,
     tablesByDbms,
-    topology
+    topology,
+    topologyGroupMode
   ]);
 
   const readTopologyCachePayload = useCallback(() => (
@@ -1166,6 +1854,9 @@ function EdgeDataFabricTopologyPage({ node }) {
     setPaused(normalized.paused);
     setLabels(normalized.labels);
     setMapSize(normalized.mapSize);
+    setTopologyGroupMode(normalized.topologyGroupMode);
+    setLocMapZoom(normalized.locMapZoom || MAP_DEFAULT_ZOOM);
+    setLocMapCenter(normalized.locMapCenter || null);
     setSelectedSite(normalized.selectedSite);
     setCompanyFilter(normalized.companyFilter);
     setSelectedNode(normalized.selectedNode);
@@ -1464,7 +2155,7 @@ function EdgeDataFabricTopologyPage({ node }) {
         refreshSeconds: pollSeconds
       });
       if (requestId !== refreshSequence.current) return;
-      const nextSites = deriveSites(raw);
+      const nextSites = deriveSites(raw, topologyGroupMode);
       const nextIssues = deriveIssues([...(raw.monitorRows || []), ...(raw.nodeRows || [])], raw.syslogRows || []);
       let displaySites = nextSites;
       setTopology(prev => {
@@ -1502,7 +2193,7 @@ function EdgeDataFabricTopologyPage({ node }) {
         setLoading(false);
       }
     }
-  }, [nodeAddress, rangeHours, companyFilter, pollSeconds, runCatalogQueries]);
+  }, [nodeAddress, rangeHours, companyFilter, pollSeconds, runCatalogQueries, topologyGroupMode]);
 
   useEffect(() => {
     if (pageVisible) refresh();
@@ -1521,7 +2212,7 @@ function EdgeDataFabricTopologyPage({ node }) {
   const selectSite = site => {
     setSelectedSite(site);
     setSelectedNode(null);
-    setCompanyFilter(site?.company || '');
+    setCompanyFilter(topologyGroupMode === 'company' ? (site?.company || '') : '');
   };
 
   const backToWorldMap = () => {
@@ -1773,6 +2464,28 @@ function EdgeDataFabricTopologyPage({ node }) {
     setRangePreset(value);
   };
 
+  const updateTopologyGroupMode = value => {
+    setTopologyGroupMode(value === 'loc' ? 'loc' : 'company');
+    setLocMapZoom(MAP_DEFAULT_ZOOM);
+    setLocMapCenter(null);
+    setSelectedSite(null);
+    setSelectedNode(null);
+    setCompanyFilter('');
+  };
+
+  const updateLocMapZoom = direction => {
+    if (direction === 'reset') {
+      setLocMapZoom(MAP_DEFAULT_ZOOM);
+      setLocMapCenter(null);
+      return;
+    }
+
+    setLocMapZoom(currentZoom => {
+      const step = direction === 'in' ? 1 : -1;
+      return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, currentZoom + step));
+    });
+  };
+
   const rangeSummary = rangePreset === 'custom'
     ? 'Custom'
     : (RANGE_OPTIONS.find(option => option.value === rangePreset)?.label || rangePreset);
@@ -1954,7 +2667,9 @@ function EdgeDataFabricTopologyPage({ node }) {
         <section className="edf-panel">
           <div className="edf-panel-title-row">
             <h2>Global Network Map</h2>
-            <span>{allNodes.length} nodes across {sites.length} sites</span>
+            <span>
+              {allNodes.length} nodes across {sites.length} {topologyGroupMode === 'loc' ? 'locations' : 'companies'}
+            </span>
           </div>
           {loadError && <div className="edf-error">{loadError}</div>}
           <div className="edf-map-nav">
@@ -1966,11 +2681,30 @@ function EdgeDataFabricTopologyPage({ node }) {
             <span>
               {currentSelectedSite
                 ? `Viewing ${currentSelectedSite.name} / ${currentSelectedSite.region}${companyFilter ? ` · company filter: ${companyFilter}` : ''}`
-                : 'Click a site to inspect local nodes'}
+                : `Click a ${topologyGroupMode === 'loc' ? 'location' : 'company'} to inspect local nodes`}
             </span>
           </div>
           <div className="edf-map-toolbar">
+            <span>Group</span>
+            {TOPOLOGY_GROUP_OPTIONS.map(option => (
+              <button
+                key={option.value}
+                className={topologyGroupMode === option.value ? 'active' : ''}
+                type="button"
+                onClick={() => updateTopologyGroupMode(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
             <button type="button" className={labels ? 'active' : ''} onClick={() => setLabels(value => !value)}>Labels</button>
+            {topologyGroupMode === 'loc' && (
+              <>
+                <span>Zoom</span>
+                <button type="button" onClick={() => updateLocMapZoom('in')}>+</button>
+                <button type="button" onClick={() => updateLocMapZoom('out')}>-</button>
+                <button type="button" onClick={() => updateLocMapZoom('reset')}>Reset</button>
+              </>
+            )}
             <span>Size</span>
             {SIZE_OPTIONS.map(option => (
               <button key={option.value} className={mapSize === option.value ? 'active' : ''} type="button" onClick={() => setMapSize(option.value)}>
@@ -1980,7 +2714,18 @@ function EdgeDataFabricTopologyPage({ node }) {
           </div>
           <div className={`edf-map-wrap size-${mapSize}`}>
             {sites.length > 0 ? (
-              <WorldTopology sites={sites} selectedSite={currentSelectedSite} labels={labels} onSelectSite={selectSite} onSelectNode={openNode} />
+              <WorldTopology
+                sites={sites}
+                selectedSite={currentSelectedSite}
+                labels={labels}
+                groupMode={topologyGroupMode}
+                mapZoom={locMapZoom}
+                mapCenter={locMapCenter}
+                onMapCenterChange={setLocMapCenter}
+                onMapZoomChange={setLocMapZoom}
+                onSelectSite={selectSite}
+                onSelectNode={openNode}
+              />
             ) : (
               <div className="edf-empty">
                 {loading ? 'Querying AnyLog metadata and monitoring tables...' : 'No topology nodes returned for the selected AnyLog node.'}
@@ -2022,6 +2767,55 @@ function EdgeDataFabricTopologyPage({ node }) {
         </section>
 
         <Panel id="catalog" title="Network Databases and Tables" tag={`${visibleCatalogQueryCards.length} queries`} collapsed={collapsed.catalog} onToggle={() => togglePanel('catalog')} querySection="catalog" apiLog={apiLog} onOpenQueries={openQueries}>
+          <div className="edf-catalog-metric-grid">
+            {topologyGroupMode === 'loc' ? (
+              <>
+                <article>
+                  <span>Locations</span>
+                  <strong>{formatNumber(networkCatalogMetrics.locations)}</strong>
+                  <small>coordinate groups with topology nodes</small>
+                </article>
+                <article>
+                  <span>Nodes</span>
+                  <strong>{formatNumber(networkCatalogMetrics.nodes)}</strong>
+                  <small>operator, query, master, and publisher nodes</small>
+                </article>
+                <article>
+                  <span>Catalog Nodes</span>
+                  <strong>{formatNumber(networkCatalogMetrics.nodesWithCatalog)}</strong>
+                  <small>nodes associated with returned table metadata</small>
+                </article>
+                <article>
+                  <span>Tables</span>
+                  <strong>{formatNumber(networkCatalogMetrics.tables)}</strong>
+                  <small>tables visible for the selected location view</small>
+                </article>
+              </>
+            ) : (
+              <>
+                <article>
+                  <span>Companies</span>
+                  <strong>{formatNumber(networkCatalogMetrics.companies)}</strong>
+                  <small>companies represented by topology nodes</small>
+                </article>
+                <article>
+                  <span>DBMS</span>
+                  <strong>{formatNumber(networkCatalogMetrics.dbms)}</strong>
+                  <small>network databases returned by metadata</small>
+                </article>
+                <article>
+                  <span>Tables</span>
+                  <strong>{formatNumber(networkCatalogMetrics.tables)}</strong>
+                  <small>unique DBMS/table entries in the catalog</small>
+                </article>
+                <article>
+                  <span>Queries</span>
+                  <strong>{formatNumber(networkCatalogMetrics.queryCards)}</strong>
+                  <small>saved metrics for this company scope</small>
+                </article>
+              </>
+            )}
+          </div>
           <form className="edf-query-builder" onSubmit={saveCatalogQueryCard}>
             <label className="edf-field">
               <span>DBMS</span>
@@ -2119,9 +2913,9 @@ function EdgeDataFabricTopologyPage({ node }) {
           </div>
         </Panel>
 
-        <Panel id="kpis" title="Summary KPIs" tag={`${kpis.critical} critical`} collapsed={collapsed.kpis} onToggle={() => togglePanel('kpis')} querySection="kpis" apiLog={apiLog} onOpenQueries={openQueries}>
-          <div className="edf-kpi-grid">
-            <article><span>Sites</span><strong>{kpis.sites}</strong><small>active locations</small></article>
+          <Panel id="kpis" title="Summary KPIs" tag={`${kpis.critical} critical`} collapsed={collapsed.kpis} onToggle={() => togglePanel('kpis')} querySection="kpis" apiLog={apiLog} onOpenQueries={openQueries}>
+            <div className="edf-kpi-grid">
+              <article><span>{topologyGroupMode === 'loc' ? 'Locations' : 'Companies'}</span><strong>{kpis.sites}</strong><small>active groups</small></article>
             <article><span>Nodes</span><strong>{kpis.nodes}</strong><small>fabric members</small></article>
             <article><span>Warnings</span><strong>{kpis.warnings}</strong><small>non-critical alerts</small></article>
             <article className="danger"><span>Critical</span><strong>{kpis.critical}</strong><small>immediate review</small></article>

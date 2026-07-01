@@ -252,6 +252,10 @@ function operatorMetadataCommand(company) {
   return 'blockchain get operator bring.json';
 }
 
+function policyMetadataCommand(policyType) {
+  return `blockchain get ${policyType} bring.json`;
+}
+
 function virtualTablesCommand(company) {
   return `get virtual tables where company = "${escapeAnyLogQuoted(company)}"`;
 }
@@ -562,7 +566,7 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
   const companyFilter = cleanCompany(filters.company);
   const refreshSeconds = Math.max(1, Number(filters.refreshSeconds) || 60);
   const monitoringClientFilter = operatorIpPortCommand(companyFilter);
-  const [operatorsResult, operatorIpPortResult, mastersResult, dbsResult, monitoredOperatorsResult, syslogResult] = await Promise.all([
+  const [operatorsResult, operatorIpPortResult, queriesResult, mastersResult, publishersResult, dbsResult, monitoredOperatorsResult, syslogResult] = await Promise.all([
     tracked(
       companyFilter ? `metadata operators json company=${companyFilter}` : 'metadata operators',
       runAnyLog(connectInfo, operatorMetadataCommand(companyFilter))
@@ -573,7 +577,9 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
         runAnyLog(connectInfo, operatorIpPortCommand(companyFilter))
       )
       : Promise.resolve({ rows: [] }),
-    tracked('metadata masters', runAnyLog(connectInfo, 'blockchain get master bring.ip_port')),
+    tracked('metadata queries', runAnyLog(connectInfo, policyMetadataCommand('query'))),
+    tracked('metadata masters', runAnyLog(connectInfo, policyMetadataCommand('master'))),
+    tracked('metadata publishers', runAnyLog(connectInfo, policyMetadataCommand('publisher'))),
     tracked('network databases', runAnyLog(connectInfo, 'get network databases')),
     tracked('monitored operators', runMonitoredOperators(connectInfo)),
     tracked('syslog', queryMonitoringTable(connectInfo, TABLES.syslog, hours, 300, monitoringClientFilter, refreshSeconds))
@@ -595,9 +601,25 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
   const monitoredOperatorRows = companyFilter
     ? filterRowsByIpPorts(monitoredOperatorsResult.rows, companyOperatorIpPorts)
     : monitoredOperatorsResult.rows;
-  const masterPolicies = companyFilter ? [] : normalizePolicyRows(mastersResult.rows);
+  const filterPoliciesByCompany = rows => (
+    companyFilter
+      ? rows.filter(row => sameCompany(row.company || row.Company || row.publisher, companyFilter))
+      : rows
+  );
+  const queryPolicies = filterPoliciesByCompany(normalizePolicyRows(queriesResult.rows));
+  const masterPolicies = filterPoliciesByCompany(normalizePolicyRows(mastersResult.rows));
+  const publisherPolicies = filterPoliciesByCompany(normalizePolicyRows(publishersResult.rows));
   const networkDatabases = parseNetworkDatabaseRows(dbsResult.rows);
-  const networkCompanies = [...new Set(networkDatabases.map(item => item.company).filter(Boolean))];
+  const policyCompanies = [
+    ...operatorPolicies,
+    ...queryPolicies,
+    ...masterPolicies,
+    ...publisherPolicies
+  ].map(row => cleanCompany(row.company || row.Company || row.publisher)).filter(Boolean);
+  const networkCompanies = [...new Set([
+    ...networkDatabases.map(item => item.company).filter(Boolean),
+    ...policyCompanies
+  ])];
   let scopedDatabases = companyFilter
     ? networkDatabases.filter(db => sameCompany(db.company, companyFilter))
     : networkDatabases;
@@ -668,7 +690,9 @@ export async function fetchEdgeDataFabricTopology(connectInfo, hours = 24, filte
 
   return {
     operatorPolicies,
+    queryPolicies,
     masterPolicies,
+    publisherPolicies,
     networkDatabases,
     scopedNetworkDatabases: scopedDatabases,
     networkCompanies,

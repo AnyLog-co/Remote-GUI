@@ -163,6 +163,16 @@ const mergeTopologyNodeEntry = (currentEntry, incomingEntry) => {
 
   return {
     ...currentEntry,
+    topology: incomingEntry?.topology || currentEntry.topology,
+    networkCatalogSnapshot: incomingEntry?.networkCatalogSnapshot || currentEntry.networkCatalogSnapshot,
+    tablesByDbms: {
+      ...(currentEntry.tablesByDbms || {}),
+      ...(incomingEntry?.tablesByDbms || {}),
+    },
+    columnsByTable: {
+      ...(currentEntry.columnsByTable || {}),
+      ...(incomingEntry?.columnsByTable || {}),
+    },
     catalogQueryCards,
     catalogQueryResults: {
       ...(currentEntry.catalogQueryResults || {}),
