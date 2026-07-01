@@ -1,21 +1,32 @@
 // src/components/Sidebar.js
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { getPluginSidebarItems, initializePluginOrder } from '../plugins/loader';
+import {
+  getOrderEntryKey,
+  getPluginSidebarItems,
+  getSidebarOrder,
+  getSidebarSections,
+  initializePluginOrder,
+} from '../plugins/loader';
 import { 
   initializeFeatureConfig, 
   isFeatureEnabled, 
   isPluginEnabled 
 } from '../services/featureConfig';
-import { getLicenseInfo } from '../services/api';
+import { getVersion } from '../services/api';
 import '../styles/Sidebar.css';
 
-const Sidebar = ({ selectedNode }) => {
+const formatVersion = (version) => {
+  if (!version || version === '—') return 'v—';
+  const cleanVersion = String(version).trim().replace(/^v/i, '').split(/\s|\(/)[0];
+  return `v${cleanVersion}`;
+};
+
+const Sidebar = ({ isOpen = false, onNavigate }) => {
   const [pluginItems, setPluginItems] = useState(() => getPluginSidebarItems());
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
-  const [configLoaded, setConfigLoaded] = useState(false);
-  const [license, setLicense] = useState(null);
+  const [remoteGuiVersion, setRemoteGuiVersion] = useState(null);
   
   // Feature configuration mapping
   const featureConfig = [
@@ -63,19 +74,22 @@ const Sidebar = ({ selectedNode }) => {
       
       setEnabledPlugins(enabledPluginSet);
       setPluginItems(enabledPluginItems);
-      setConfigLoaded(true);
     };
     
     loadConfig();
   }, []);
 
   useEffect(() => {
-    if (!selectedNode) {
-      setLicense(null);
-      return;
-    }
-    getLicenseInfo({ connectInfo: selectedNode }).then(setLicense);
-  }, [selectedNode]);
+    let isCurrent = true;
+    getVersion().then((versionInfo) => {
+      if (!isCurrent) return;
+      setRemoteGuiVersion(versionInfo?.remote_gui_version ?? versionInfo?.version ?? null);
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
   
   // Filter features based on config
   const visibleFeatures = featureConfig.filter(feature => 
@@ -86,38 +100,88 @@ const Sidebar = ({ selectedNode }) => {
   const visiblePlugins = pluginItems.filter(plugin => 
     enabledPlugins.has(plugin.path)
   );
+
+  const navItemsByPath = new Map();
+  visibleFeatures.forEach((feature) => {
+    navItemsByPath.set(feature.path, {
+      ...feature,
+      type: 'feature',
+    });
+  });
+  visiblePlugins.forEach((plugin) => {
+    navItemsByPath.set(plugin.path, {
+      ...plugin,
+      type: 'plugin',
+    });
+  });
+
+  const takeOrderedItems = (entries, remainingPaths) => {
+    const items = [];
+    entries.forEach((entry) => {
+      const path = getOrderEntryKey(entry);
+      if (!path || !navItemsByPath.has(path) || !remainingPaths.has(path)) return;
+      items.push(navItemsByPath.get(path));
+      remainingPaths.delete(path);
+    });
+    return items;
+  };
+
+  const sidebarSections = getSidebarSections();
+  const hasSidebarSections = (
+    sidebarSections.above_divider.length > 0 ||
+    sidebarSections.below_divider.length > 0
+  );
+  const remainingPaths = new Set(navItemsByPath.keys());
+
+  const topNavItems = hasSidebarSections
+    ? takeOrderedItems(sidebarSections.above_divider, remainingPaths)
+    : takeOrderedItems(getSidebarOrder(), remainingPaths);
+  const bottomNavItems = hasSidebarSections
+    ? takeOrderedItems(sidebarSections.below_divider, remainingPaths)
+    : [];
+
+  Array.from(remainingPaths)
+    .map((path) => navItemsByPath.get(path))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((item) => {
+      bottomNavItems.push(item);
+    });
+
+  const renderNavItem = (item) => (
+    <NavLink
+      key={item.path}
+      to={item.path}
+      className={({ isActive }) => isActive ? 'active' : ''}
+      onClick={onNavigate}
+    >
+      {item.icon && `${item.icon} `}{item.name}
+    </NavLink>
+  );
   
   return (
-    <nav className="sidebar">
-      {visibleFeatures.map((feature) => (
-        <NavLink 
-          key={feature.path}
-          to={feature.path} 
-          className={({ isActive }) => isActive ? 'active' : ''}
-        >
-          {feature.name}
-        </NavLink>
-      ))}
-      
-      {/* Plugin Navigation - Auto-loaded and filtered */}
-      {configLoaded && visiblePlugins.length > 0 && (
-        <div className="plugin-section">
-          {visiblePlugins.map((plugin) => (
-            <NavLink 
-              key={plugin.path}
-              to={plugin.path} 
-              className={({ isActive }) => isActive ? 'active' : ''}
-            >
-              {plugin.icon && `${plugin.icon} `}{plugin.name}
-            </NavLink>
-          ))}
-        </div>
+    <nav
+      id="dashboard-navigation"
+      className={`sidebar${isOpen ? ' open' : ''}`}
+      aria-label="Main navigation"
+    >
+      {topNavItems.map(renderNavItem)}
+      {hasSidebarSections && topNavItems.length > 0 && bottomNavItems.length > 0 && (
+        <div className="sidebar-divider" role="separator" />
       )}
+      {bottomNavItems.map(renderNavItem)}
 
       <div className="sidebar-version">
-        <NavLink to="about" className="sidebar-about-link">About</NavLink>
-        <span className="sidebar-licensee">
-          Licensee: {license?.company ?? '—'}
+        <NavLink to="about" className="sidebar-about-link" onClick={onNavigate}>About</NavLink>
+        <a href="https://anylog-co.github.io/anylog-docs.github.io/docs/readme/"
+          className="sidebar-about-link"
+          onClick={onNavigate}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Documentation
+        </a>
+        <span className="sidebar-version-number">
+            {formatVersion(remoteGuiVersion)}
         </span>
       </div>
     </nav>

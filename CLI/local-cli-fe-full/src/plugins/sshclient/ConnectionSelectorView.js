@@ -1,21 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   FaComputer,
   FaDocker,
   FaChevronDown,
   FaChevronRight,
+  FaGripVertical,
 } from 'react-icons/fa6';
 import { fetchAllNodes, normalizeNodes } from './utils/fetchNodes';
-import { cliState } from './state/state';
+import { cliState, getOrderedTerminalIds } from './state/state';
 import { CiTrash, CiStar } from 'react-icons/ci';
 import { FaStar } from 'react-icons/fa';
 import { TbBrandPowershell } from 'react-icons/tb';
 import { Vault } from './storage/vault';
+import MaskedNodeAddress from '../../components/MaskedNodeAddress';
 import {
   retrieveStoredCredential,
   storeCredentialInSession,
   saveCredentialToVault,
   clearStoredCredentials,
+  CRED_TYPE_PASSWORD,
+  CRED_TYPE_KEYFILE,
 } from './storage/stateStorage';
 
 // Selector view to show user's nodes and connect options
@@ -31,6 +35,8 @@ const ConnectionSelectorView = () => {
   const {
     setActiveConnection,
     activeConnection,
+    activeTerminalOrder,
+    reorderActiveConnections,
     credLocked,
     setFocusedTerminalId,
     terminalLoading,
@@ -44,7 +50,7 @@ const ConnectionSelectorView = () => {
   // --- Auth modal state ---
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [selectedAction, setSelectedAction] = useState(null);
-  const [authMethod, setAuthMethod] = useState('password');
+  const [authMethod, setAuthMethod] = useState(CRED_TYPE_PASSWORD);
   const [authPassword, setAuthPassword] = useState('');
   const [keyFile, setKeyFile] = useState(null);
   const [user, setUser] = useState('root');
@@ -53,7 +59,6 @@ const ConnectionSelectorView = () => {
 
   // --- Tab and display state ---
   const [connectionsTab, setConnectionsTab] = useState('all');
-  const [activeTerminals, setActiveTerminals] = useState(null);
   const [saveToVault, setSaveToVault] = useState(false);
 
   // Starred connections are persisted to localStorage so they survive page refreshes.
@@ -63,15 +68,31 @@ const ConnectionSelectorView = () => {
   });
   const [sortedConns, setSortedConns] = useState(null);
   const [expandedHostnames, setExpandedHostnames] = useState({});
+  const [revealedConnectionAddresses, setRevealedConnectionAddresses] = useState(new Set());
 
   // States for active terminals view and editing terminal conn name
   const [visibleTooltip, setVisibleTooltip] = useState(null);
   const [terminalNames, setTerminalNames] = useState({});
   const [editingTerminalId, setEditingTerminalId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [draggedTerminalId, setDraggedTerminalId] = useState(null);
+  const [dropTargetTerminalId, setDropTargetTerminalId] = useState(null);
+  const dragSourceIdRef = useRef(null);
 
   const handleRemoveConnection = (id) => {
     removeConnection(id);
+  };
+
+  const toggleConnectionAddressReveal = (key) => {
+    setRevealedConnectionAddresses(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   /**
@@ -87,24 +108,27 @@ const ConnectionSelectorView = () => {
     setSelectedAction(conn_action);
     setAuthPassword('');
     setKeyFile(null);
-    setAuthMethod('password');
+    setAuthMethod(CRED_TYPE_PASSWORD);
     setSaveToVault(false);
     setContainerName(conn.name);
 
     // Attempt to prefill from previously stored credentials.
-    const storedPassword = retrieveStoredCredential(conn.hostname, 'password');
-    const storedKey = retrieveStoredCredential(conn.hostname, 'keyfile');
+    const storedPassword = retrieveStoredCredential(
+      conn.hostname,
+      CRED_TYPE_PASSWORD,
+    );
+    const storedKey = retrieveStoredCredential(conn.hostname, CRED_TYPE_KEYFILE);
 
     if (storedPassword) {
       setAuthPassword(storedPassword);
-      setAuthMethod('password');
+      setAuthMethod(CRED_TYPE_PASSWORD);
     }
 
     // Keyfile overrides password if both are stored.
     if (storedKey) {
       setKeyFile(storedKey);
       console.log(`Autofilling key:`, storedKey);
-      setAuthMethod('keyfile');
+      setAuthMethod(CRED_TYPE_KEYFILE);
     }
 
     setShowAuthModal(true);
@@ -131,7 +155,7 @@ const ConnectionSelectorView = () => {
       alert('Please enter a container id / name');
       return;
     }
-    if (authMethod === 'password' && !authPassword) {
+    if (authMethod === CRED_TYPE_PASSWORD && !authPassword) {
       alert('Please enter a password');
       return;
     }
@@ -149,16 +173,16 @@ const ConnectionSelectorView = () => {
       });
 
       try {
-        if (authMethod === 'keyfile') {
+        if (authMethod === CRED_TYPE_KEYFILE) {
           await saveCredentialToVault(
             selectedConnection.hostname,
-            'keyfile',
+            CRED_TYPE_KEYFILE,
             keyFile,
           );
-        } else if (authMethod === 'password') {
+        } else if (authMethod === CRED_TYPE_PASSWORD) {
           await saveCredentialToVault(
             selectedConnection.hostname,
-            'password',
+            CRED_TYPE_PASSWORD,
             authPassword,
           );
         }
@@ -171,12 +195,16 @@ const ConnectionSelectorView = () => {
     }
 
     // Always store in session so the terminal can access credentials during this session.
-    if (authMethod === 'keyfile') {
-      storeCredentialInSession(selectedConnection.hostname, 'keyfile', keyFile);
-    } else if (authMethod === 'password') {
+    if (authMethod === CRED_TYPE_KEYFILE) {
       storeCredentialInSession(
         selectedConnection.hostname,
-        'password',
+        CRED_TYPE_KEYFILE,
+        keyFile,
+      );
+    } else if (authMethod === CRED_TYPE_PASSWORD) {
+      storeCredentialInSession(
+        selectedConnection.hostname,
+        CRED_TYPE_PASSWORD,
         authPassword,
       );
     }
@@ -196,7 +224,8 @@ const ConnectionSelectorView = () => {
       user: user,
       port: portNumber,
       name: containerName,
-      credential: authMethod === 'keyfile' ? keyFile.contents : authPassword,
+      credential:
+        authMethod === CRED_TYPE_KEYFILE ? keyFile.contents : authPassword,
       action: selectedAction ?? 'direct_ssh',
       authType: authMethod,
       isConnected: false,
@@ -204,8 +233,18 @@ const ConnectionSelectorView = () => {
   };
 
   useEffect(() => {
-    setActiveTerminals(activeConnection);
-  }, [activeConnection]);
+    const endDrag = () => {
+      dragSourceIdRef.current = null;
+      setDraggedTerminalId(null);
+      setDropTargetTerminalId(null);
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    return () => {
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
+    };
+  }, []);
 
   /**
   Handles SSH key file upload and validation.
@@ -373,6 +412,36 @@ const ConnectionSelectorView = () => {
     return terminalNames[connId] ?? defaultName;
   };
 
+  /** Stable sort key from connection id (timestamp / action suffix), not display order. */
+  const getTerminalCreationKey = (id) => {
+    const dash = id?.indexOf('-');
+    if (dash == null || dash < 0) return id ?? '';
+    const tail = id.slice(dash + 1);
+    const asNum = Number(tail);
+    return Number.isFinite(asNum) ? asNum : tail;
+  };
+
+  /** Default labels like host-1, host-2 keyed by terminal id (unchanged when reordering). */
+  const buildDefaultTerminalNameMap = (connections) => {
+    const countByHostname = {};
+    const nameMap = {};
+    const byCreation = [...connections].sort((a, b) => {
+      const ka = getTerminalCreationKey(a.id);
+      const kb = getTerminalCreationKey(b.id);
+      if (ka !== kb) {
+        if (typeof ka === 'number' && typeof kb === 'number') return ka - kb;
+        return String(ka).localeCompare(String(kb));
+      }
+      return a.id.localeCompare(b.id);
+    });
+    byCreation.forEach((conn) => {
+      const h = conn.hostname || conn.ip || 'Unknown';
+      countByHostname[h] = (countByHostname[h] || 0) + 1;
+      nameMap[conn.id] = `${h}-${countByHostname[h]}`;
+    });
+    return nameMap;
+  };
+
   const startEditing = (connId, currentName) => {
     setEditingTerminalId(connId);
     setEditingName(currentName);
@@ -395,6 +464,31 @@ const ConnectionSelectorView = () => {
     }
   };
 
+  const reorderTerminalsById = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const ids = getOrderedTerminalIds(cliState.getState());
+    const fromIndex = ids.indexOf(fromId);
+    const toIndex = ids.indexOf(toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const next = [...ids];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    reorderActiveConnections(next);
+  };
+
+  const handleGripPointerDown = (connId) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragSourceIdRef.current = connId;
+    setDraggedTerminalId(connId);
+  };
+
+  const handleRowPointerEnter = (connId) => () => {
+    if (!dragSourceIdRef.current) return;
+    setDropTargetTerminalId(connId);
+    reorderTerminalsById(dragSourceIdRef.current, connId);
+  };
+
   /**
   Renders grouped active terminals view.
   Groups by hostname
@@ -403,13 +497,20 @@ const ConnectionSelectorView = () => {
   Displays terminal metadata
   @param {Object} activeTerminalsObj
   */
-  const displayActiveTerminalsTree = (activeTerminalsObj) => {
-    const list = Object.entries(activeTerminalsObj || {}).map(
-      ([key, value]) => ({
-        id: key,
-        ...value,
-      }),
-    );
+  const displayActiveTerminalsTree = () => {
+    const terminalOrder = getOrderedTerminalIds({
+      activeConnection,
+      activeTerminalOrder,
+    });
+    const orderIndex = (id) => {
+      const idx = terminalOrder.indexOf(id);
+      return idx < 0 ? terminalOrder.length : idx;
+    };
+
+    const list = terminalOrder.map((key) => ({
+      id: key,
+      ...activeConnection[key],
+    }));
 
     if (list.length < 1)
       return (
@@ -421,20 +522,13 @@ const ConnectionSelectorView = () => {
             padding: '32px',
           }}
         >
-          <p style={{ fontSize: '16px', color: '#64748b' }}>
+          <p style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>
             No active terminals
           </p>
         </div>
       );
 
-    // Build a per-hostname counter to generate default names like "hostname-1", "hostname-2".
-    const countByHostname = {};
-    const nameMap = {};
-    list.forEach((conn) => {
-      const h = conn.hostname || conn.ip || 'Unknown';
-      countByHostname[h] = (countByHostname[h] || 0) + 1;
-      nameMap[conn.id] = `${h}-${countByHostname[h]}`;
-    });
+    const nameMap = buildDefaultTerminalNameMap(list);
 
     const byHostname = {};
     list.forEach((conn) => {
@@ -442,9 +536,14 @@ const ConnectionSelectorView = () => {
       if (!byHostname[h]) byHostname[h] = [];
       byHostname[h].push(conn);
     });
-    const hostnames = Object.keys(byHostname).sort((a, b) =>
-      a.localeCompare(b),
-    );
+    Object.values(byHostname).forEach((conns) => {
+      conns.sort((a, b) => orderIndex(a.id) - orderIndex(b.id));
+    });
+    const hostnames = Object.keys(byHostname).sort((a, b) => {
+      const minOrder = (hostname) =>
+        Math.min(...byHostname[hostname].map((c) => orderIndex(c.id)));
+      return minOrder(a) - minOrder(b);
+    });
 
     return (
       <div
@@ -463,10 +562,10 @@ const ConnectionSelectorView = () => {
             <div
               key={hostname}
               style={{
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--color-border)',
                 borderRadius: '6px',
                 overflow: 'hidden',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'var(--color-surface)',
               }}
             >
               <div
@@ -483,9 +582,9 @@ const ConnectionSelectorView = () => {
                   padding: '10px 12px',
                   cursor: 'pointer',
                   fontWeight: '600',
-                  color: '#1a365d',
+                  color: 'var(--color-heading)',
                   fontSize: '14px',
-                  backgroundColor: isExpanded ? '#f1f5f9' : '#f8fafc',
+                  backgroundColor: isExpanded ? 'var(--color-surface-muted)' : 'var(--color-surface)',
                 }}
               >
                 {isExpanded ? (
@@ -500,14 +599,19 @@ const ConnectionSelectorView = () => {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {hostname}
+                  <MaskedNodeAddress
+                    value={hostname}
+                    revealed={revealedConnectionAddresses.has(`group-${hostname}`)}
+                    onToggle={() => toggleConnectionAddressReveal(`group-${hostname}`)}
+                    label="SSH host address"
+                  />
                 </span>
                 <span
                   style={{
                     marginLeft: 'auto',
                     fontSize: '12px',
                     fontWeight: '500',
-                    color: '#64748b',
+                    color: 'var(--color-text-muted)',
                   }}
                 >
                   {conns.length} terminal{conns.length !== 1 ? 's' : ''}
@@ -525,26 +629,49 @@ const ConnectionSelectorView = () => {
                   {conns.map((conn) => {
                     const simpleName = nameMap[conn.id];
                     const tId = getTIdFromConnId(conn.id);
+                    const isDragging = draggedTerminalId === conn.id;
+                    const isDropTarget = dropTargetTerminalId === conn.id;
                     return (
                       <div
                         key={conn.id}
+                        onPointerEnter={handleRowPointerEnter(conn.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '8px 10px',
-                          backgroundColor: 'white',
-                          border: '1px solid #e2e8f0',
+                          backgroundColor: isDropTarget ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                          border: isDropTarget
+                            ? '2px dashed #2563eb'
+                            : '1px solid var(--color-border)',
                           borderRadius: '6px',
                           gap: '8px',
+                          opacity: isDragging ? 0.45 : 1,
+                          userSelect: draggedTerminalId ? 'none' : undefined,
                         }}
                       >
+                        <span
+                          title="Drag to reorder terminals"
+                          onPointerDown={handleGripPointerDown(conn.id)}
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            color: '#94a3b8',
+                            cursor:
+                              draggedTerminalId === conn.id ? 'grabbing' : 'grab',
+                            touchAction: 'none',
+                          }}
+                        >
+                          <FaGripVertical size={12} />
+                        </span>
                         <div
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '6px',
                             minWidth: 0,
+                            flex: 1,
                           }}
                         >
                           {editingTerminalId === conn.id ? (
@@ -557,13 +684,13 @@ const ConnectionSelectorView = () => {
                               style={{
                                 fontSize: '13px',
                                 fontWeight: '600',
-                                color: '#1e3a5f',
+                                color: 'var(--color-heading)',
                                 border: '1.5px solid #2563eb',
                                 borderRadius: '4px',
                                 padding: '1px 6px',
                                 outline: 'none',
                                 width: '120px',
-                                backgroundColor: '#f0f7ff',
+                                backgroundColor: 'var(--component-input-bg)',
                               }}
                             />
                           ) : (
@@ -577,7 +704,7 @@ const ConnectionSelectorView = () => {
                               }
                               style={{
                                 fontSize: '13px',
-                                color: '#1e3a5f',
+                                color: 'var(--color-heading)',
                                 fontWeight: '600',
                                 whiteSpace: 'nowrap',
                                 cursor: 'text',
@@ -658,8 +785,8 @@ const ConnectionSelectorView = () => {
                         <span
                           style={{
                             fontSize: '12px',
-                            color: '#475569',
-                            backgroundColor: '#f1f5f9',
+                            color: 'var(--color-text)',
+                            backgroundColor: 'var(--color-surface-muted)',
                             padding: '2px 8px',
                             borderRadius: '4px',
                             fontWeight: '500',
@@ -681,8 +808,8 @@ const ConnectionSelectorView = () => {
                             fontSize: '12px',
                             fontWeight: '500',
                             color: '#2563eb',
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            backgroundColor: 'var(--color-primary-soft)',
+                            border: '1px solid var(--color-primary-border)',
                             borderRadius: '6px',
                             cursor: 'pointer',
                           }}
@@ -727,7 +854,7 @@ const ConnectionSelectorView = () => {
             padding: '32px',
           }}
         >
-          <p style={{ fontSize: '16px', color: '#64748b' }}>
+          <p style={{ fontSize: '16px', color: 'var(--color-text-muted)' }}>
             No active terminals
           </p>
         </div>
@@ -740,7 +867,7 @@ const ConnectionSelectorView = () => {
       return (
         <h3
           style={{
-            color: '#64748b',
+            color: 'var(--color-text-muted)',
             fontSize: '14px',
             margin: '2px 0',
             fontWeight: '700',
@@ -759,9 +886,10 @@ const ConnectionSelectorView = () => {
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           padding: '16px',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--color-border)',
           borderRadius: '8px',
-          backgroundColor: 'white',
+          backgroundColor: 'var(--color-surface)',
+          color: 'var(--color-text)',
           transition: 'background-color 0.2s',
           width: '100%',
           boxSizing: 'border-box',
@@ -802,43 +930,42 @@ const ConnectionSelectorView = () => {
             <h3
               style={{
                 margin: 0,
-                color: '#1a365d',
+                color: 'var(--color-heading)',
                 fontSize: '16px',
                 fontWeight: '500',
                 wordBreak: 'break-word',
                 overflowWrap: 'break-word',
               }}
             >
-              {conn.hostname}
+              <MaskedNodeAddress
+                value={conn.hostname}
+                revealed={revealedConnectionAddresses.has(`host-${conn.id || conn.hostname}`)}
+                onToggle={() => toggleConnectionAddressReveal(`host-${conn.id || conn.hostname}`)}
+                label="SSH connection hostname"
+              />
             </h3>
 
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 fontSize: '14px',
                 margin: '2px 0',
                 wordBreak: 'break-word',
                 overflowWrap: 'break-word',
               }}
             >
-              IP: {conn.ip}
+              IP:{' '}
+              <MaskedNodeAddress
+                value={conn.ip}
+                revealed={revealedConnectionAddresses.has(`ip-${conn.id || conn.ip}`)}
+                onToggle={() => toggleConnectionAddressReveal(`ip-${conn.id || conn.ip}`)}
+                label="SSH connection IP"
+              />
             </p>
 
-            <p style={{ color: '#64748b', fontSize: '14px', margin: '2px 0' }}>
-              User: {conn.user}
-            </p>
             <p
               style={{
-                color: '#64748b',
-                fontSize: '14px',
-                margin: '2px 0',
-              }}
-            >
-              Password: ******
-            </p>
-            <p
-              style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 fontSize: '14px',
                 margin: '2px 0',
               }}
@@ -860,8 +987,9 @@ const ConnectionSelectorView = () => {
               <button
                 style={{
                   ...actionStyles.actionButton,
-                  backgroundColor: '#E5E4E2',
-                  color: 'black',
+                  backgroundColor: 'var(--component-button-secondary-bg)',
+                  color: 'var(--component-button-secondary-text)',
+                  border: '1px solid var(--component-button-secondary-border)',
                   width: '100%',
                 }}
                 onClick={() => handleConnectClick(conn, 'direct_ssh')}
@@ -912,14 +1040,15 @@ const ConnectionSelectorView = () => {
                 justifyContent: 'center',
                 padding: '64px 0',
                 textAlign: 'center',
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
               }}
             >
               <div
                 style={{
                   width: '64px',
                   height: '64px',
-                  backgroundColor: '#dbeafe',
+                  backgroundColor: 'var(--color-primary-soft)',
+                  color: 'var(--color-primary)',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
@@ -939,7 +1068,7 @@ const ConnectionSelectorView = () => {
                 flexDirection: 'column',
                 gap: '12px',
                 padding: '16px',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--color-border)',
                 borderRadius: '8px',
                 width: '100%',
                 boxSizing: 'border-box',
@@ -956,35 +1085,39 @@ const ConnectionSelectorView = () => {
                 <button
                   style={{
                     padding: '16px',
-                    border: '1px solid #b0c3db',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     backgroundColor:
-                      connectionsTab === 'all' ? '#cbd5e1' : '#ebeef1',
-                    color: 'black',
+                      connectionsTab === 'all'
+                        ? 'var(--color-surface-muted)'
+                        : 'var(--color-surface)',
+                    color: 'var(--color-text)',
                     fontWeight: connectionsTab === 'all' ? '600' : '400',
                   }}
                   onClick={() => setConnectionsTab('all')}
                 >
                   All Connections
                   <span
-                    style={{ color: 'grey' }}
+                    style={{ color: 'var(--color-text-muted)' }}
                   >{` (${connectionsList.length})`}</span>
                 </button>
                 <button
                   style={{
                     padding: '16px',
-                    border: '1px solid #b0c3db',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     backgroundColor:
-                      connectionsTab === 'active' ? '#cbd5e1' : '#ebeef1',
-                    color: 'black',
+                      connectionsTab === 'active'
+                        ? 'var(--color-surface-muted)'
+                        : 'var(--color-surface)',
+                    color: 'var(--color-text)',
                     fontWeight: connectionsTab === 'active' ? '600' : '400',
                   }}
                   onClick={() => setConnectionsTab('active')}
                 >
                   Active Terminals
-                  <span style={{ color: 'grey' }}>
-                    {` (${Object.entries(activeTerminals || {}).length})`}
+                  <span style={{ color: 'var(--color-text-muted)' }}>
+                    {` (${Object.keys(activeConnection || {}).length})`}
                   </span>
                 </button>
               </div>
@@ -1002,7 +1135,7 @@ const ConnectionSelectorView = () => {
               >
                 {connectionsTab === 'all'
                   ? displayChosenList(sortedConns)
-                  : displayActiveTerminalsTree(activeTerminals)}
+                  : displayActiveTerminalsTree()}
               </div>
             </div>
           )}
@@ -1033,28 +1166,36 @@ const ConnectionSelectorView = () => {
         >
           <div
             style={{
-              backgroundColor: 'white',
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
               borderRadius: '12px',
               padding: '32px',
               maxWidth: '500px',
               width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              boxShadow: 'var(--shadow-card)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2
               style={{
                 margin: '0 0 8px 0',
-                color: '#1a365d',
+                color: 'var(--color-heading)',
                 fontSize: '24px',
                 fontWeight: '600',
               }}
             >
-              Connect to {selectedConnection?.hostname}
+              Connect to{' '}
+              <MaskedNodeAddress
+                value={selectedConnection?.hostname}
+                revealed={revealedConnectionAddresses.has(`modal-${selectedConnection?.hostname}`)}
+                onToggle={() => toggleConnectionAddressReveal(`modal-${selectedConnection?.hostname}`)}
+                label="selected SSH host"
+              />
             </h2>
             <p
               style={{
-                color: '#64748b',
+                color: 'var(--color-text-muted)',
                 marginBottom: '24px',
                 fontSize: '14px',
               }}
@@ -1068,7 +1209,7 @@ const ConnectionSelectorView = () => {
                 display: 'flex',
                 gap: '8px',
                 marginBottom: '24px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--color-border)',
               }}
             >
               <button
@@ -1076,14 +1217,17 @@ const ConnectionSelectorView = () => {
                   padding: '12px 24px',
                   border: 'none',
                   backgroundColor: 'transparent',
-                  color: authMethod === 'password' ? '#2563eb' : '#64748b',
+                  color:
+                    authMethod === CRED_TYPE_PASSWORD ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   borderBottom:
-                    authMethod === 'password' ? '2px solid #2563eb' : 'none',
+                    authMethod === CRED_TYPE_PASSWORD
+                      ? '2px solid #2563eb'
+                      : 'none',
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setAuthMethod('password')}
+                onClick={() => setAuthMethod(CRED_TYPE_PASSWORD)}
               >
                 Password
               </button>
@@ -1092,14 +1236,17 @@ const ConnectionSelectorView = () => {
                   padding: '12px 24px',
                   border: 'none',
                   backgroundColor: 'transparent',
-                  color: authMethod === 'keyfile' ? '#2563eb' : '#64748b',
+                  color:
+                    authMethod === CRED_TYPE_KEYFILE ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   borderBottom:
-                    authMethod === 'keyfile' ? '2px solid #2563eb' : 'none',
+                    authMethod === CRED_TYPE_KEYFILE
+                      ? '2px solid #2563eb'
+                      : 'none',
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500',
                 }}
-                onClick={() => setAuthMethod('keyfile')}
+                onClick={() => setAuthMethod(CRED_TYPE_KEYFILE)}
               >
                 SSH Key
               </button>
@@ -1112,7 +1259,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1135,7 +1282,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1149,7 +1298,7 @@ const ConnectionSelectorView = () => {
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1172,7 +1321,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1187,7 +1338,7 @@ const ConnectionSelectorView = () => {
                     style={{
                       display: 'block',
                       marginBottom: '8px',
-                      color: '#1a365d',
+                      color: 'var(--color-heading)',
                       fontSize: '14px',
                       fontWeight: '500',
                     }}
@@ -1210,7 +1361,9 @@ const ConnectionSelectorView = () => {
                         flex: 1,
                         padding: '12px',
                         borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--component-input-border)',
+                        backgroundColor: 'var(--component-input-bg)',
+                        color: 'var(--component-input-text)',
                         fontSize: '14px',
                       }}
                       onKeyPress={(e) => {
@@ -1226,13 +1379,13 @@ const ConnectionSelectorView = () => {
              * The trash icon clears the stored credential for this hostname
              * from session storage, allowing the user to re-enter it manually.
              */}
-            {authMethod === 'password' && (
+            {authMethod === CRED_TYPE_PASSWORD && (
               <div style={{ marginBottom: '24px' }}>
                 <label
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1255,7 +1408,9 @@ const ConnectionSelectorView = () => {
                       flex: 1,
                       padding: '12px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--component-input-border)',
+                      backgroundColor: 'var(--component-input-bg)',
+                      color: 'var(--component-input-text)',
                       fontSize: '14px',
                     }}
                     onKeyPress={(e) => {
@@ -1269,7 +1424,7 @@ const ConnectionSelectorView = () => {
                     onClick={() => {
                       clearStoredCredentials(
                         selectedConnection?.hostname,
-                        'password',
+                        CRED_TYPE_PASSWORD,
                       );
                       setAuthPassword('');
                     }}
@@ -1284,13 +1439,13 @@ const ConnectionSelectorView = () => {
              * The drop zone border and background change color when a valid key is loaded.
              * "Clear Key" removes the key from session storage and resets local state.
              */}
-            {authMethod === 'keyfile' && (
+            {authMethod === CRED_TYPE_KEYFILE && (
               <div style={{ marginBottom: '24px' }}>
                 <label
                   style={{
                     display: 'block',
                     marginBottom: '8px',
-                    color: '#1a365d',
+                    color: 'var(--color-heading)',
                     fontSize: '14px',
                     fontWeight: '500',
                   }}
@@ -1300,11 +1455,11 @@ const ConnectionSelectorView = () => {
                 <div
                   style={{
                     border: '2px dashed',
-                    borderColor: keyFile ? '#86efac' : '#cbd5e1',
+                    borderColor: keyFile ? 'var(--color-success)' : 'var(--component-input-border)',
                     borderRadius: '6px',
                     padding: '24px',
                     textAlign: 'center',
-                    backgroundColor: keyFile ? '#f0fdf4' : '#f8fafc',
+                    backgroundColor: keyFile ? 'rgba(34, 197, 94, 0.12)' : 'var(--color-surface-muted)',
                   }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
@@ -1333,7 +1488,7 @@ const ConnectionSelectorView = () => {
                   </label>
                   <p
                     style={{
-                      color: '#64748b',
+                      color: 'var(--color-text-muted)',
                       fontSize: '12px',
                       marginTop: '8px',
                     }}
@@ -1356,7 +1511,7 @@ const ConnectionSelectorView = () => {
                       onClick={() => {
                         clearStoredCredentials(
                           selectedConnection?.hostname,
-                          'keyfile',
+                          CRED_TYPE_KEYFILE,
                         );
                         setKeyFile(null);
                       }}
@@ -1392,7 +1547,7 @@ const ConnectionSelectorView = () => {
                   gap: '8px',
                   cursor: credLocked ? 'not-allowed' : 'pointer',
                   fontSize: '14px',
-                  color: credLocked ? '#94a3b8' : '#1a365d',
+                  color: credLocked ? 'var(--color-text-subtle)' : 'var(--color-heading)',
                   opacity: credLocked ? 0.6 : 1,
                 }}
               >
@@ -1413,7 +1568,7 @@ const ConnectionSelectorView = () => {
               <p
                 style={{
                   fontSize: '12px',
-                  color: '#64748b',
+                  color: 'var(--color-text-muted)',
                   marginLeft: '24px',
                   marginTop: '4px',
                 }}
@@ -1449,9 +1604,9 @@ const ConnectionSelectorView = () => {
               <button
                 style={{
                   padding: '10px 20px',
-                  border: '1px solid #e2e8f0',
-                  backgroundColor: 'white',
-                  color: '#64748b',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--component-button-secondary-bg)',
+                  color: 'var(--component-button-secondary-text)',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '14px',

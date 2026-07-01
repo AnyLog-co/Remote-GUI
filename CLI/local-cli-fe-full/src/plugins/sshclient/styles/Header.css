@@ -80,3 +80,26 @@
   transition: all 0.2s ease;
   white-space: nowrap;
 }
+
+:root[data-theme='dark'] .header {
+  border-bottom-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .header-title {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .header-subtitle {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .manage-btn {
+  background-color: var(--component-button-secondary-bg);
+  border-color: var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}
+
+:root[data-theme='dark'] .add-btn {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}

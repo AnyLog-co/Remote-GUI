@@ -7,6 +7,8 @@ import datetime
 import json
 import requests
 import os
+import time
+import uuid
 
 from classes import *
 
@@ -15,6 +17,8 @@ import anylog_api.anylog_connector as anylog_connector
 
 DEFAULT_ANYLOG_CONNECT_TIMEOUT = 5.0
 DEFAULT_ANYLOG_READ_TIMEOUT = 30.0
+CPU_PERCENT_RETRY_DELAY_SECONDS = 0.25
+CPU_PERCENT_RETRY_ATTEMPTS = 3
 
 
 def _parse_positive_timeout(
@@ -83,6 +87,62 @@ def _create_anylog_connector(conn: str, auth: tuple):
                 conn=conn, auth=auth, timeout=fallback_timeout
             )
         raise
+
+
+def _is_node_cpu_percent_command(command: str) -> bool:
+    """Return True for the scalar psutil CPU command that needs a warm sample."""
+    return " ".join(command.lower().split()) == "get node info cpu_percent"
+
+
+def _is_system_command(command: str) -> bool:
+    """Return True for direct system commands that need POST+GET handling."""
+    return " ".join((command or "").lower().split()).startswith("system ")
+
+
+def _is_zero_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+
+
+def _get_system_command_output(anylog_conn, command: str, destination: str = None):
+    """
+    AnyLog rejects direct `system ...` over REST GET. Execute it via a temporary
+    variable so the GUI can still return the command output as text.
+    """
+    temp_var = f"remote_gui_system_{uuid.uuid4().hex}"
+    try:
+        anylog_conn.post(
+            command=f"{temp_var} = {command}",
+            destination=destination,
+        )
+        return anylog_conn.get(
+            command=f"get !{temp_var}",
+            destination=destination,
+        )
+    finally:
+        try:
+            anylog_conn.post(
+                command=f'{temp_var} = ""',
+                destination=destination,
+            )
+        except Exception as cleanup_error:
+            print(f"Failed to clear temporary system cat variable {temp_var}: {cleanup_error}")
+
+
+def _get_with_cpu_percent_retry(anylog_conn, command: str, destination: str = None):
+    response = anylog_conn.get(command=command, destination=destination)
+
+    if not _is_node_cpu_percent_command(command) or not _is_zero_number(response):
+        return response
+
+    # psutil.cpu_percent(interval=None) commonly returns 0.0 on its first sample.
+    # Retry briefly so the GUI shows the same warmed value users see in the node CLI.
+    for _ in range(CPU_PERCENT_RETRY_ATTEMPTS):
+        time.sleep(CPU_PERCENT_RETRY_DELAY_SECONDS)
+        retry_response = anylog_conn.get(command=command, destination=destination)
+        if not _is_zero_number(retry_response):
+            return retry_response
+
+    return response
 
 class Policy(BaseModel):
     name: str  # Policy name
@@ -217,8 +277,18 @@ def make_request(conn, method, command, topic=None, destination=None, payload=No
     # }
     
     try:
-        if method.upper() == "GET":
-            response = anylog_conn.get(command=command, destination=destination)
+        if _is_system_command(command):
+            response = _get_system_command_output(
+                anylog_conn=anylog_conn,
+                command=command,
+                destination=destination
+            )
+        elif method.upper() == "GET":
+            response = _get_with_cpu_percent_retry(
+                anylog_conn=anylog_conn,
+                command=command,
+                destination=destination
+            )
             # response = requests.get(url, headers=headers)
         elif method.upper() == "POST":
             response = anylog_conn.post(command=command, topic=topic, destination=destination, payload=payload)

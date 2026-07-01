@@ -1,11 +1,15 @@
 .sidebar {
+  box-sizing: border-box;
   width: 220px;
+  flex: 0 0 220px;
   background: #1e1e2f;
   padding: 20px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebar a {
@@ -30,18 +34,11 @@
   font-weight: 600;
 }
 
-/* Plugin section styling */
-.plugin-section {
-  margin-top: 20px;
-  padding-top: 20px;
+.sidebar-divider {
   border-top: 1px solid #4e4e6a;
+  margin: 4px 0 12px;
 }
 
-.plugin-section a {
-  margin-bottom: 12px;
-}
-
-/* License / About at bottom left */
 .sidebar-version {
   margin-top: auto;
   padding: 16px 4px 0;
@@ -64,9 +61,41 @@
   color: #c7c7d9 !important;
 }
 
-.sidebar-licensee {
+.sidebar-version-number {
   padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(82vw, 300px);
+    padding: 16px;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.28);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar a {
+    min-height: 44px;
+    margin-bottom: 6px;
+    padding: 11px 12px;
+    box-sizing: border-box;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }

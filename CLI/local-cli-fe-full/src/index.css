@@ -1,10 +1,514 @@
+html {
+  height: 100%;
+  text-size-adjust: 100%;
+  color-scheme: light;
+  --color-bg: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-text: #172033;
+  --color-text-muted: #5b6678;
+  --color-text-subtle: #7b8798;
+  --color-heading: #0f172a;
+  --color-border: #cbd5e1;
+  --color-border-strong: #94a3b8;
+  --color-primary: #007bff;
+  --color-primary-hover: #0056b3;
+  --color-primary-soft: rgba(0, 123, 255, 0.1);
+  --color-primary-border: rgba(0, 123, 255, 0.35);
+  --color-primary-contrast: #ffffff;
+  --color-success: #22a34a;
+  --color-danger: #dc3545;
+  --color-danger-soft: #f8d7da;
+  --color-danger-border: #f5c6cb;
+  --color-warning-bg: #fff3cd;
+  --color-warning-soft: #fff3cd;
+  --color-warning-border: #ffe08a;
+  --color-warning-text: #664d03;
+  --color-error-bg: #f8d7da;
+  --color-error-text: #721c24;
+  --shadow-card: 0 10px 28px rgba(15, 23, 42, 0.08);
+  --focus-ring: 0 0 0 3px rgba(0, 123, 255, 0.25);
+  --topbar-bg: linear-gradient(135deg, #087cf5 0%, #005eb8 100%);
+  --topbar-menu-bg: #086dcc;
+  --topbar-shadow: 0 8px 26px rgba(12, 58, 112, 0.16);
+  --chart-grid: #d8e1ec;
+  --chart-axis: #5b6678;
+  --chart-line: #007bff;
+  --chart-line-active: #0056b3;
+  --chart-gap-fill: #dbe3ec;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #cbd5e1;
+  --component-input-bg: #ffffff;
+  --component-input-border: #cbd5e1;
+  --component-input-text: #172033;
+  --component-disabled-bg: #e9eef5;
+  --component-disabled-text: #697586;
+  --component-hover-bg: #eef5ff;
+  --component-code-bg: #f8fafc;
+  --component-code-text: #172033;
+  --component-info-bg: rgba(0, 123, 255, 0.1);
+  --component-success-bg: rgba(34, 163, 74, 0.12);
+  --component-button-secondary-bg: #ffffff;
+  --component-button-secondary-hover-bg: #eef5ff;
+  --component-button-secondary-border: #cbd5e1;
+  --component-button-secondary-text: #172033;
+}
+
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  scrollbar-color: var(--color-border-strong) var(--color-surface-muted);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  scrollbar-color: var(--color-border-strong) var(--color-surface-muted);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-surface-muted);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border: 2px solid var(--color-surface-muted);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+#root {
+  min-height: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #050914;
+  --color-surface: #0d1524;
+  --color-surface-elevated: #111c2f;
+  --color-surface-muted: #172238;
+  --color-text: #f7fbff;
+  --color-text-muted: #c4cfdf;
+  --color-text-subtle: #92a3bc;
+  --color-heading: #ffffff;
+  --color-border: #37506f;
+  --color-border-strong: #6d8bb1;
+  --color-primary: #66b3ff;
+  --color-primary-hover: #92c9ff;
+  --color-primary-soft: rgba(102, 179, 255, 0.16);
+  --color-primary-border: rgba(102, 179, 255, 0.44);
+  --color-primary-contrast: #04111f;
+  --color-success: #4ade80;
+  --color-danger: #ff6b7a;
+  --color-danger-soft: #3b1117;
+  --color-danger-border: #7f2630;
+  --color-warning-bg: #3d2f09;
+  --color-warning-soft: #3d2f09;
+  --color-warning-border: #80691c;
+  --color-warning-text: #ffe69c;
+  --color-error-bg: #3b1117;
+  --color-error-text: #ffb4bd;
+  --shadow-card: 0 18px 44px rgba(0, 0, 0, 0.46);
+  --focus-ring: 0 0 0 3px rgba(102, 179, 255, 0.42);
+  --topbar-bg: linear-gradient(135deg, #071527 0%, #112f57 58%, #0c3f79 100%);
+  --topbar-menu-bg: #0d1d33;
+  --topbar-shadow: 0 10px 34px rgba(0, 0, 0, 0.48);
+  --chart-grid: #26364f;
+  --chart-axis: #d3deee;
+  --chart-line: #79c0ff;
+  --chart-line-active: #ffffff;
+  --chart-gap-fill: #263142;
+  --chart-tooltip-bg: #0a1220;
+  --chart-tooltip-border: #6d8bb1;
+  --component-input-bg: #07111f;
+  --component-input-border: #37506f;
+  --component-input-text: #f7fbff;
+  --component-disabled-bg: #4b5566;
+  --component-disabled-text: #c7d2e3;
+  --component-hover-bg: #1f2c44;
+  --component-code-bg: #07111f;
+  --component-code-text: #e6f1ff;
+  --component-info-bg: rgba(102, 179, 255, 0.16);
+  --component-success-bg: rgba(74, 222, 128, 0.14);
+  --component-button-secondary-bg: #101b2d;
+  --component-button-secondary-hover-bg: #1f2c44;
+  --component-button-secondary-border: #37506f;
+  --component-button-secondary-text: #f7fbff;
+}
+
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] #root {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .dashboard-container,
+:root[data-theme='dark'] .dashboard-main {
+  background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 34%),
+    var(--color-bg);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] a {
+  color: var(--color-primary);
+}
+
+:root[data-theme='dark'] :where(input, select, textarea) {
+  background-color: #07111f;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] :where(input, select, textarea):focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+:root[data-theme='dark'] :where(input, select, textarea)::placeholder {
+  color: #93a4ba;
+}
+
+:root[data-theme='dark'] :where(input, select, textarea):disabled {
+  background-color: #182236;
+  color: #8ea0b8;
+}
+
+:root[data-theme='dark'] :where(table) {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] :where(th, td) {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] :where(thead, .table-header) {
+  background-color: var(--color-surface-muted);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] :where(pre, code) {
+  background-color: #07111f;
+  color: #e6f1ff;
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .dashboard-main :where(
+  .uns-container,
+  .uns-header,
+  .uns-breadcrumb,
+  .uns-layer,
+  .uns-layer-header,
+  .uns-side-panel,
+  .uns-side-panel-header,
+  .uns-side-panel-description,
+  .uns-side-panel-json pre,
+  .uns-sql-table-container,
+  .uns-sql-table,
+  .uns-sql-table thead,
+  .uns-sql-chart,
+  .edf-topology-page,
+  .topology-shell,
+  .topology-toolbar,
+  .topology-panel,
+  .topology-card,
+  .modern-login-box,
+  .bookmark-upload-modal,
+  .add-node-section,
+  .node-picker-select,
+  .node-picker-input,
+  .client-container,
+  .monitor-container,
+  .blockchain-manager,
+  .policies-container,
+  .bookmarks-container,
+  .presets-container,
+  .view-files-container,
+  .sql-query-generator,
+  .about-container,
+  .security-container,
+  .card,
+  .panel,
+  .modal,
+  .modal-content,
+  .container,
+  .client-container,
+  .monitor-container,
+  .blockchain-manager,
+  .nodecheck-page,
+  .query-builder,
+  .query-preview,
+  .query-display,
+  .results-section,
+  .results-header,
+  .results-container,
+  .results-grid,
+  .result-item,
+  .result-card,
+  .status-card,
+  .json-card,
+  .json-details,
+  .detail-section,
+  .selected-node-info,
+  .nodecheck-controls,
+  .result-header,
+  .result-body,
+  .result-content,
+  .loading-section,
+  .monitor-table-container,
+  .threshold-form,
+  .active-thresholds,
+  .threshold-item,
+  .import-section,
+  .file-info,
+  .import-preview,
+  .group-list,
+  .preset-list,
+  .group-list li,
+  .preset-list li,
+  .view-files-grid,
+  .file-browser,
+  .file-viewer,
+  .file-content,
+  .anylog-table-wrapper,
+  .anylog-table,
+  .anylog-table-row,
+  .anylog-table-cell,
+  .data-table,
+  .presets-panel,
+  .preset-group,
+  .no-node-message,
+  .command-preview,
+  .id-box,
+  .policy-id-box,
+  .json-preview
+) {
+  background-color: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(
+  h1, h2, h3, h4, h5, h6,
+  label,
+  strong,
+  .uns-item-name,
+  .uns-side-panel-description strong,
+  .uns-side-panel-info-row strong,
+  .uns-side-panel-json strong,
+  .uns-side-panel-header h3,
+  .uns-sql-table th,
+  .blockchain-header h2,
+  .results-header h2,
+  .result-header h3,
+  .json-title h3,
+  .detail-section h4,
+  .nodecheck-header h2,
+  .nodecheck-header h3,
+  .result-card h3,
+  .threshold-form h3,
+  .active-thresholds h4,
+  .import-preview h4,
+  .additional-content h4,
+  .modal-content h3,
+  .no-node-message h3
+) {
+  color: var(--color-heading) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(
+  small,
+  .uns-query-label,
+  .uns-breadcrumb-separator,
+  .uns-item-expand,
+  .uns-loading,
+  .uns-empty,
+  .uns-tooltip-type,
+  .uns-tooltip-content,
+  .uns-sql-row-count,
+  .uns-sql-loading,
+  .uns-sql-empty,
+  .uns-sql-chart-controls label,
+  .uns-sql-chart-zoom-hint,
+  .login-subtitle,
+  .signup-subtitle,
+  .blockchain-header p,
+  .nodecheck-header p,
+  .result-message,
+  .json-subtitle,
+  .detail-label,
+  .loading-section p,
+  .file-info p,
+  .no-node-message p,
+  .anylog-table-null,
+  .anylog-table-empty
+) {
+  color: var(--color-text-muted) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(
+  .uns-layer-header,
+  .uns-side-panel-header,
+  .uns-sql-table thead,
+  .uns-sql-table tbody tr:hover,
+  .uns-item:hover,
+  .bookmark-upload-header,
+  .blockchain-controls,
+  .query-preview,
+  .results-header,
+  .result-header,
+  .json-header,
+  .selected-node-info,
+  .nodecheck-controls,
+  .result-body,
+  .result-content,
+  .status-content,
+  .no-data,
+  .loading-section,
+  .threshold-form,
+  .active-thresholds,
+  .import-section,
+  .import-preview,
+  .group-list li:hover,
+  .preset-list li:hover,
+  .anylog-table-header,
+  .service-cell,
+  .anylog-table-row:nth-child(even),
+  .preset-group summary,
+  .modal-body
+) {
+  background-color: var(--color-surface-muted) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(
+  input,
+  select,
+  textarea,
+  .form-select,
+  .form-input,
+  .connection-field,
+  .text-input,
+  .policy-name-input,
+  .group-select,
+  .group-name-input,
+  .button-name-input,
+  .file-input,
+  .query-textarea
+) {
+  background-color: var(--component-input-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(select option) {
+  background-color: var(--component-input-bg) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(input:disabled, select:disabled, textarea:disabled, button:disabled) {
+  background-color: var(--component-disabled-bg) !important;
+  color: var(--component-disabled-text) !important;
+  opacity: 1;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(pre, code, .query-display, .result-content pre, .status-content pre, .detail-value, .detail-value.json-object, .additional-content-text, .json-preview, .command-preview) {
+  background-color: var(--component-code-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--component-code-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.data-table th, .anylog-table-header, .monitor-table-container th) {
+  background-color: var(--color-surface-muted) !important;
+  color: var(--color-heading) !important;
+  border-color: var(--color-border) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.data-table td, .anylog-table-cell, .monitor-table-container td) {
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.data-table tr:hover, .anylog-table-row:hover, .result-item:hover, .json-card:hover) {
+  background-color: var(--component-hover-bg) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.uns-item.expanded, .uns-item.selected, .uns-item.has-data) {
+  background-color: rgba(102, 179, 255, 0.17) !important;
+  border-color: var(--color-primary) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.uns-tooltip, .recharts-default-tooltip) {
+  background-color: var(--chart-tooltip-bg) !important;
+  border-color: var(--chart-tooltip-border) !important;
+  color: var(--color-text) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.recharts-tooltip-label, .recharts-tooltip-item) {
+  color: var(--color-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.uns-error, .uns-sql-error, .error) {
+  background-color: var(--color-error-bg) !important;
+  border-color: #b84250 !important;
+  color: var(--color-error-text) !important;
+}
+
+:root[data-theme='dark'] .dashboard-main :where(.node-picker-warning) {
+  background-color: var(--color-warning-bg) !important;
+  border-color: #d6a82f !important;
+  color: var(--color-warning-text) !important;
+}
+
+@media (max-width: 600px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  button,
+  [role='button'],
+  a {
+    touch-action: manipulation;
+  }
 }
 
 code {

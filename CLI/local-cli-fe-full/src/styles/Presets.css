@@ -373,3 +373,66 @@ button:disabled {
   margin-top: 1rem;
   color: #006400;
 }
+
+:root[data-theme='dark'] .container {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .container section,
+:root[data-theme='dark'] .import-section,
+:root[data-theme='dark'] .file-info,
+:root[data-theme='dark'] .preset-section .form-row,
+:root[data-theme='dark'] .preset-list li {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .import-section:hover,
+:root[data-theme='dark'] .file-input:hover {
+  border-color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .file-input,
+:root[data-theme='dark'] .preset-section .form-row input,
+:root[data-theme='dark'] .preset-section .form-row select,
+:root[data-theme='dark'] .container input[type='text'],
+:root[data-theme='dark'] .container select {
+  background: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] h2,
+:root[data-theme='dark'] .import-preview h4,
+:root[data-theme='dark'] .file-info p,
+:root[data-theme='dark'] .preset-section .form-row label,
+:root[data-theme='dark'] .preset-list li .preset-button {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .import-preview ul,
+:root[data-theme='dark'] .group-list li.selected,
+:root[data-theme='dark'] .preset-list li:hover,
+:root[data-theme='dark'] .preset-list li .preset-command,
+:root[data-theme='dark'] .preset-list li .preset-type,
+:root[data-theme='dark'] .preset-list li.empty-state {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .import-preview li,
+:root[data-theme='dark'] .group-list li,
+:root[data-theme='dark'] .preset-list li .preset-type,
+:root[data-theme='dark'] .preset-list li .preset-command {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .group-list li .delete-btn,
+:root[data-theme='dark'] .preset-list li .delete-btn {
+  background: var(--component-button-secondary-bg);
+  border-color: var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}

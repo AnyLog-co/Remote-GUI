@@ -104,3 +104,41 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+:root[data-theme='dark'] .form-container {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .form-header {
+  border-bottom-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .form-title {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .form-description,
+:root[data-theme='dark'] .form-label {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .form-input {
+  background-color: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] .form-input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+:root[data-theme='dark'] .form-button.primary {
+  background-color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .form-button.secondary {
+  background-color: var(--component-button-secondary-bg);
+  color: var(--component-button-secondary-text);
+  border: 1px solid var(--component-button-secondary-border);
+}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ConnectedNodeAddress from '../../components/ConnectedNodeAddress';
 import '../../styles/ReportgeneratorPage.css';
+import { getApiBaseUrl } from '../../utils/runtimeConfig';
 
 // Plugin metadata - used by the plugin loader
 export const pluginMetadata = {
@@ -94,7 +96,7 @@ const ReportgeneratorPage = ({ node }) => {
   const fetchReports = async () => {
     try {
       setLoadingReports(true);
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/list-reports/`, {
         method: 'GET',
         headers: {
@@ -120,7 +122,7 @@ const ReportgeneratorPage = ({ node }) => {
 
     try {
       setLoadingMonitorIds(true);
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/monitor-ids-by-report/`, {
         method: 'POST',
         headers: {
@@ -218,7 +220,7 @@ const ReportgeneratorPage = ({ node }) => {
         page_orientation: pageOrientation
       };
 
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const url = `${API_URL}/reportgenerator/generate-report`;
       
       // Make request to get PDF file
@@ -319,7 +321,7 @@ const ReportgeneratorPage = ({ node }) => {
     setSuccess(null);
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       
       // Step 1: Check for conflicts
       const checkFormData = new FormData();
@@ -402,7 +404,7 @@ const ReportgeneratorPage = ({ node }) => {
     setSuccess(null);
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const formData = new FormData();
       
       // Append all files
@@ -482,7 +484,7 @@ const ReportgeneratorPage = ({ node }) => {
     }
 
     try {
-      const API_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+      const API_URL = getApiBaseUrl();
       const response = await fetch(`${API_URL}/reportgenerator/export-configs`, {
         method: 'GET',
       });
@@ -531,10 +533,14 @@ const ReportgeneratorPage = ({ node }) => {
       <div className="reportgenerator-header">
         <h2>Report Generator</h2>
         {node && (
-          <div className="selected-node-info">
-            <span className="node-label">Node:</span>
-            <span className="node-value">{node}</span>
-          </div>
+          <ConnectedNodeAddress
+            value={node}
+            label="Node:"
+            as="div"
+            className="selected-node-info"
+            labelClassName="node-label"
+            valueClassName="node-value"
+          />
         )}
       </div>
 
@@ -566,7 +572,7 @@ const ReportgeneratorPage = ({ node }) => {
               <p>Selected {importFiles.length} file(s):</p>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
                 {importFiles.map((file, index) => (
-                  <li key={index} style={{ padding: '0.25rem 0', color: '#495057', fontSize: '0.9rem' }}>
+                  <li key={index} style={{ padding: '0.25rem 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
                     {file.name} {file.name.endsWith('.zip') && '(ZIP archive)'}
                   </li>
                 ))}
@@ -603,14 +609,14 @@ const ReportgeneratorPage = ({ node }) => {
 
           {/* Conflict Resolution Dialog */}
           {conflictingFiles.length > 0 && currentConflictIndex < conflictingFiles.length && !replaceAll && (
-            <div className="file-info" style={{ marginTop: '1rem', border: '2px solid #ffc107', backgroundColor: '#fff3cd' }}>
-              <h4 style={{ margin: '0 0 1rem 0', color: '#856404' }}>
+            <div className="file-info" style={{ marginTop: '1rem', border: '2px solid var(--color-warning-border)', backgroundColor: 'var(--color-warning-soft)' }}>
+              <h4 style={{ margin: '0 0 1rem 0', color: 'var(--color-warning-text)' }}>
                 File Already Exists ({currentConflictIndex + 1} of {conflictingFiles.length})
               </h4>
-              <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold', color: '#856404' }}>
+              <p style={{ margin: '0 0 1rem 0', fontWeight: 'bold', color: 'var(--color-warning-text)' }}>
                 {conflictingFiles[currentConflictIndex]}
               </p>
-              <p style={{ margin: '0 0 1rem 0', color: '#856404' }}>
+              <p style={{ margin: '0 0 1rem 0', color: 'var(--color-warning-text)' }}>
                 This file already exists. What would you like to do?
               </p>
               <div className="import-actions">
@@ -852,4 +858,3 @@ const ReportgeneratorPage = ({ node }) => {
 };
 
 export default ReportgeneratorPage;
-

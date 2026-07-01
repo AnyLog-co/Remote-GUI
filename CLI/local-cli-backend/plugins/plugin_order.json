@@ -1,10 +1,54 @@
 {
   "plugin_order": [
+    "mcpclient",
+    {
+      "name": "uns",
+      "label": "Unified Namespace (UNS)"
+    },
+    "edgedatafabrictopology",
     "policycreator",
+    "sshclient",
     "grafana",
     "reportgenerator",
     "nodecheck",
-    "mcpclient",
     "videostreamviewer"
-  ]
+  ],
+  "sidebar_order": [
+    "client",
+    "mcpclient",
+    {
+      "name": "uns",
+      "label": "Unified Namespace (UNS)"
+    },
+    "edgedatafabrictopology",
+    "monitor",
+    "sqlquery",
+    "blockchain",
+    "policycreator",
+    "sshclient",
+    "grafana",
+    "presets",
+    "viewfiles"
+  ],
+  "sidebar_sections": {
+    "above_divider": [
+      "client",
+      "mcpclient",
+      {
+        "name": "uns",
+        "label": "Unified Namespace (UNS)"
+      },
+      "edgedatafabrictopology",
+      "monitor",
+      "sqlquery",
+      "blockchain",
+      "policycreator",
+      "sshclient"
+    ],
+    "below_divider": [
+      "grafana",
+      "presets",
+      "viewfiles"
+    ]
+  }
 }

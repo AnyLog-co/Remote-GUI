@@ -1,11 +1,20 @@
 import { cliState } from '../state/state';
 import { Vault } from './vault';
+import {
+  CRED_TYPE_PASSWORD,
+  CRED_TYPE_KEYFILE,
+  CREDENTIAL_TYPES,
+  VAULT_TYPE_PASSWORD,
+  VAULT_TYPE_KEY,
+  CACHE_KEY_AUTH,
+  CACHE_KEY_KEYFILE,
+  cacheKeyForCredentialType,
+} from './credentialConstants';
 
-const CREDENTIAL_TYPES = ['password', 'keyfile'];
-
-// // Use constant to avoid secret-detection false positives on .password assignments
-// const CRED_FIELD_AUTH = 'password';
-// const CRED_FIELD_KEY = 'keyfile';
+export {
+  CRED_TYPE_PASSWORD,
+  CRED_TYPE_KEYFILE,
+} from './credentialConstants';
 
 export const retrieveStoredCredential = (hostname, type) => {
   if (!CREDENTIAL_TYPES.includes(type)) {
@@ -17,11 +26,13 @@ export const retrieveStoredCredential = (hostname, type) => {
 
   if (!hostCreds) return null;
 
-  if (type === 'password') {
-    return hostCreds.password || null;
-  } else if (type === 'keyfile') {
-    console.log(`providing data from ${hostCreds.keyfile?.name}`);
-    return hostCreds.keyfile || null;
+  const cacheKey = cacheKeyForCredentialType(type);
+  if (type === CRED_TYPE_PASSWORD) {
+    return hostCreds[cacheKey] || null;
+  }
+  if (type === CRED_TYPE_KEYFILE) {
+    console.log(`providing data from ${hostCreds[CACHE_KEY_KEYFILE]?.name}`);
+    return hostCreds[CACHE_KEY_KEYFILE] || null;
   }
 
   return null;
@@ -34,10 +45,11 @@ export const storeCredentialInSession = (hostname, type, value) => {
 
   const currentCache = cliState.getState().secretsCache || {};
   const hostData = currentCache[hostname] || {};
+  const cacheKey = cacheKeyForCredentialType(type);
 
   const updatedHostData = {
     ...hostData,
-    [type]: value,
+    [cacheKey]: value,
   };
 
   cliState.getState().cacheSecrets({
@@ -79,7 +91,7 @@ export const saveCredentialToVault = async (
     );
   }
 
-  const credType = type === 'password' ? 'PASSWORD' : 'KEY';
+  const credType = type === CRED_TYPE_PASSWORD ? VAULT_TYPE_PASSWORD : VAULT_TYPE_KEY;
 
   try {
     const existingSecrets = await vaultDb.secrets.toArray();
@@ -93,8 +105,8 @@ export const saveCredentialToVault = async (
         content: {
           hostname,
           type: credType,
-          ref: ref || (type === 'keyfile' ? value.name : ''),
-          credential: type === 'keyfile' ? value.contents : value,
+          ref: ref || (type === CRED_TYPE_KEYFILE ? value.name : ''),
+          credential: type === CRED_TYPE_KEYFILE ? value.contents : value,
         },
         date: new Date().toISOString(),
       });
@@ -103,8 +115,8 @@ export const saveCredentialToVault = async (
       await Vault.saveSecret({
         hostname,
         type: credType,
-        ref: ref || (type === 'keyfile' ? value.name : ''),
-        credential: type === 'keyfile' ? value.contents : value,
+        ref: ref || (type === CRED_TYPE_KEYFILE ? value.name : ''),
+        credential: type === CRED_TYPE_KEYFILE ? value.contents : value,
       });
     }
 
@@ -127,9 +139,10 @@ export const clearStoredCredentials = (hostname, type) => {
     if (!CREDENTIAL_TYPES.includes(type)) {
       throw new Error(`Invalid credential type: ${type}`);
     }
+    const cacheKey = cacheKeyForCredentialType(type);
     currentCache[hostname] = {
       ...currentCache[hostname],
-      [type]: null,
+      [cacheKey]: null,
     };
   }
 
@@ -148,11 +161,11 @@ export const loadSecretsFromVault = async (vaultDb) => {
       secretsCache[hostname] = {};
     }
 
-    if (secret.content.type === 'PASSWORD') {
-      secretsCache[hostname]['password'] = secret.content.credential;
+    if (secret.content.type === VAULT_TYPE_PASSWORD) {
+      secretsCache[hostname][CACHE_KEY_AUTH] = secret.content.credential;
       secretsCache[hostname].username = secret.content.username || 'root';
-    } else if (secret.content.type === 'KEY') {
-      secretsCache[hostname]['keyfile'] = {
+    } else if (secret.content.type === VAULT_TYPE_KEY) {
+      secretsCache[hostname][CACHE_KEY_KEYFILE] = {
         name: secret.content.ref,
         contents: secret.content.credential,
       };

@@ -138,7 +138,7 @@ const About = ({ node }) => {
             </a>
           </p>
           <p>© 2026 AnyLog Inc.</p>
-          <p>AnyLog and AnyLog GUI are proprietary software owned by AnyLog Inc.</p>
+          <p>AnyLog and Edge Data Manager are proprietary software owned by AnyLog Inc.</p>
           <p>
             Documentation:{' '}
             <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">

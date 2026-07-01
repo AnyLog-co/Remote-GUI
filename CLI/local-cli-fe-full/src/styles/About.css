@@ -208,3 +208,52 @@ tr.env-default {
   background: #f1f5f9;
   color: #94a3b8;
 }
+
+:root[data-theme='dark'] .about-page {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .about-content h1,
+:root[data-theme='dark'] .about-env-header h3,
+:root[data-theme='dark'] .env-name {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .about-section,
+:root[data-theme='dark'] .about-footer {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .about-footer,
+:root[data-theme='dark'] .env-count,
+:root[data-theme='dark'] .env-chevron,
+:root[data-theme='dark'] .env-desc {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .about-env-header:hover,
+:root[data-theme='dark'] .env-table thead,
+:root[data-theme='dark'] .env-table tbody tr:hover {
+  background: var(--color-surface-muted);
+}
+
+:root[data-theme='dark'] .env-table th,
+:root[data-theme='dark'] .env-table td {
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .env-table th {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .env-value code {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .env-badge-none {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}

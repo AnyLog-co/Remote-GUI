@@ -214,3 +214,53 @@
   padding: 4px 8px;
   color: #ef4444;
 }
+
+:root[data-theme='dark'] .vault-locked,
+:root[data-theme='dark'] .vault-main {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .vault-locked-title,
+:root[data-theme='dark'] .vault-header-title,
+:root[data-theme='dark'] .vault-host-title {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .vault-password-input {
+  background: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] .vault-header {
+  border-bottom-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .vault-form-container,
+:root[data-theme='dark'] .vault-secret-row {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .vault-host-card {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .vault-close-btn {
+  background-color: var(--component-button-secondary-bg);
+  color: var(--component-button-secondary-text);
+}
+
+:root[data-theme='dark'] .vault-unlock-btn,
+:root[data-theme='dark'] .vault-add-btn {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .vault-username,
+:root[data-theme='dark'] .vault-date {
+  color: var(--color-text-muted);
+}

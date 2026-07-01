@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import MaskedNodeAddress from './MaskedNodeAddress';
 import { filterTableData, hasInternalColumns } from '../utils/tableUtils';
+import { hasMaskableAddress } from '../utils/maskAddress';
 import '../styles/MonitorTable.css'; 
 
 const MonitorTable = ({ data }) => {
@@ -18,6 +20,9 @@ const MonitorTable = ({ data }) => {
   
   // State for showing/hiding internal columns
   const [showInternalColumns, setShowInternalColumns] = useState(false);
+  const [nodeColumnRevealed, setNodeColumnRevealed] = useState(false);
+  const [revealedNodeRows, setRevealedNodeRows] = useState(new Set());
+  const [hiddenNodeRows, setHiddenNodeRows] = useState(new Set());
 
   // Check if data has internal columns
   const hasInternal = useMemo(() => hasInternalColumns(data), [data]);
@@ -26,6 +31,66 @@ const MonitorTable = ({ data }) => {
   const { data: filteredData, headers } = useMemo(() => {
     return filterTableData(data, showInternalColumns);
   }, [data, showInternalColumns]);
+
+  const nodeColumnHasMaskableValues = useMemo(() => {
+    const nodeHeader = headers[0];
+    if (!nodeHeader) return false;
+    return filteredData.some(row => hasMaskableAddress(row[nodeHeader]));
+  }, [filteredData, headers]);
+
+  const nodeRowRevealKey = (value, rowIndex) => `${rowIndex}:${String(value || '')}`;
+
+  const toggleAllNodeRows = () => {
+    const nextRevealed = !nodeColumnRevealed;
+    setNodeColumnRevealed(nextRevealed);
+    setRevealedNodeRows(new Set());
+    setHiddenNodeRows(new Set());
+  };
+
+  const toggleNodeRow = (key) => {
+    if (nodeColumnRevealed) {
+      setHiddenNodeRows(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+      return;
+    }
+
+    setRevealedNodeRows(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const isNodeRowRevealed = (key) => (
+    nodeColumnRevealed ? !hiddenNodeRows.has(key) : revealedNodeRows.has(key)
+  );
+
+  const renderCellValue = (value, cellIndex, rowIndex) => {
+    if (cellIndex === 0 && hasMaskableAddress(value)) {
+      const key = nodeRowRevealKey(value, rowIndex);
+      return (
+        <MaskedNodeAddress
+          value={value}
+          revealed={isNodeRowRevealed(key)}
+          onToggle={() => toggleNodeRow(key)}
+          label="monitor node row"
+          className="monitor-node-cell"
+        />
+      );
+    }
+    return value;
+  };
 
   // If no data or empty array, render a message
   if (!data || data.length === 0) {
@@ -250,29 +315,44 @@ const MonitorTable = ({ data }) => {
       )}
 
       {/* Data Table */}
-      <table className="data-table">
-        <thead>
-          <tr>
-            {headers.map((header, idx) => (
-              <th key={`header-${idx}`}>{header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filteredData.map((row, rowIndex) => (
-            <tr key={`row-${rowIndex}`}>
-              {headers.map((header, cellIndex) => (
-                <td 
-                  key={`cell-${rowIndex}-${cellIndex}`}
-                  style={getCellStyle(row[header], header)}
-                >
-                  {row[header]}
-                </td>
+      <div className="monitor-data-table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              {headers.map((header, idx) => (
+                <th key={`header-${idx}`}>
+                  {idx === 0 && nodeColumnHasMaskableValues ? (
+                    <span className="monitor-node-header">
+                      <span>{header}</span>
+                      <MaskedNodeAddress
+                        value={filteredData.find(row => hasMaskableAddress(row[header]))?.[header] || ''}
+                        revealed={nodeColumnRevealed}
+                        onToggle={toggleAllNodeRows}
+                        label="all monitor node rows"
+                        showText={false}
+                      />
+                    </span>
+                  ) : header}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredData.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`}>
+                {headers.map((header, cellIndex) => (
+                  <td 
+                    key={`cell-${rowIndex}-${cellIndex}`}
+                    style={getCellStyle(row[header], header)}
+                  >
+                    {renderCellValue(row[header], cellIndex, rowIndex)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

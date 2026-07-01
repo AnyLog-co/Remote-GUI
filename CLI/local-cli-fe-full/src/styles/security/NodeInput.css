@@ -67,3 +67,29 @@
   margin-top: 4px;
   font-family: 'Inter', sans-serif;
 }
+
+:root[data-theme='dark'] .node-input {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .node-input label {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .node-input input {
+  background-color: var(--component-input-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .node-input input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+:root[data-theme='dark'] .node-input input::placeholder {
+  color: var(--color-text-muted);
+}

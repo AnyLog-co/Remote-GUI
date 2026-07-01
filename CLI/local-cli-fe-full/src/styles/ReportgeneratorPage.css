@@ -510,3 +510,72 @@ select.form-control {
   cursor: not-allowed;
 }
 
+:root[data-theme='dark'] .reportgenerator-page {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .reportgenerator-header h2,
+:root[data-theme='dark'] .form-section h3,
+:root[data-theme='dark'] .pdf-viewer-header h3,
+:root[data-theme='dark'] .import-section h2 {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .selected-node-info,
+:root[data-theme='dark'] .config-monitor-id-display {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .node-label,
+:root[data-theme='dark'] .node-value {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .reportgenerator-form,
+:root[data-theme='dark'] .pdf-viewer-section,
+:root[data-theme='dark'] .import-section,
+:root[data-theme='dark'] .file-info {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .form-section,
+:root[data-theme='dark'] .pdf-viewer-header {
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .form-group label,
+:root[data-theme='dark'] .form-help,
+:root[data-theme='dark'] .loading-indicator,
+:root[data-theme='dark'] .form-text.text-muted,
+:root[data-theme='dark'] .import-preview li {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .form-control,
+:root[data-theme='dark'] .file-input {
+  background-color: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] select.form-control {
+  background-image: none;
+}
+
+:root[data-theme='dark'] .form-control:disabled,
+:root[data-theme='dark'] .import-preview ul,
+:root[data-theme='dark'] .pdf-viewer-container {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .file-info p,
+:root[data-theme='dark'] .import-preview h4 {
+  color: var(--color-heading);
+}

@@ -2,37 +2,47 @@ import React, { useRef, useState, useEffect } from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
 import UNSColumnDetails from './UNSColumnDetails';
+import UNSTimeControls from './UNSTimeControls';
 import { exportToCSV, exportToPDF } from './unsExportUtils';
 import { getDataNodes } from './uns_api';
 
 const UNSSidePanel = ({
   isOpen,
   selectedItem,
-  itemsWithData,
   conn,
   sqlData,
+  sqlColumns,
   sqlLoading,
   sqlError,
   timeRangeValue,
   timeRangeUnit,
+  timeMode = 'relative',
+  startTime = '',
+  endTime = '',
+  timeRangeError = '',
+  timeRangeErrorDismissed = false,
   timeColumn,
   onClose,
   onTimeRangeValueChange,
   onTimeRangeUnitChange,
+  onTimeModeChange,
+  onStartTimeChange,
+  onEndTimeChange,
+  onTimeRangeErrorDismiss,
   onTimeColumnChange,
   onFetchTimeRange,
+  onCompareItem,
   getItemName,
   getItemType,
   getItemId,
   getItemData,
   chartYKey,
   onChartYKeyChange,
+  isCompared = false,
 }) => {
   const itemData = selectedItem ? getItemData(selectedItem) : null;
   const hasTableMeta = itemData && itemData.dbms && itemData.table;
-  const tableCacheKey = hasTableMeta ? `${itemData.dbms}:${itemData.table}` : null;
-  const hasDataAtLocation = tableCacheKey ? (itemsWithData.get(tableCacheKey) === true) : false;
-  const showTableSection = hasTableMeta && hasDataAtLocation;
+  const showTableSection = hasTableMeta;
   const chartRef = useRef(null);
 
   const [dataNodes, setDataNodes] = useState(null);
@@ -106,9 +116,11 @@ const UNSSidePanel = ({
   const sanitizeForFilename = (s) => (s != null ? String(s).replace(/[/\\:*?"<>|]/g, '-').trim() : '');
 
   /** Get table columns in order: selected time column first (if present), then others. Only show one time column. */
-  const getOrderedTableColumns = (firstRow) => {
-    if (!firstRow || typeof firstRow !== 'object') return [];
-    const keys = Object.keys(firstRow);
+  const getOrderedTableColumns = (source) => {
+    const keys = Array.isArray(source)
+      ? source
+      : (source && typeof source === 'object' ? Object.keys(source) : []);
+    if (keys.length === 0) return [];
     const keyMatches = (k, target) => k === target || (k && target && String(k).toLowerCase() === String(target).toLowerCase());
     const timeCols = ['insert_timestamp', 'timestamp'];
     const selectedTimeKey = keys.find((k) => keyMatches(k, timeColumn));
@@ -121,6 +133,12 @@ const UNSSidePanel = ({
     }
     return keys;
   };
+
+  const tableColumns = Array.isArray(sqlData) && sqlData[0] && typeof sqlData[0] === 'object'
+    ? getOrderedTableColumns(sqlData[0])
+    : (Array.isArray(sqlColumns) && sqlColumns.length > 0
+      ? getOrderedTableColumns(sqlColumns)
+      : []);
 
   const getExportFilename = () => {
     const parts = [
@@ -199,80 +217,54 @@ const UNSSidePanel = ({
                   <div className="uns-side-panel-info-row">
                     <strong>Table:</strong> {itemData.table}
                   </div>
+                  <button
+                    type="button"
+                    className={`uns-side-panel-compare-btn ${isCompared ? 'selected' : ''}`}
+                    onClick={() => onCompareItem && onCompareItem(selectedItem)}
+                    title={isCompared ? 'Already in active compare graph' : 'Add to compare graph'}
+                    aria-label={isCompared ? 'Already in active compare graph' : 'Add to compare graph'}
+                    aria-pressed={isCompared}
+                  >
+                    {isCompared ? 'Compared' : 'Compare'}
+                  </button>
                   <div className="uns-side-panel-time-range">
-                    <label htmlFor="time-range-value">Time Range:</label>
-                    <div className="uns-time-range-controls">
-                      <input
-                        id="time-range-value"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={timeRangeValue}
-                        onChange={(e) => {
-                          const value = parseFloat(e.target.value) || 5;
-                          onTimeRangeValueChange(value);
-                        }}
-                        className="uns-time-range-input"
-                      />
-                      <select
-                        id="time-range-unit"
-                        value={timeRangeUnit}
-                        onChange={(e) => {
-                          onTimeRangeUnitChange(e.target.value);
-                        }}
-                        className="uns-time-range-unit"
-                      >
-                        <option value="minute">Minutes</option>
-                        <option value="hour">Hours</option>
-                        <option value="day">Days</option>
-                        <option value="week">Weeks</option>
-                      </select>
-                      <select
-                        id="time-column"
-                        value={timeColumn}
-                        onChange={(e) => onTimeColumnChange(e.target.value)}
-                        className="uns-time-column-select"
-                        title="Time column used for filtering"
-                      >
-                        <option value="insert_timestamp">insert_timestamp</option>
-                        <option value="timestamp">timestamp</option>
-                      </select>
-                      <button
-                        onClick={() => {
-                          if (showTableSection) {
-                            onFetchTimeRange(itemData.dbms, itemData.table, itemData.where, itemData.column);
-                          }
-                        }}
-                        disabled={sqlLoading}
-                        className="uns-time-range-refresh-btn"
-                      >
-                        {sqlLoading ? 'Loading...' : '🔄 Refresh'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="uns-live-controls">
-                    <button
-                      onClick={() => setLiveMode((prev) => !prev)}
-                      className={`uns-live-toggle ${liveMode ? 'active' : ''}`}
-                      title={liveMode ? 'Stop live refresh' : 'Start live refresh'}
-                    >
-                      {liveMode && <span className="uns-live-dot" />}
-                      {liveMode ? 'Live' : 'Go Live'}
-                    </button>
-                    <label className="uns-refresh-rate-label" htmlFor="refresh-rate">
-                      every
-                    </label>
-                    <input
-                      id="refresh-rate"
-                      type="number"
-                      min="5"
-                      step="1"
-                      value={refreshRate}
-                      onChange={(e) => setRefreshRate(Math.max(5, parseInt(e.target.value, 10) || 20))}
-                      className="uns-refresh-rate-input"
-                      disabled={liveMode}
+                    <UNSTimeControls
+                      idPrefix="uns-detail"
+                      timeRangeValue={timeRangeValue}
+                      timeRangeUnit={timeRangeUnit}
+                      timeMode={timeMode}
+                      startTime={startTime}
+                      endTime={endTime}
+                      timeColumn={timeColumn}
+                      loading={sqlLoading || Boolean(timeRangeError)}
+                      liveMode={liveMode}
+                      refreshRate={refreshRate}
+                      onTimeRangeValueChange={onTimeRangeValueChange}
+                      onTimeRangeUnitChange={onTimeRangeUnitChange}
+                      onTimeModeChange={onTimeModeChange}
+                      onStartTimeChange={onStartTimeChange}
+                      onEndTimeChange={onEndTimeChange}
+                      onTimeColumnChange={onTimeColumnChange}
+                      onRefresh={() => {
+                        if (showTableSection) {
+                          onFetchTimeRange(itemData.dbms, itemData.table, itemData.where, itemData.column);
+                        }
+                      }}
+                      onLiveModeChange={setLiveMode}
+                      onRefreshRateChange={setRefreshRate}
                     />
-                    <span className="uns-refresh-rate-unit">sec</span>
+                    {timeRangeError && !timeRangeErrorDismissed && (
+                      <div className="uns-compare-range-error uns-time-range-error" role="alert">
+                        <span>{timeRangeError}</span>
+                        <button
+                          type="button"
+                          onClick={onTimeRangeErrorDismiss}
+                          aria-label="Dismiss time range error"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -291,19 +283,21 @@ const UNSSidePanel = ({
                           <span className="uns-live-dot" /> LIVE — {refreshRate}s
                         </span>
                       )}
-                      {sqlData && sqlData.length > 0 && (
+                      {Array.isArray(sqlData) && (
                         <>
                           <span className="uns-sql-row-count">
                             ({sqlData.length} row{sqlData.length !== 1 ? 's' : ''})
                           </span>
-                          <div className="uns-sql-export-btns">
-                            <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
-                              Export CSV
-                            </button>
-                            <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
-                              Export PDF
-                            </button>
-                          </div>
+                          {sqlData.length > 0 && (
+                            <div className="uns-sql-export-btns">
+                              <button type="button" onClick={handleExportCSV} className="uns-export-btn" title="Export table to CSV">
+                                Export CSV
+                              </button>
+                              <button type="button" onClick={handleExportPDF} className="uns-export-btn" title="Export table and chart to PDF">
+                                Export PDF
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -325,28 +319,25 @@ const UNSSidePanel = ({
                     {!sqlLoading && !sqlError && Array.isArray(sqlData) && (
                       <>
                         <div className="uns-sql-table-container">
-                          {sqlData.length === 0 ? (
+                          {tableColumns.length === 0 && sqlData.length === 0 ? (
                             <div className="uns-sql-empty">
-                              No data found for the specified time range.
+                              No columns found for this table.
                             </div>
                           ) : (
                             <table className="uns-sql-table">
                               <thead>
                                 <tr>
-                                  {sqlData[0] && getOrderedTableColumns(sqlData[0]).map((key) => (
+                                  {tableColumns.map((key) => (
                                     <th key={key}>{key}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
                                 {sqlData.map((row, index) => {
-                                  const orderedKeys = sqlData[0] && typeof sqlData[0] === 'object'
-                                    ? getOrderedTableColumns(sqlData[0])
-                                    : (row && typeof row === 'object' ? Object.keys(row) : []);
                                   return (
                                     <tr key={index}>
                                       {row && typeof row === 'object'
-                                        ? orderedKeys.map((key) => (
+                                        ? tableColumns.map((key) => (
                                             <td key={key}>
                                               {key in row
                                                 ? (typeof row[key] === 'object' && row[key] !== null
@@ -355,7 +346,7 @@ const UNSSidePanel = ({
                                                 : ''}
                                             </td>
                                           ))
-                                        : <td>{String(row ?? '')}</td>}
+                                        : <td colSpan={Math.max(tableColumns.length, 1)}>{String(row ?? '')}</td>}
                                     </tr>
                                   );
                                 })}
@@ -446,4 +437,3 @@ const UNSSidePanel = ({
 };
 
 export default UNSSidePanel;
-

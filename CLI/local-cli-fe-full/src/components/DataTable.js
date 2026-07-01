@@ -40,6 +40,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { filterTableData, hasInternalColumns } from '../utils/tableUtils';
+import '../styles/DataTable.css';
 
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 

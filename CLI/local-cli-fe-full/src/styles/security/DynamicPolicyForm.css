@@ -413,3 +413,56 @@
   background-color: white;
 }
 
+:root[data-theme='dark'] .dynamic-policy-form {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(.dynamic-policy-form-label, h1, h2, h3, h4, label, summary) {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(input, select, textarea, .fallback-input) {
+  background-color: var(--component-input-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(select option) {
+  background-color: var(--component-input-bg);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(input:focus, select:focus, textarea:focus) {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(.policy-preview, .policy-preview pre, .array-fallback, .text-input-fallback, .array-fallback .array-input) {
+  background: var(--component-code-bg);
+  border-color: var(--color-border);
+  color: var(--component-code-text);
+}
+
+:root[data-theme='dark'] .dynamic-policy-form .field-clear-btn {
+  background: var(--color-surface-muted) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+:root[data-theme='dark'] .dynamic-policy-form .field-clear-btn:hover {
+  background: var(--color-error-bg) !important;
+  border-color: #b84250 !important;
+  color: var(--color-error-text) !important;
+}
+
+:root[data-theme='dark'] .dynamic-policy-form .custom-select-input {
+  background: rgba(102, 179, 255, 0.14) !important;
+  border-color: var(--color-primary) !important;
+}
+
+:root[data-theme='dark'] .dynamic-policy-form :where(.array-fallback summary, .text-input-fallback summary) {
+  color: var(--color-text-muted);
+}

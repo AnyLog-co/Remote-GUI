@@ -253,7 +253,7 @@ You can connect to a node in two ways:
 
 2. Run (local):
    ```bash
-   docker run -it --rm -p 8000:8000 -p 3001:3001      -e VITE_API_URL=http://127.0.0.1:8000      --name gui oshadmon/gui:test
+   docker run -it -p 8080:8080 -p 31800:31800 --name gui-1 --rm anylogco/remote-gui:1.2.0
    ```
 
 3. Run (production):

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 from plugins.utils import make_request
 from parsers import parse_response
-from plugins.utils import get_data_nodes_for_table
+from plugins.utils import get_columns, get_data_nodes_for_table
 
 # Create the API router
 api_router = APIRouter(prefix="/uns", tags=["UNS"])
@@ -21,7 +21,7 @@ class BlockchainQueryRequest(BaseModel):
 
 class GetRootRequest(BaseModel):
     conn: str
-    query: Optional[str] = "blockchain get root policies"  # Default to blockchain get * if not provided
+    query: Optional[str] = "blockchain get root policies exclude cluster"
 
 class QueryTableRequest(BaseModel):
     conn: str
@@ -29,6 +29,8 @@ class QueryTableRequest(BaseModel):
     table: str
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
+    start_time: Optional[str] = None  # Absolute range start, e.g. "2026-06-29 16:00:00"
+    end_time: Optional[str] = None  # Absolute range end, e.g. "2026-06-29 17:00:00"
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
     column: Optional[str] = None  # When set, only fetch time_column and this column
     time_column: Optional[str] = "insert_timestamp"  # Time-based column for filtering: insert_timestamp or timestamp
@@ -71,7 +73,7 @@ async def uns_info():
 async def get_root(request: GetRootRequest):
     """Get root items using configurable query"""
     try:
-        command = request.query or "blockchain get *"
+        command = request.query or "blockchain get root policies exclude cluster"
         print(f"UNS: Executing command: {command}")
         print(f"UNS: Connection: {request.conn}")
         print(f"UNS: Query: {request.query}")
@@ -187,6 +189,20 @@ def _extract_sql_error_message(response) -> str:
     return str(response)[:300]
 
 
+def _get_visible_columns(conn: str, dbms: str, table: str) -> list:
+    """Return displayable column names for a table."""
+    columns = get_columns(conn, dbms, table)
+    names = []
+    for column in columns:
+        if isinstance(column, dict):
+            name = column.get("column_name") or column.get("name")
+        else:
+            name = str(column)
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 @api_router.post("/query-table")
 async def query_table(request: QueryTableRequest):
     """Query table data for the last N hours"""
@@ -219,8 +235,15 @@ async def query_table(request: QueryTableRequest):
 
         table_quoted = _quote_identifier(request.table.strip()) if request.table else request.table
 
+        start_time = (request.start_time or "").strip().replace("'", "''")
+        end_time = (request.end_time or "").strip().replace("'", "''")
+        if start_time and end_time:
+            time_filter = f"{time_col} >= '{start_time}' AND {time_col} < '{end_time}'"
+        else:
+            time_filter = f"period({time_unit}, {time_value_str}, NOW(), {time_col})"
+
         # Base time filter using selected time column
-        sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE period({time_unit}, {time_value_str}, NOW(), {time_col})'
+        sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE {time_filter}'
         where_clause = (request.where or "").strip()
         if where_clause:
             sql_query += f" AND {where_clause}"
@@ -230,6 +253,8 @@ async def query_table(request: QueryTableRequest):
         print(f"UNS: Connection: {request.conn}")
         print(f"UNS: DBMS: {request.dbms}, Table: {request.table}, Time: {time_value} {time_unit}")
 
+        columns = _get_visible_columns(request.conn, request.dbms, request.table)
+
         # Execute query - catch connection/SQL errors
         try:
             response = make_request(request.conn, "GET", command)
@@ -237,7 +262,7 @@ async def query_table(request: QueryTableRequest):
             err_msg = str(req_err)
             print(f"UNS: make_request failed: {err_msg}")
             friendly = _extract_sql_error_message(err_msg)
-            return {"success": False, "error": friendly if len(friendly) > 10 else err_msg, "data": None}
+            return {"success": False, "error": friendly if len(friendly) > 10 else err_msg, "data": [], "columns": columns}
 
         # Check for error response before parsing (e.g. err_code, type=error)
         if isinstance(response, dict) and (
@@ -245,7 +270,7 @@ async def query_table(request: QueryTableRequest):
         ):
             err_msg = _extract_sql_error_message(response)
             print(f"UNS: SQL/connection error in response: {err_msg}")
-            return {"success": False, "error": err_msg, "data": None}
+            return {"success": False, "error": err_msg, "data": [], "columns": columns}
 
         # Parse response - catch parse errors
         try:
@@ -253,7 +278,7 @@ async def query_table(request: QueryTableRequest):
         except Exception as parse_err:
             err_msg = str(parse_err)
             print(f"UNS: parse_response failed: {err_msg}")
-            return {"success": False, "error": _extract_sql_error_message(response) or f"Failed to parse response: {err_msg}", "data": None}
+            return {"success": False, "error": _extract_sql_error_message(response) or f"Failed to parse response: {err_msg}", "data": [], "columns": columns}
 
         # Extract data from response
         if isinstance(parsed, dict) and "data" in parsed:
@@ -268,7 +293,8 @@ async def query_table(request: QueryTableRequest):
                 return {
                     "success": False,
                     "error": parsed.get("data", "Unknown error occurred"),
-                    "data": None
+                    "data": [],
+                    "columns": columns
                 }
             data = parsed.get("data", parsed)
             # print(f"UNS: Extracted from parsed dict, type: {type(data)}, length: {len(data) if isinstance(data, list) else 'N/A'}")
@@ -282,7 +308,10 @@ async def query_table(request: QueryTableRequest):
                 import json
                 data = json.loads(data)
             except (json.JSONDecodeError, ValueError):
-                pass
+                if data.startswith("Error parsing response:") and columns:
+                    data = []
+                else:
+                    return {"success": False, "error": data, "data": [], "columns": columns}
         
         # Ensure data is a list
         if not isinstance(data, list):
@@ -316,6 +345,7 @@ async def query_table(request: QueryTableRequest):
         return {
             "success": True,
             "data": filtered_data,
+            "columns": columns,
             "error": None
         }
     except Exception as e:
@@ -324,7 +354,8 @@ async def query_table(request: QueryTableRequest):
         return {
             "success": False,
             "error": error_msg,
-            "data": None
+            "data": [],
+            "columns": []
         }
 
 @api_router.post("/query-custom")
@@ -485,22 +516,22 @@ async def column_details(request: ColumnDetailsRequest):
 
 @api_router.post("/check-table")
 async def check_table(request: CheckTableRequest):
-    """Check if a table exists at the location using get data nodes (returns empty list if no table)."""
+    """Check if a table exists at the location using table columns."""
     try:
         if not request.dbms or not request.table:
             raise HTTPException(status_code=400, detail="dbms and table are required")
         
-        # Use get data nodes: returns empty list if no table at this location (no error)
-        nodes = get_data_nodes_for_table(request.conn, request.dbms, request.table)
-        has_data = len(nodes) > 0
+        columns = _get_visible_columns(request.conn, request.dbms, request.table)
+        has_data = len(columns) > 0
         
         if not has_data:
-            print(f"UNS: No data nodes for {request.dbms}.{request.table} - treating as no table")
+            print(f"UNS: No columns for {request.dbms}.{request.table} - treating as no table")
         
         return {
             "success": True,
             "has_data": has_data,
-            "column_count": len(nodes),  # number of nodes matching dbms/table
+            "columns": columns,
+            "column_count": len(columns),
             "error": None
         }
     except Exception as e:
@@ -509,6 +540,7 @@ async def check_table(request: CheckTableRequest):
         return {
             "success": False,
             "has_data": False,
+            "columns": [],
             "column_count": 0,
             "error": error_msg
         }
@@ -613,4 +645,3 @@ async def check_children(request: CheckChildrenRequest):
             "child_count": 0,
             "error": error_msg
         }
-

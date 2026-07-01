@@ -72,7 +72,8 @@ const MarkdownRenderer = ({ content }) => {
           <code
             key={`code-${idx}`}
             style={{
-              backgroundColor: '#f4f4f4',
+              backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+              color: 'var(--component-code-text, inherit)',
               padding: '2px 6px',
               borderRadius: '3px',
               fontFamily: 'monospace',
@@ -100,6 +101,81 @@ const MarkdownRenderer = ({ content }) => {
     const trimmed = line.trim();
     return /^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed);
   };
+
+  const splitTableRow = (line) => (
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim())
+  );
+
+  const isTableDivider = (line) => {
+    const cells = splitTableRow(line);
+    return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  };
+
+  const isTableRow = (line) => {
+    const trimmed = line.trim();
+    return trimmed.includes('|') && splitTableRow(trimmed).length > 1;
+  };
+
+  const renderTable = (headers, rows, key) => (
+    <div key={key} style={{ overflowX: 'auto', margin: '12px 0' }}>
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: '0.92em',
+          background: 'var(--color-surface, #fff)',
+          color: 'var(--color-text, inherit)',
+          border: '1px solid var(--color-border, #d7dde8)',
+          borderRadius: '6px',
+          overflow: 'hidden'
+        }}
+      >
+        <thead>
+          <tr>
+            {headers.map((header, index) => (
+              <th
+                key={`th-${index}`}
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  background: 'var(--color-surface-muted, #eef3f8)',
+                  borderBottom: '1px solid var(--color-border, #d7dde8)',
+                  color: 'var(--color-heading, #24364b)',
+                  fontWeight: 700
+                }}
+              >
+                {processInlineMarkdown(header)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`tr-${rowIndex}`}>
+              {headers.map((_, cellIndex) => (
+                <td
+                  key={`td-${rowIndex}-${cellIndex}`}
+                  style={{
+                    padding: '8px 10px',
+                    borderTop: rowIndex === 0 ? 'none' : '1px solid var(--color-border, #edf0f5)',
+                    color: 'var(--color-text, inherit)',
+                    verticalAlign: 'top'
+                  }}
+                >
+                  {processInlineMarkdown(row[cellIndex] || '')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   // Build nested list tree structure
   const buildListTree = (items) => {
@@ -169,14 +245,15 @@ const MarkdownRenderer = ({ content }) => {
           <pre
             key={`codeblock-${i}`}
             style={{
-              backgroundColor: '#f4f4f4',
+              backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+              color: 'var(--component-code-text, inherit)',
               padding: '12px',
               borderRadius: '4px',
               overflowX: 'auto',
               fontFamily: 'monospace',
               fontSize: '0.9em',
               margin: '10px 0',
-              border: '1px solid #ddd'
+              border: '1px solid var(--color-border, #ddd)'
             }}
           >
             <code>{codeContent}</code>
@@ -191,6 +268,29 @@ const MarkdownRenderer = ({ content }) => {
 
     if (inCodeBlock) {
       codeBlockContent.push(line);
+      continue;
+    }
+
+    if (isTableRow(line) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      if (inList) {
+        const listTree = buildListTree(listItems);
+        if (listTree) {
+          elements.push(renderListTree(listTree, `list-${i}-pre-table`));
+        }
+        listItems = [];
+        inList = false;
+      }
+
+      const headers = splitTableRow(line);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && isTableRow(lines[i]) && !isTableDivider(lines[i])) {
+        rows.push(splitTableRow(lines[i]));
+        i += 1;
+      }
+      i -= 1;
+
+      elements.push(renderTable(headers, rows, `table-${i}`));
       continue;
     }
 
@@ -308,14 +408,15 @@ const MarkdownRenderer = ({ content }) => {
       <pre
         key="codeblock-final"
         style={{
-          backgroundColor: '#f4f4f4',
+          backgroundColor: 'var(--component-code-bg, #f4f4f4)',
+          color: 'var(--component-code-text, inherit)',
           padding: '12px',
           borderRadius: '4px',
           overflowX: 'auto',
           fontFamily: 'monospace',
           fontSize: '0.9em',
           margin: '10px 0',
-          border: '1px solid #ddd'
+          border: '1px solid var(--color-border, #ddd)'
         }}
       >
         <code>{codeBlockContent.join('\n')}</code>

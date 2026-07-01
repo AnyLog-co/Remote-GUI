@@ -368,3 +368,60 @@
     flex-wrap: wrap;
   }
 }
+
+:root[data-theme='dark'] .video-stream-page {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .video-stream-header h2,
+:root[data-theme='dark'] .video-card-header h3,
+:root[data-theme='dark'] .viewer-settings label,
+:root[data-theme='dark'] .form-group label,
+:root[data-theme='dark'] .footer-controls label {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .video-stream-header p,
+:root[data-theme='dark'] .form-group small,
+:root[data-theme='dark'] .video-card-label,
+:root[data-theme='dark'] .video-card-footer,
+:root[data-theme='dark'] .drag-hint {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .stream-form-section,
+:root[data-theme='dark'] .video-stream-empty,
+:root[data-theme='dark'] .video-card {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .viewer-settings select,
+:root[data-theme='dark'] .form-group input,
+:root[data-theme='dark'] .inline-edit-form input,
+:root[data-theme='dark'] .footer-controls select {
+  background: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] .ghost-button {
+  background: var(--component-button-secondary-bg);
+  border-color: var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}
+
+:root[data-theme='dark'] .ghost-button:hover {
+  background: var(--component-button-secondary-hover-bg);
+}
+
+:root[data-theme='dark'] .video-card-footer {
+  background: var(--color-surface-muted);
+  border-top: 1px solid var(--color-border);
+}
+
+:root[data-theme='dark'] .video-frame-wrapper {
+  border-color: var(--color-border);
+}

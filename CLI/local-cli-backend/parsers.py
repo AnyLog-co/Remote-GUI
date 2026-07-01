@@ -1,8 +1,8 @@
 # parsers.py
 import json
+from typing import Any
 
 def parse_table_fixed(text: str) -> list:
-    lines = text.strip().splitlines()
 
     lines = text.strip().splitlines()
     if len(lines) < 2:
@@ -122,6 +122,99 @@ def parse_table_fixed(text: str) -> list:
     return {"data": data, "additional_info": additional_info}
 
 
+def check_format_table_sql_query(text: str) -> tuple[bool, str]:
+    """
+    Check whether a command string is a SQL query using table format, and if so,
+    return a modified command where the table format is changed to JSON.
+
+    Supported command forms:
+
+        run client (...) sql ... format=table
+        sql ... format=table
+
+    The second form starts directly with "sql", so "run" and "client" are not
+    required.
+
+    The format option may be written with or without spaces around the equals
+    sign, for example:
+
+        format=table
+        format = table
+        format= table
+        format =table
+
+    Args:
+        text: The command string to inspect.
+
+    Returns:
+        A tuple containing:
+            - True if the command is a SQL query using table format.
+            - The updated command string with format=json if matched,
+              otherwise the original command string.
+    """
+
+    # Normalize equals signs so all variants of "format=table" become:
+    # ["format", "=", "table"]
+    tokens = text.replace("=", " = ").split()
+
+    # Empty input cannot match.
+    if not tokens:
+        return False, text
+
+    first = tokens[0].lower()
+
+    # Case 1:
+    # The command starts directly with SQL, so "run client" is not required.
+    if first == "sql":
+        required = {"sql"}
+        found = {"sql"}
+
+    # Case 2:
+    # The command must begin with: run client
+    elif (
+        len(tokens) >= 2
+        and tokens[0].lower() == "run"
+        and tokens[1].lower() == "client"
+    ):
+        required = {"run", "client", "sql"}
+        found = {"run", "client"}
+
+    # Early stop:
+    # If the command does not start with either "sql" or "run client",
+    # it cannot be the command form we care about.
+    else:
+        return False, text
+
+    # Tracks where the "format = table" sequence starts.
+    format_index = None
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i].lower()
+
+        # Track required command keywords.
+        if token in required:
+            found.add(token)
+
+        # Detect: format = table
+        if (
+            token == "format"
+            and i + 2 < len(tokens)
+            and tokens[i + 1] == "="
+            and tokens[i + 2].lower() == "table"
+        ):
+            format_index = i
+
+        # Stop early once all required pieces have been found.
+        if found == required and format_index is not None:
+            tokens[format_index:format_index + 3] = ["format=json"]
+            return True, " ".join(tokens)
+
+        i += 1
+
+    return False, text.strip()
+
+
 
 def parse_table(text: str) -> list:
     """
@@ -200,7 +293,7 @@ def parse_json(text: str) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def parse_response(raw: str) -> dict:
+def parse_response(raw: Any) -> dict:
     """
     Unified response parser.
     Checks if the response is JSON, table formatted, or a simple string,
@@ -209,8 +302,9 @@ def parse_response(raw: str) -> dict:
     try:
         print(f"=== PARSING RESPONSE ===")
         print(f"Raw response type: {type(raw)}")
-        print(f"Raw response length: {len(str(raw)) if raw else 0}")
-        print(f"Raw response preview: {str(raw)[:500] if raw else 'None'}...")
+        raw_preview = str(raw)[:500] if raw is not None else 'None'
+        print(f"Raw response length: {len(str(raw)) if raw is not None else 0}")
+        print(f"Raw response preview: {raw_preview}...")
         print(f"=== END PARSING RESPONSE ===")
     except Exception as e:
         print(f"Error in parse_response debugging: {e}")
@@ -237,6 +331,26 @@ def parse_response(raw: str) -> dict:
         if isinstance(raw, bool):
             return {"type": "string", "data": str(raw).lower()}
 
+        if raw is None:
+            return {"type": "string", "data": ""}
+
+        if isinstance(raw, (int, float)):
+            return {"type": "string", "data": str(raw)}
+
+        if type(raw) is list:
+            return {"type": "json", "data": raw}
+        
+        if type(raw) is dict:
+            return {"type": "json", "data": raw}
+
+        if isinstance(raw, str):
+            # Replace \r\n with \n and normalize line endings
+            raw = raw.replace('\r\n', '\n').replace('\r', '\n')
+            # Remove leading/trailing whitespace
+            raw = raw.strip()
+        else:
+            return {"type": "string", "data": str(raw)}
+
         if '|' in raw:
             print("FOUND TABLE")
             table_data = parse_table(raw)
@@ -251,22 +365,10 @@ def parse_response(raw: str) -> dict:
                     result["additional_content"] = table_result["additional_info"]
                 return result
             
-        if type(raw) is list:
-            return {"type": "json", "data": raw}
-        
-        if type(raw) is dict:
-            return {"type": "json", "data": raw}
-            
         # Try to parse as JSON first
         # parsed = parse_json(raw_text)
         # if parsed:
         #     return {"type": "json", "data": parsed}
-        
-        if isinstance(raw, str):
-            # Replace \r\n with \n and normalize line endings
-            raw = raw.replace('\r\n', '\n').replace('\r', '\n')
-            # Remove leading/trailing whitespace
-            raw = raw.strip()
             
         # Otherwise, treat it as a simple message
         return {"type": "string", "data": raw}
@@ -276,7 +378,7 @@ def parse_response(raw: str) -> dict:
         print(f"Error type: {type(e).__name__}")
         print(f"Error message: {str(e)}")
         print(f"Raw data type: {type(raw)}")
-        print(f"Raw data: {str(raw)[:1000] if raw else 'None'}")
+        print(f"Raw data: {str(raw)[:1000] if raw is not None else 'None'}")
         print(f"=== END PARSE_RESPONSE ERROR ===")
         
         return {
@@ -286,7 +388,7 @@ def parse_response(raw: str) -> dict:
                 "error_type": type(e).__name__,
                 "error_message": str(e),
                 "raw_data_type": str(type(raw)),
-                "raw_data_preview": str(raw)[:500] if raw else 'None'
+                "raw_data_preview": str(raw)[:500] if raw is not None else 'None'
             }
         }
 

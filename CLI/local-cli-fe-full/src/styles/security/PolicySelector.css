@@ -92,3 +92,49 @@
   border-radius: 6px;
   border-left: 3px solid #059669;
 }
+
+:root[data-theme='dark'] .policy-selector {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .policy-selector:hover {
+  border-color: var(--color-border-strong);
+}
+
+:root[data-theme='dark'] .policy-selector label {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .policy-selector select {
+  background-color: var(--component-input-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  background-image: none;
+}
+
+:root[data-theme='dark'] .policy-selector select option {
+  background-color: var(--component-input-bg);
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .policy-selector select:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+:root[data-theme='dark'] .policy-selector .description {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .policy-selector .error {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+
+:root[data-theme='dark'] .policy-selector .success {
+  background: var(--component-success-bg);
+  color: var(--color-success);
+}

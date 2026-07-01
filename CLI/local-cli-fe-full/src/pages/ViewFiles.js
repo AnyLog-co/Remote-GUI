@@ -5,9 +5,11 @@ import { useLocation } from 'react-router-dom';
 import FileViewerAuto      from '../components/FileViewerAuto';
 import StreamingPlayer     from '../components/StreamingPlayer';
 import StreamingGrid       from '../components/StreamingGrid';
+import ConnectedNodeAddress from '../components/ConnectedNodeAddress';
 import '../styles/ViewFiles.css';  // <-- import the new stylesheet
+import { getApiBaseUrl } from '../utils/runtimeConfig';
 
-const BACKEND_URL = window._env_?.VITE_API_URL || "http://localhost:8080";
+const BACKEND_URL = getApiBaseUrl();
 
 const ViewFiles = () => {
 
@@ -55,7 +57,7 @@ const ViewFiles = () => {
               <p><strong>DBMS:</strong> {blob.dbms}</p>
               <p><strong>Table:</strong> {blob.table}</p>
               <p><strong>ID:</strong> {blob.id}</p>
-              <p><strong>Node:</strong> {blob.ip}:{blob.port}</p>
+              <ConnectedNodeAddress value={`${blob.ip}:${blob.port}`} label="Node:" />
             </div>
             <div className="streaming-url-section">
               <p><strong>Streaming URL:</strong></p>

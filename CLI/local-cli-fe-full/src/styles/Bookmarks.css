@@ -75,6 +75,61 @@ section {
   min-width: 150px;
 }
 
+.copy-btn {
+  background: #495057;
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+.copy-btn:hover:not(:disabled) {
+  background: #343a40;
+}
+
+.copy-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #6c757d;
+}
+
+.paste-import {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.paste-import textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.paste-import textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.import-duplicate-note {
+  color: #856404;
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
 .export-btn:hover:not(:disabled) {
   background: #138496;
 }
@@ -274,6 +329,16 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.bookmark-list li.active-bookmark {
+  background: #eef7ff;
+  border-color: #4a90e2;
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.22);
+}
+
+.bookmark-list li.active-bookmark:hover {
+  background: #e5f2ff;
+}
+
 /* Bookmark content styling */
 .bookmark-list li .bookmark-content {
   flex: 1;
@@ -303,6 +368,40 @@ button:disabled {
   flex-shrink: 0;
 }
 
+.bookmark-list li .node-display-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.bookmark-list li .node-edit-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #ced4da;
+  background: #fff;
+  color: #495057;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.bookmark-list li .node-edit-btn:hover:not(:disabled) {
+  background: #e9f4ff;
+  color: #0b5ed7;
+  border-color: #8bbce8;
+}
+
+.bookmark-list li .node-edit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .bookmark-list li .bookmark-date {
   font-size: 0.8rem;
   color: #6c757d;
@@ -312,6 +411,41 @@ button:disabled {
   font-style: normal;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.bookmark-list li .unsaved-badge {
+  font-size: 0.8rem;
+  color: #0c5460;
+  background: #d1ecf1;
+  border: 1px solid #bee5eb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bookmark-list li .node-edit-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: min(100%, 420px);
+}
+
+.bookmark-list li .node-input {
+  min-width: 220px;
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+.bookmark-list li .node-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
 
 .bookmark-list li .bookmark-description {
@@ -516,6 +650,16 @@ button:disabled {
   box-shadow: none;
 }
 
+.bookmark-list li .use-node-btn.active-node-btn,
+.bookmark-list li .use-node-btn.active-node-btn:disabled {
+  background: #0d6efd;
+  color: #fff;
+  opacity: 1;
+  border: 1px solid #0b5ed7;
+  cursor: default;
+  box-shadow: 0 2px 6px rgba(13, 110, 253, 0.25);
+}
+
 /* Delete button styling */
 .bookmark-list li .delete-btn {
   background: #fff;
@@ -565,4 +709,205 @@ button:disabled {
   border: 1px solid #c3e6cb;
   padding: 0.75rem;
   border-radius: 4px;
+}
+
+:root[data-theme='dark'] .container {
+  color: var(--color-text);
+}
+
+:root[data-theme='dark'] .container section,
+:root[data-theme='dark'] .import-section,
+:root[data-theme='dark'] .file-info,
+:root[data-theme='dark'] .bookmark-section .form-row,
+:root[data-theme='dark'] .bookmark-list li {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme='dark'] .import-section:hover,
+:root[data-theme='dark'] .file-input:hover {
+  border-color: var(--color-primary);
+}
+
+:root[data-theme='dark'] .file-input,
+:root[data-theme='dark'] .paste-import textarea,
+:root[data-theme='dark'] .bookmark-section .form-row input,
+:root[data-theme='dark'] .bookmark-list li .node-input,
+:root[data-theme='dark'] .bookmark-list li .description-input,
+:root[data-theme='dark'] .container input[type='text'],
+:root[data-theme='dark'] .container select {
+  background: var(--component-input-bg);
+  border-color: var(--component-input-border);
+  color: var(--component-input-text);
+}
+
+:root[data-theme='dark'] h2,
+:root[data-theme='dark'] .import-preview h4,
+:root[data-theme='dark'] .file-info p,
+:root[data-theme='dark'] .bookmark-list li .bookmark-node {
+  color: var(--color-heading);
+}
+
+:root[data-theme='dark'] .import-preview ul,
+:root[data-theme='dark'] .bookmark-list li:hover,
+:root[data-theme='dark'] .bookmark-list li .bookmark-node,
+:root[data-theme='dark'] .bookmark-list li .bookmark-date {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .import-preview li,
+:root[data-theme='dark'] .bookmark-list li .bookmark-date,
+:root[data-theme='dark'] .bookmark-list li .description-input,
+:root[data-theme='dark'] .bookmark-list li .description-text {
+  color: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] .bookmark-list li .description-text {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+:root[data-theme='dark'] .bookmark-list li.active-bookmark,
+:root[data-theme='dark'] .bookmark-list li.active-bookmark:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+}
+
+:root[data-theme='dark'] .bookmark-list li .node-edit-btn,
+:root[data-theme='dark'] .bookmark-list li .delete-btn {
+  background: var(--component-button-secondary-bg);
+  border-color: var(--component-button-secondary-border);
+  color: var(--component-button-secondary-text);
+}
+
+@media (max-width: 680px) {
+  .container {
+    max-width: 100%;
+    margin: 0;
+    padding: 0.75rem;
+  }
+
+  .container section {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 10px;
+  }
+
+  .import-export-actions,
+  .import-actions,
+  .bookmark-section .form-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .file-input,
+  .export-btn,
+  .copy-btn,
+  .import-btn,
+  .cancel-btn,
+  .bookmark-section .form-row input,
+  .bookmark-section .form-row button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .paste-import textarea {
+    min-height: 150px;
+  }
+
+  .bookmark-list li {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    padding: 0.9rem;
+  }
+
+  .bookmark-list li:hover {
+    transform: none;
+  }
+
+  .bookmark-list li .bookmark-content,
+  .bookmark-list li .bookmark-header,
+  .bookmark-list li .node-display-container,
+  .bookmark-list li .description-display-container,
+  .bookmark-list li .node-edit-container {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bookmark-list li .bookmark-header,
+  .bookmark-list li .description-display-container,
+  .bookmark-list li .node-edit-container {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .bookmark-list li .node-display-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 0.5rem;
+  }
+
+  .bookmark-list li .bookmark-node {
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    font-size: 0.92rem;
+    line-height: 1.35;
+  }
+
+  .bookmark-list li .bookmark-date,
+  .bookmark-list li .unsaved-badge {
+    align-self: flex-start;
+    white-space: normal;
+  }
+
+  .bookmark-list li .node-input,
+  .bookmark-list li .description-input,
+  .bookmark-list li .description-text {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bookmark-list li .description-text {
+    min-height: 44px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .bookmark-list li .description-actions,
+  .bookmark-list li .bookmark-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    margin-left: 0;
+    gap: 0.5rem;
+  }
+
+  .bookmark-list li .save-btn,
+  .bookmark-list li .cancel-btn,
+  .bookmark-list li .edit-btn,
+  .bookmark-list li .use-node-btn,
+  .bookmark-list li .delete-btn {
+    width: 100%;
+    min-height: 44px;
+    min-width: 0;
+  }
+
+  .bookmark-list li .node-edit-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .bookmark-list li .delete-btn {
+    font-size: 1.1rem;
+  }
 }
