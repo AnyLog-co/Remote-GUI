@@ -9,6 +9,8 @@ const ROOT_QUERY_UNS_DATA = 'blockchain get root policies exclude cluster';
 const ROOT_QUERY_UNS_CLUSTERS = 'blockchain get root policies include cluster';
 const UNS_NAVIGATION_STORAGE_KEY = 'uns-navigation-state';
 const UNS_COMPARE_STORAGE_KEY = 'uns-compare-graphs-state';
+const UNS_COMPARE_CACHE_KIND = 'anylog-uns-compare-cache';
+const UNS_COMPARE_CACHE_VERSION = 1;
 
 const isRootGroupItem = (item) => item?.__unsRootGroup === true;
 
@@ -43,6 +45,7 @@ const UNSPage = ({ node }) => {
   const [compareGraphs, setCompareGraphs] = useState([]);
   const [activeCompareGraphId, setActiveCompareGraphId] = useState(null);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [compareCacheMessage, setCompareCacheMessage] = useState('');
   const [itemsWithData, setItemsWithData] = useState(new Map()); // Cache: item key (dbms:table) -> has_data (boolean)
   const [checkingData, setCheckingData] = useState(new Set()); // Track items currently being checked
   const checkTimeoutsRef = useRef([]); // Track all pending timeout IDs for cleanup
@@ -55,6 +58,7 @@ const UNSPage = ({ node }) => {
   // Load root items on mount or when node changes
   useEffect(() => {
     setCompareCacheReady(false);
+    setCompareCacheMessage('');
     if (node) {
       if (!restoreNavigationState(node)) {
         loadRootItems();
@@ -98,6 +102,7 @@ const UNSPage = ({ node }) => {
       setCompareGraphs([]);
       setActiveCompareGraphId(null);
       setIsCompareOpen(false);
+      setCompareCacheMessage('');
       clearCachedCompareState();
       autoExpandedItemsRef.current = new Set();
     };
@@ -107,6 +112,25 @@ const UNSPage = ({ node }) => {
       window.removeEventListener('uns-storage-cleared', handleStorageCleared);
     };
   }, []);
+
+  useEffect(() => {
+    const handleCompareCacheImported = () => {
+      if (node) {
+        const restored = restoreCompareState(node);
+        setCompareCacheMessage(
+          restored
+            ? 'UNS compare cache imported.'
+            : 'UNS compare cache imported for another node.',
+        );
+      }
+    };
+
+    window.addEventListener('uns-compare-cache-imported', handleCompareCacheImported);
+    return () => {
+      window.removeEventListener('uns-compare-cache-imported', handleCompareCacheImported);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node]);
 
   useEffect(() => {
     if (!node || layers.length === 0) {
@@ -441,6 +465,95 @@ const UNSPage = ({ node }) => {
     }
   };
 
+  const buildCompareCachePayload = (nodes) => ({
+    kind: UNS_COMPARE_CACHE_KIND,
+    version: UNS_COMPARE_CACHE_VERSION,
+    updatedAt: new Date().toISOString(),
+    nodes,
+  });
+
+  const normalizeCompareCacheNodeEntry = (entry, fallbackNode = '') => {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.graphs)) {
+      return null;
+    }
+
+    const graphs = entry.graphs.map(normalizeCompareGraph).filter(Boolean);
+    if (graphs.length === 0) {
+      return null;
+    }
+
+    const activeGraphId = graphs.some((graph) => graph.id === entry.activeGraphId)
+      ? entry.activeGraphId
+      : graphs[0]?.id || null;
+
+    return {
+      node: entry.node || fallbackNode,
+      graphs,
+      activeGraphId,
+      isOpen: Boolean(entry.isOpen && graphs.length > 0),
+      updatedAt: entry.updatedAt || new Date().toISOString(),
+    };
+  };
+
+  const normalizeCompareCachePayload = (payload) => {
+    if (!payload || typeof payload !== 'object') {
+      return buildCompareCachePayload({});
+    }
+
+    // Backward compatibility for the original single-node localStorage shape.
+    if (payload.node && Array.isArray(payload.graphs)) {
+      const entry = normalizeCompareCacheNodeEntry(payload, payload.node);
+      return buildCompareCachePayload(entry ? { [payload.node]: entry } : {});
+    }
+
+    const sourceNodes = payload.nodes && typeof payload.nodes === 'object'
+      ? payload.nodes
+      : {};
+    const nodes = {};
+
+    Object.entries(sourceNodes).forEach(([nodeKey, entry]) => {
+      const normalizedEntry = normalizeCompareCacheNodeEntry(entry, nodeKey);
+      if (normalizedEntry) {
+        nodes[nodeKey] = normalizedEntry;
+      }
+    });
+
+    return buildCompareCachePayload(nodes);
+  };
+
+  const readCompareCachePayload = () => {
+    try {
+      const raw = window.localStorage.getItem(UNS_COMPARE_STORAGE_KEY);
+      if (!raw) {
+        return buildCompareCachePayload({});
+      }
+
+      return normalizeCompareCachePayload(JSON.parse(raw));
+    } catch {
+      return buildCompareCachePayload({});
+    }
+  };
+
+  const writeCompareCachePayload = (payload) => {
+    const normalizedPayload = normalizeCompareCachePayload(payload);
+
+    try {
+      if (Object.keys(normalizedPayload.nodes).length === 0) {
+        window.localStorage.removeItem(UNS_COMPARE_STORAGE_KEY);
+        return normalizedPayload;
+      }
+
+      window.localStorage.setItem(
+        UNS_COMPARE_STORAGE_KEY,
+        JSON.stringify(normalizedPayload),
+      );
+      return normalizedPayload;
+    } catch {
+      // Ignore storage failures; compare state should still work in memory.
+      return normalizedPayload;
+    }
+  };
+
   const cacheNavigationState = () => {
     try {
       window.localStorage.setItem(
@@ -496,58 +609,198 @@ const UNSPage = ({ node }) => {
   };
 
   const cacheCompareState = () => {
-    try {
-      if (compareGraphs.length === 0) {
-        window.localStorage.removeItem(UNS_COMPARE_STORAGE_KEY);
-        return;
-      }
-
-      window.localStorage.setItem(
-        UNS_COMPARE_STORAGE_KEY,
-        JSON.stringify({
-          node,
-          graphs: compareGraphs.map(normalizeCompareGraph).filter(Boolean),
-          activeGraphId: activeCompareGraphId,
-          isOpen: isCompareOpen,
-        }),
-      );
-    } catch {
-      // Ignore storage failures; compare state should still work in memory.
+    if (!node) {
+      return;
     }
+
+    const payload = readCompareCachePayload();
+    const nextNodes = { ...payload.nodes };
+    const graphs = compareGraphs.map(normalizeCompareGraph).filter(Boolean);
+
+    if (graphs.length === 0) {
+      delete nextNodes[node];
+      writeCompareCachePayload({ ...payload, nodes: nextNodes });
+      return;
+    }
+
+    const activeGraphId = graphs.some((graph) => graph.id === activeCompareGraphId)
+      ? activeCompareGraphId
+      : graphs[0]?.id || null;
+
+    nextNodes[node] = {
+      node,
+      graphs,
+      activeGraphId,
+      isOpen: Boolean(isCompareOpen && graphs.length > 0),
+      updatedAt: new Date().toISOString(),
+    };
+
+    writeCompareCachePayload({ ...payload, nodes: nextNodes });
   };
 
   const restoreCompareState = (currentNode) => {
-    try {
-      const raw = window.localStorage.getItem(UNS_COMPARE_STORAGE_KEY);
-      if (!raw) {
-        setCompareGraphs([]);
-        setActiveCompareGraphId(null);
-        setIsCompareOpen(false);
-        return false;
-      }
+    const payload = readCompareCachePayload();
+    const saved = payload.nodes[currentNode];
 
-      const saved = JSON.parse(raw);
-      if (!saved || saved.node !== currentNode || !Array.isArray(saved.graphs)) {
-        setCompareGraphs([]);
-        setActiveCompareGraphId(null);
-        setIsCompareOpen(false);
-        return false;
-      }
-
-      const savedGraphs = saved.graphs.map(normalizeCompareGraph).filter(Boolean);
-      const savedActiveId = savedGraphs.some((graph) => graph.id === saved.activeGraphId)
-        ? saved.activeGraphId
-        : savedGraphs[0]?.id || null;
-      setCompareGraphs(savedGraphs);
-      setActiveCompareGraphId(savedActiveId);
-      setIsCompareOpen(Boolean(saved.isOpen && savedGraphs.length > 0));
-      return savedGraphs.length > 0;
-    } catch {
-      clearCachedCompareState();
+    if (!saved) {
       setCompareGraphs([]);
       setActiveCompareGraphId(null);
       setIsCompareOpen(false);
       return false;
+    }
+
+    const savedGraphs = saved.graphs.map(normalizeCompareGraph).filter(Boolean);
+    const savedActiveId = savedGraphs.some((graph) => graph.id === saved.activeGraphId)
+      ? saved.activeGraphId
+      : savedGraphs[0]?.id || null;
+    setCompareGraphs(savedGraphs);
+    setActiveCompareGraphId(savedActiveId);
+    setIsCompareOpen(Boolean(saved.isOpen && savedGraphs.length > 0));
+
+    // Persist any migrated legacy cache into the versioned shape without removing other nodes.
+    writeCompareCachePayload(payload);
+    return savedGraphs.length > 0;
+  };
+
+  const getExportableCompareCachePayload = () => {
+    const payload = readCompareCachePayload();
+    const nextNodes = { ...payload.nodes };
+
+    if (node) {
+      const graphs = compareGraphs.map(normalizeCompareGraph).filter(Boolean);
+      if (graphs.length > 0) {
+        const activeGraphId = graphs.some((graph) => graph.id === activeCompareGraphId)
+          ? activeCompareGraphId
+          : graphs[0]?.id || null;
+
+        nextNodes[node] = {
+          node,
+          graphs,
+          activeGraphId,
+          isOpen: Boolean(isCompareOpen && graphs.length > 0),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+
+    return {
+      ...buildCompareCachePayload(nextNodes),
+      exportedAt: new Date().toISOString(),
+      activeNode: node || null,
+    };
+  };
+
+  const appendImportedCompareGraphs = (currentGraphs = [], importedGraphs = []) => {
+    const usedIds = new Set(currentGraphs.map((graph) => graph.id).filter(Boolean));
+    const idMap = {};
+    const appendedGraphs = importedGraphs.map((graph) => {
+      const baseId = graph.id || `compare-graph-${Date.now()}`;
+      let nextId = baseId;
+      let index = 1;
+
+      while (usedIds.has(nextId)) {
+        nextId = `${baseId}-import-${index}`;
+        index += 1;
+      }
+
+      usedIds.add(nextId);
+      idMap[graph.id] = nextId;
+      return {
+        ...graph,
+        id: nextId,
+      };
+    });
+
+    return {
+      graphs: [...currentGraphs, ...appendedGraphs],
+      idMap,
+    };
+  };
+
+  const exportCompareCache = () => {
+    const payload = getExportableCompareCachePayload();
+    const graphCount = Object.values(payload.nodes).reduce((count, entry) => (
+      count + (Array.isArray(entry.graphs) ? entry.graphs.length : 0)
+    ), 0);
+
+    if (graphCount === 0) {
+      setCompareCacheMessage('No compare graph cache to export.');
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `uns-compare-cache-${date}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setCompareCacheMessage(`Exported ${graphCount} compare graph${graphCount === 1 ? '' : 's'}.`);
+  };
+
+  const importCompareCache = async (file) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const importedPayload = normalizeCompareCachePayload(JSON.parse(text));
+      const importedNodeEntries = Object.entries(importedPayload.nodes);
+
+      if (importedNodeEntries.length === 0) {
+        setCompareCacheMessage('No compare graphs were found in that JSON file.');
+        return;
+      }
+
+      const currentPayload = readCompareCachePayload();
+      const nextNodes = { ...currentPayload.nodes };
+
+      importedNodeEntries.forEach(([nodeKey, entry]) => {
+        const currentEntry = nextNodes[nodeKey];
+        if (currentEntry?.graphs?.length) {
+          const { graphs, idMap } = appendImportedCompareGraphs(
+            currentEntry.graphs,
+            entry.graphs || [],
+          );
+          const importedActiveGraphId = idMap[entry.activeGraphId] || entry.activeGraphId;
+          nextNodes[nodeKey] = {
+            ...currentEntry,
+            graphs,
+            activeGraphId: currentEntry.activeGraphId || importedActiveGraphId || graphs[0]?.id || null,
+            isOpen: Boolean(currentEntry.isOpen || entry.isOpen),
+            updatedAt: new Date().toISOString(),
+          };
+          return;
+        }
+
+        nextNodes[nodeKey] = {
+          ...entry,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      writeCompareCachePayload({ ...currentPayload, nodes: nextNodes });
+
+      if (node && nextNodes[node]) {
+        restoreCompareState(node);
+      }
+
+      const graphCount = importedNodeEntries.reduce((count, [, entry]) => (
+        count + (Array.isArray(entry.graphs) ? entry.graphs.length : 0)
+      ), 0);
+      setCompareCacheMessage(
+        `Imported ${graphCount} compare graph${graphCount === 1 ? '' : 's'} for ${importedNodeEntries.length} node${importedNodeEntries.length === 1 ? '' : 's'}.`,
+      );
+      setError(null);
+    } catch (importError) {
+      setCompareCacheMessage('');
+      setError(importError.message || 'Failed to import UNS compare cache JSON.');
     }
   };
 
@@ -1631,6 +1884,10 @@ const UNSPage = ({ node }) => {
             isOpen={isCompareOpen}
             setIsOpen={setIsCompareOpen}
             onCreateGraph={createCompareGraph}
+            onExportCache={exportCompareCache}
+            onImportCache={importCompareCache}
+            cacheMessage={compareCacheMessage}
+            onDismissCacheMessage={() => setCompareCacheMessage('')}
           />
 
           <div className="uns-layers">
